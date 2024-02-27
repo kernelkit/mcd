@@ -1,12 +1,11 @@
-AC_PREREQ(2.61)
-AC_INIT([mcd], [0.10], [https://github.com/troglobit/mcd/issues],,
-		[https://troglobit.com/projects/mcd/])
-AC_CONFIG_AUX_DIR(aux)
+AC_PREREQ([2.69])
+AC_INIT([mcd], [0.10], [https://github.com/kernelkit/mcd/issues])
+AC_CONFIG_AUX_DIR(.aux)
 AM_INIT_AUTOMAKE([1.11 foreign])
 AM_SILENT_RULES([yes])
 
 AC_CONFIG_SRCDIR([src/main.c])
-AC_CONFIG_HEADER([config.h])
+AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_FILES([Makefile src/Makefile test/Makefile])
 
 # Check for standard programs, headers, and functions
@@ -18,7 +17,6 @@ AC_PROG_YACC
 PKG_PROG_PKG_CONFIG
 
 # Check for linux/netlink.h is only to be able to define LINUX below
-AC_HEADER_STDC
 AC_CHECK_HEADERS([fcntl.h ifaddrs.h sys/ioctl.h sys/time.h linux/netlink.h termios.h])
 AC_CHECK_HEADERS([net/if.h netinet/igmp.h], [], [], [
 #include <stdio.h>

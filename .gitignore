@@ -7,7 +7,7 @@ ID
 TAGS
 aclocal.m4
 autom4te.cache/
-aux/
+.aux/
 config.h*
 config.log
 config.status
