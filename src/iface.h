@@ -2,8 +2,8 @@
  * Parts of this program has been derived from mrouted.  It is covered
  * by the license in the accompanying file named "LICENSE".
  */
-#ifndef QUERIERD_IFACE_H_
-#define QUERIERD_IFACE_H_
+#ifndef MCD_IFACE_H_
+#define MCD_IFACE_H_
 
 #include <net/if.h>
 #include <stdint.h>
@@ -52,7 +52,7 @@ struct listaddr {
 
 #define	NBRF_STATIC_GROUP	0x4000	/* Static group entry		    */
 
-#endif /* QUERIERD_IFACE_H_ */
+#endif /* MCD_IFACE_H_ */
 
 /**
  * Local Variables:

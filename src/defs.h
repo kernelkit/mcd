@@ -2,8 +2,8 @@
  * Parts of this program has been derived from mrouted.  It is covered
  * by the license in the accompanying file named "LICENSE".
  */
-#ifndef QUERIERD_DEFS_H_
-#define QUERIERD_DEFS_H_
+#ifndef MCD_DEFS_H_
+#define MCD_DEFS_H_
 
 #include "config.h"
 #include <stdio.h>
@@ -237,4 +237,4 @@ extern FILE *		tempfile(void);
 extern int		pidfile(const char *basename);
 #endif
 
-#endif /* QUERIERD_DEFS_H_ */
+#endif /* MCD_DEFS_H_ */

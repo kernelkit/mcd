@@ -6,10 +6,10 @@ on:
       - 'dev'
 
 env:
-  PROJECT_NAME: querierd
+  PROJECT_NAME: mcd
   CONTACT_EMAIL: troglobit@gmail.com
-  COVERITY_NAME: westermo-querierd
-  COVERITY_PROJ: westermo%2Fquerierd
+  COVERITY_NAME: kernelkit-mcd
+  COVERITY_PROJ: kernelkit%2Fmcd
 
 jobs:
   coverity:
@@ -19,8 +19,8 @@ jobs:
         run: |
           sudo apt-get -y update
           sudo apt-get -y install pkg-config
-      - uses: actions/checkout@v2
-      - uses: actions/cache@v2
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
         id: coverity-toolchain-cache
         with:
           path: cov-analysis-linux64
@@ -57,7 +57,7 @@ jobs:
             --form description="${PROJECT_NAME} $(git rev-parse HEAD)" \
             https://scan.coverity.com/builds?project=${COVERITY_PROJ}
       - name: Upload build.log
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: coverity-build.log
           path: cov-int/build-log.txt

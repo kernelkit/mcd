@@ -1,9 +1,9 @@
 %{
 /*
- * Configuration file parser for querierd
+ * Configuration file parser for mcd
  *
  * Written originally for mrouted by Bill Fenner, NRL, 1994
- * Adapted to querierd by Joachim Wiberg, Westermo, 2022
+ * Adapted to mcd by Joachim Wiberg, Westermo, 2022
  *
  * cfparse.y,v 3.8.4.30 1998/03/01 01:48:58 fenner Exp
  */

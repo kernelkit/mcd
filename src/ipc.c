@@ -41,7 +41,7 @@
  * it to the daemon.
  *
  * Example:
- *           echo "help" |socat - UNIX-CONNECT:/run/querierd.sock
+ *           echo "help" |socat - UNIX-CONNECT:/run/mcd.sock
  */
 
 #include <fcntl.h>
@@ -518,7 +518,7 @@ void ipc_init(char *sockfile)
 	if (sockfile)
 		strlcpy(sun.sun_path, sockfile, sizeof(sun.sun_path));
 	else
-		snprintf(sun.sun_path, sizeof(sun.sun_path), _PATH_QUERIERD_SOCK, ident);
+		snprintf(sun.sun_path, sizeof(sun.sun_path), _PATH_MCD_SOCK, ident);
 
 	unlink(sun.sun_path);
 	logit(LOG_DEBUG, 0, "Binding IPC socket to %s", sun.sun_path);

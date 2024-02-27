@@ -57,9 +57,9 @@ tshark -lni eth1 -w "/tmp/$NM/eth1.pcap" 2>/dev/null &
 echo $! >> "/tmp/$NM/PIDs"
 sleep 1
 
-print "Starting querierd ..."
+print "Starting mcd ..."
 # shellcheck disable=SC2086
-../src/querierd -f "/tmp/$NM/config" -p "/tmp/$NM/pid" $DEBUG -n &
+../src/mcd -f "/tmp/$NM/config" -p "/tmp/$NM/pid" $DEBUG -n &
 echo $! >> "/tmp/$NM/PIDs"
 
 sleep 4

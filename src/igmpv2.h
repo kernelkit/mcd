@@ -43,7 +43,7 @@
  * IGMP_HOST_{MEMBERSHIP_QUERY,MEMBERSHIP_REPORT,NEW_MEMBERSHIP_REPORT
  *   ,LEAVE_MESSAGE}.  Later releases removed the HOST and inserted
  * the IGMP version number.  NetBSD inserted the version number in
- * a different way.  querierd use the new names, so we #define them
+ * a different way.  mcd use the new names, so we #define them
  * to the old ones if needed.
  */
 #if !defined(IGMP_MEMBERSHIP_QUERY) && defined(IGMP_HOST_MEMBERSHIP_QUERY)

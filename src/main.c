@@ -13,7 +13,7 @@
 int haveterminal = 1;
 int running = 1;
 int use_syslog = 1;
-time_t querierd_init_time;
+time_t mcd_init_time;
 
 char *config_file = NULL;
 char *pid_file    = NULL;
@@ -21,7 +21,7 @@ char *sock_file   = NULL;
 
 char *ident       = PACKAGE_NAME;
 char *prognm      = NULL;
-const char *versionstring = "querierd version " PACKAGE_VERSION;
+const char *versionstring = "mcd version " PACKAGE_VERSION;
 
 /*
  * Forward declarations.
@@ -34,7 +34,7 @@ static void cleanup(void);
 
 static int compose_paths(void)
 {
-    /* Default .conf file path: "/etc" + '/' + "querierd" + ".conf" */
+    /* Default .conf file path: "/etc" + '/' + "mcd" + ".conf" */
     if (!config_file) {
 	size_t len = strlen(SYSCONFDIR) + strlen(ident) + 7;
 
@@ -44,7 +44,7 @@ static int compose_paths(void)
 	    exit(1);
 	}
 
-	snprintf(config_file, len, _PATH_QUERIERD_CONF, ident);
+	snprintf(config_file, len, _PATH_MCD_CONF, ident);
     }
 
     /* Default is to let pidfile() API construct PID file from ident */

@@ -23,8 +23,8 @@ iface eth3 enable
 EOF
 cat "/tmp/$NM/config"
 
-print "Starting querierd ..."
-../src/querierd -f "/tmp/$NM/config" -p "/tmp/$NM/pid" -l debug -n -u "/tmp/$NM/sock" &
+print "Starting mcd ..."
+../src/mcd -f "/tmp/$NM/config" -p "/tmp/$NM/pid" -l debug -n -u "/tmp/$NM/sock" &
 echo $! >> "/tmp/$NM/PIDs"
 sleep 2
 

@@ -1,6 +1,6 @@
 AC_PREREQ(2.61)
-AC_INIT([querierd], [0.10], [https://github.com/troglobit/querierd/issues],,
-		[https://troglobit.com/projects/querierd/])
+AC_INIT([mcd], [0.10], [https://github.com/troglobit/mcd/issues],,
+		[https://troglobit.com/projects/mcd/])
 AC_CONFIG_AUX_DIR(aux)
 AM_INIT_AUTOMAKE([1.11 foreign])
 AM_SILENT_RULES([yes])
@@ -97,7 +97,7 @@ cat <<EOF
 ------------------ Summary ------------------
  $PACKAGE_NAME version $PACKAGE_VERSION
   Install prefix........: $prefix
-  Configuration file....: `eval echo $sysconfdir`/querierd.conf
+  Configuration file....: `eval echo $sysconfdir`/mcd.conf
   PID and .sock files...: `eval echo $runstatedir`/
   C Compiler............: $CC $CFLAGS $CPPFLAGS $LDFLAGS $LIBS
 

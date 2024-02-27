@@ -155,7 +155,7 @@ static int try_connect(struct sockaddr_un *sun)
 		close(sd);
 		if (errno == ENOENT) {
 			if (debug)
-				warnx("no querierd at %s", sun->sun_path);
+				warnx("no mcd at %s", sun->sun_path);
 			return -1;
 		}
 
@@ -432,10 +432,10 @@ static int get(char *cmd, FILE *fp)
 	sd = ipc_connect();
 	if (-1 == sd) {
 		if (errno == ENOENT)
-			errx(1, "no querierd running.");
+			errx(1, "no mcd running.");
 		else if (errno == EACCES)
 			errx(1, "not enough permissions.");
-		err(1, "failed connecting to querierd");
+		err(1, "failed connecting to mcd");
 
 		return 1; /* we never get here, make gcc happy */
 	}
@@ -585,23 +585,23 @@ static int usage(int rc)
 	char buf[120];
 
 	printf("Usage:\n"
-	       "  querierctl [OPTIONS] [COMMAND]\n"
+	       "  mctl [OPTIONS] [COMMAND]\n"
 	       "\n"
 	       "Options:\n"
-	       "  -i, --ident=NAME           Connect to named querierd instance\n"
+	       "  -i, --ident=NAME           Connect to named mcd instance\n"
 	       "  -m, --monitor              Run 'COMMAND' every two seconds, like watch(1)\n"
 	       "  -p, --plain                Use plain table headings, no ctrl chars\n"
 	       "  -t, --no-heading           Skip table headings\n"
 	       "  -h, --help                 This help text\n"
 	       "  -u, --ipc=FILE             Override UNIX domain socket file, default based on -i\n"
-	       "  -v, --version              Show querierctl version\n"
+	       "  -v, --version              Show mctl version\n"
 	       "\n");
 
 	if (ipc_fetch()) {
 		if (errno == EACCES)
-			printf("Not enough permissions to query querierd for commands.\n");
+			printf("Not enough permissions to query mcd for commands.\n");
 		else
-			printf("No querierd running, no commands available.\n");
+			printf("No mcd running, no commands available.\n");
 
 		return rc;
 	}
@@ -625,7 +625,7 @@ static int usage(int rc)
 
 static int version(void)
 {
-	printf("querierctl version %s (%s)\n", PACKAGE_VERSION, PACKAGE_NAME);
+	printf("mctl version %s (%s)\n", PACKAGE_VERSION, PACKAGE_NAME);
 	return 0;
 }
 
@@ -636,9 +636,9 @@ static int cmd(int argc, char *argv[])
 
 	if (ipc_fetch()) {
 		if (errno == EACCES)
-			printf("Not enough permissions to send commands to querierd.\n");
+			printf("Not enough permissions to send commands to mcd.\n");
 		else
-			printf("No querierd running, no commands available.\n");
+			printf("No mcd running, no commands available.\n");
 
 		return 1;
 	}

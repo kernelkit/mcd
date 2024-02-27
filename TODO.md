@@ -1,4 +1,4 @@
-Rough Plan for querierd
+Rough Plan for mcd
 =======================
 
 Planned for v0.11

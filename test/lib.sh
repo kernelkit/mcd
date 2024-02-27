@@ -1,5 +1,5 @@
 #!/bin/sh
-# Helper functions for testing querierd
+# Helper functions for testing mcd
 
 # Test name, used everywhere as /tmp/$NM/foo
 NM=$(basename "$0" .sh)

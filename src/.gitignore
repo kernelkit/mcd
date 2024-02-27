@@ -2,5 +2,5 @@
 .deps
 .dirstamp
 cfparse.c
-querierd
-querierctl
+mcd
+mctl

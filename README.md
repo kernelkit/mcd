@@ -5,30 +5,27 @@ Bridge Querier Helper
 This daemon is a querier helper for the Linux bridge.  Currently IGMP
 (IPv4) is supported, MLD (IPv6) querier support is planned.
 
-The daemon comes with a little helper tool called `querierctl` which
+The daemon comes with a little helper tool called `mctl` which
 can be used to check the status of IGMP per interface, but also to
-dump the bridge's MDB in a more human-friendly format.  There is a
-blog post describing how to set the bridge up and use `querierd`
+dump the bridge's MDB in a more human-friendly format.
 
-  * https://westermo.github.io/2022/02/17/bridge-igmp-snooping/
+For controlling `mcd` from another application, use the basic IPC
+support that `mctl` employs:
 
-For controlling `querierd` from another application, use the basic IPC
-support that `querierctl` employs:
+    echo "help" |socat - UNIX-CONNECT:/run/mcd.sock
 
-    echo "help" |socat - UNIX-CONNECT:/run/querierd.sock
-
-> See `querierd -h` for help, e.g. to customize the IPC path.
+> See `mcd -h` for help, e.g. to customize the IPC path.
 
 
 Configuration
 -------------
 
-By default `querierd` is passive on all interfaces.  Use the following
+By default `mcd` is passive on all interfaces.  Use the following
 settings to enable and tweak the defaults.  There is no way to configure
 different IGMP/MLD settings per interface at the moment, only protocol
 version.
 
-    # /etc/querierd.conf syntax
+    # /etc/mcd.conf syntax
     query-interval [1-1024]                   # default: 125 sec
     query-response-interval [1-1024]          # default: 10 sec
     query-last-member-interval [1-1024]       # default: 1
@@ -49,7 +46,7 @@ Description:
     devices and the loss of elected queriers (above)
   * `router-timeout`: also known as *"other querier present interval"*,
     controls the timer used to detect when an elected querier stops
-    sending queries.  When the timer expires `querierd` will initiate a
+    sending queries.  When the timer expires `mcd` will initiate a
     query.  The default, when this is unset (commented out) is
     calculated based on: `robustness * query-interval +
     query-response-interval / 2`.  Setting this to any value overrides
@@ -57,7 +54,7 @@ Description:
     however strongly recommended to leave this setting commented out!
 
 > **Note:** the daemon needs an address on interfaces to operate, it is
-> expected that querierd runs on top of a bridge. Also, currently the
+> expected that mcd runs on top of a bridge. Also, currently the
 > daemon does not react automatically to IP address changes, so it needs
 > to be SIGHUP'ed to use any new interface or address.
 
@@ -115,21 +112,19 @@ _____
 Origin & References
 -------------------
 
-This project is based on the [mrouted][] project, with DNA strands also from
-the [pimd][] project.  It should be quite easy to also add MLD/MLDv2 querier
-functionality from the [pim6sd][] project, because they all share a the same
-ancestor (mrouted).
+This is a fork of [querierd][], by Westermo Network Technologies, which
+in turn was based on the [mrouted][] project, with DNA strands from the
+[pimd][] project.  It should be quite easy to also add MLD/MLDv2 querier
+functionality from the [pim6sd][] project, because they all share a the
+same ancestor (mrouted).
 
-The [project][1] is maintained by Westermo Network Technologies, and due to
-its origin, licensed under the same license as mrouted.
-
-[1]:               https://github.com/westermo/querierd/
-[GitHub]:          https://github.com/westermo/querierd/actions/workflows/build.yml/
-[GitHub Status]:   https://github.com/westermo/querierd/actions/workflows/build.yml/badge.svg
+[GitHub]:          https://github.com/kernelkit/mcd/actions/workflows/build.yml/
+[GitHub Status]:   https://github.com/kernelkit/mcd/actions/workflows/build.yml/badge.svg
 [License]:         http://www.openbsd.org/cgi-bin/cvsweb/src/usr.sbin/mrouted/LICENSE
 [License Badge]:   https://img.shields.io/badge/License-BSD%203--Clause-blue.svg
 [Coverity Scan]:   https://scan.coverity.com/projects/24475
 [Coverity Status]: https://scan.coverity.com/projects/24475/badge.svg
+[querierd]:        https://github.com/westermo/querierd/
 [mrouted]:         https://github.com/troglobit/mrouted/
 [pimd]:            https://github.com/troglobit/pimd/
 [pim6sd]:          https://github.com/troglobit/pim6sd/
