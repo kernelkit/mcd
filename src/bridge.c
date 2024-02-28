@@ -219,27 +219,25 @@ static char *got(char *prop, int setval, int first)
 	return NULL;
 }
 
- static int cmpstringp(const void *p1, const void *p2)
+static int cmpstringp(const void *p1, const void *p2)
 {
-
 	const char *str1 = *(const char **)p1;
 	const char *str2 = *(const char **)p2;
-
-	int length = 0;
-	int index = 0;
-	int str1_len = strlen(str1);
-	int str2_len = strlen(str2);
+	size_t str1_len = strlen(str1);
+	size_t str2_len = strlen(str2);
+	size_t index, length;
 
 	if (str1_len == str2_len) {
 		length = str1_len;
 		return strncmp(str1, str2, length);
 	}
-	else if (str1_len > str2_len) 
+
+	if (str1_len > str2_len)
 		length = str1_len;
 	else 
 		length = str2_len;
 	
-	for (index=0; index<=length; index++) {
+	for (index = 0; index <= length; index++) {
 		if (*str1 != *str2)
 			break;
 
@@ -249,25 +247,23 @@ static char *got(char *prop, int setval, int first)
 
 	if (index <= 2)
 		return strncmp(str1, str2, length);
-	else if (str1_len < str2_len)
+
+	if (str1_len < str2_len)
 		return -1;
-	else
-		return 1;
 
-
+	return 1;
 }
 
 void bridge_prop(FILE *fp, char *prop, int setval)
 {
-	char *ifname;
+	struct port_name *name = NULL, *next = NULL;
 	char **array = NULL;
+	char *ifname;
 	int num = 0;
 	int x = 0;
-	struct port_name *name = NULL, *next = NULL;		
 
 	while ((ifname = got(prop, setval, !num))) {
-
-		name = malloc(sizeof(struct port_name));
+		name = calloc(1, sizeof(struct port_name));
 		if (!name)
 			goto out;
 		strncpy(name->ifname, ifname, IFNAMSIZ);
@@ -278,11 +274,11 @@ void bridge_prop(FILE *fp, char *prop, int setval)
 		name = NULL;
 	}
 
-	array = malloc(num * sizeof(char*));
+	array = calloc(num, sizeof(char *));
 	if (!array)
 		goto out;
 
-	for(int j=0; j<num; j++) {
+	for (int j = 0; j < num; j++) {
 		array[j] = malloc(IFNAMSIZ * sizeof(char));
 		if (!array[j])
 			goto out;
@@ -296,7 +292,7 @@ void bridge_prop(FILE *fp, char *prop, int setval)
 
 	qsort(array, num, sizeof(char *), cmpstringp);
 
-	for (int i=0; i<num; i++) {
+	for (int i = 0; i < num; i++) {
 		logit(LOG_DEBUG, 0, "Array val: %s, index: %d", array[i], i);
 		fprintf(fp, "%s%s", i ? ", " : "", array[i]);
 	}
@@ -304,8 +300,7 @@ void bridge_prop(FILE *fp, char *prop, int setval)
 out:
 	/* Cleaning up */
 	if (array) {
-		for (int j=0; j<num; j++)
-		{
+		for (int j = 0; j < num; j++) {
 			if (array[j]) 
 				free(array[j]);
 		}
@@ -314,8 +309,8 @@ out:
 	}
 
 	for (name = TAILQ_FIRST(&pnl); name; name = next) {
-	    next = TAILQ_NEXT(name, link);
-        TAILQ_REMOVE(&pnl, name, link);
+		next = TAILQ_NEXT(name, link);
+		TAILQ_REMOVE(&pnl, name, link);
 		free(name);
 	}
 
