@@ -29,7 +29,7 @@
 
 struct port_name {
 	TAILQ_ENTRY(port_name) link;
-	char ifname[IFNAMSIZ];
+	char ifname[IFNAMSIZ + 1];
 };
 TAILQ_HEAD(port_name_list, port_name); 
 struct port_name_list pnl = TAILQ_HEAD_INITIALIZER(pnl);
@@ -37,7 +37,7 @@ struct port_name_list pnl = TAILQ_HEAD_INITIALIZER(pnl);
 struct mdb {
 	TAILQ_ENTRY(mdb) link;
 
-	char br[16];
+	char br[IFNAMSIZ + 1];
 	char group[64];		/* XXX: audit for ipv6 */
 	char port[128];		/* XXX: too small prob */
 	int  vid;
@@ -106,17 +106,21 @@ static int populate(void)
 		return -1;
 
 	while (fgets(buf, sizeof(buf), fp)) {
-		char br[5], port[16], group[64];
+		char br[IFNAMSIZ + 1], port[IFNAMSIZ + 1], group[64];
 		char *tok, *dst;
 		int vid = 0;
+		size_t len;
 
 		for (tok = strtok(buf, " \t"); tok; tok = strtok(NULL, " \t")) {
 			if (!strcmp(tok, "dev")) {
 				dst = br;
+				len = sizeof(br);
 			} else if (!strcmp(tok, "port")) {
 				dst = port;
+				len = sizeof(port);
 			} else if (!strcmp(tok, "grp")) {
 				dst = group;
+				len = sizeof(group);
 			} else if (!strcmp(tok, "vid")) {
 				tok = strtok(NULL, " \t");
 				vid = strtol(tok, NULL, 10);
@@ -126,7 +130,7 @@ static int populate(void)
 			}
 
 			tok = strtok(NULL, " \t");
-			strcpy(dst, tok);
+			strlcpy(dst, tok, len);
 		}
 
 		/* XXX: Filter out IPv6 and MAC for now ... */
@@ -145,8 +149,8 @@ static int populate(void)
 		if (e->port[0])
 			strcat(e->port, ", ");
 		strcat(e->port, port);
-		strncpy(e->br, br, sizeof(e->br));
-		strncpy(e->group, group, sizeof(e->group));
+		strlcpy(e->br, br, sizeof(e->br));
+		strlcpy(e->group, group, sizeof(e->group));
 		e->vid = vid;
 		num++;
 	}
@@ -257,6 +261,7 @@ static int cmpstringp(const void *p1, const void *p2)
 void bridge_prop(FILE *fp, char *prop, int setval)
 {
 	struct port_name *name = NULL, *next = NULL;
+	const size_t len = IFNAMSIZ + 1;
 	char **array = NULL;
 	char *ifname;
 	int num = 0;
@@ -266,7 +271,8 @@ void bridge_prop(FILE *fp, char *prop, int setval)
 		name = calloc(1, sizeof(struct port_name));
 		if (!name)
 			goto out;
-		strncpy(name->ifname, ifname, IFNAMSIZ);
+
+		strlcpy(name->ifname, ifname, sizeof(name->ifname));
 		logit(LOG_DEBUG, 0, "Loop, name %s", name->ifname);
 
 		TAILQ_INSERT_TAIL(&pnl, name, link);	
@@ -279,14 +285,14 @@ void bridge_prop(FILE *fp, char *prop, int setval)
 		goto out;
 
 	for (int j = 0; j < num; j++) {
-		array[j] = malloc(IFNAMSIZ * sizeof(char));
+		array[j] = malloc(len * sizeof(char));
 		if (!array[j])
 			goto out;
 	}
 	
 	TAILQ_FOREACH(name, &pnl, link) {
 		logit(LOG_DEBUG, 0, "Foreach, port name: %s", name->ifname);
-		strncpy(array[x], name->ifname, IFNAMSIZ);
+		strlcpy(array[x], name->ifname, len);
 		x++;
 	}
 
