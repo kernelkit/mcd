@@ -27,10 +27,10 @@ struct ifi {
 
 #define IFIF_DOWN		0x000100 /* kernel state of interface */
 #define IFIF_DISABLED		0x000200 /* administratively disabled */
-#define IFIF_QUERIER		0x000400 /* I am the subnet's querier */
+#define IFIF_IGMP_QUERIER	0x000400 /* I am the subnet's querier */
 #define IFIF_IGMPV1		0x000800 /* Act as an IGMPv1 Router   */
 #define IFIF_IGMPV2		0x001000 /* Act as an IGMPv2 Router   */
-#define IFIF_PROXY_QUERIES	0x002000 /* Enable proxy queries      */
+#define IFIF_PROXY_QUERIER	0x002000 /* Act as IGMP proxy querier */
 
 struct phaddr {
     TAILQ_ENTRY(phaddr) pa_link;

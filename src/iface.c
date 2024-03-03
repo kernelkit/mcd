@@ -90,9 +90,9 @@ void iface_zero(struct ifi *ifi)
     ifi->ifi_igmpv1_warn = 0;
 }
 
-static int iface_is_proxy(const struct ifi *ifi)
+static int is_igmp_proxy(const struct ifi *ifi)
 {
-    return ifi->ifi_flags & IFIF_PROXY_QUERIES;
+    return ifi->ifi_flags & IFIF_PROXY_QUERIER;
 }
 
 /*
@@ -109,7 +109,7 @@ void iface_check_election(struct ifi *ifi)
     in_addr_t curr = 0;
     struct phaddr *pa;
 
-    if (iface_is_proxy(ifi)) {
+    if (is_igmp_proxy(ifi)) {
         if (ifi->ifi_querier && ifi->ifi_querier->al_addr)
             return;
 
@@ -166,9 +166,9 @@ void iface_check_election(struct ifi *ifi)
      * sending periodic group membership queries to the subnet.  Send
      * the first query.
      */
-    ifi->ifi_flags |= IFIF_QUERIER;
+    ifi->ifi_flags |= IFIF_IGMP_QUERIER;
     logit(LOG_DEBUG, 0, "Assuming %squerier duties on interface %s",
-          iface_is_proxy(ifi) ? "proxy " : "", ifi->ifi_name);
+          is_igmp_proxy(ifi) ? "proxy " : "", ifi->ifi_name);
     send_query(ifi, allhosts_group, igmp_response_interval * IGMP_TIMER_SCALE, 0);
 }
 
@@ -380,7 +380,7 @@ static void stop_iface(struct ifi *ifi)
     k_leave(allreports_group, ifi->ifi_ifindex);
 
     logit(LOG_DEBUG, 0, "Releasing querier duties on interface %s", ifi->ifi_name);
-    ifi->ifi_flags &= ~IFIF_QUERIER;
+    ifi->ifi_flags &= ~IFIF_IGMP_QUERIER;
 
     logit(LOG_INFO, 0, "Interface %s out of service", ifi->ifi_name);
 }
@@ -401,7 +401,7 @@ static void query_groups(int period, void *arg)
     if (ifi->ifi_flags & (IFIF_DOWN | IFIF_DISABLED))
 	return;
 
-    if (ifi->ifi_flags & IFIF_QUERIER)
+    if (ifi->ifi_flags & IFIF_IGMP_QUERIER)
 	send_query(ifi, allhosts_group, igmp_response_interval * IGMP_TIMER_SCALE, 0);
 }
 
@@ -467,7 +467,7 @@ void accept_membership_query(int ifindex, uint32_t src, uint32_t dst, uint32_t g
 		}
 
 		ifi->ifi_querier->al_timerid = pev_timer_add(router_timeout * 1000000, 0, router_timeout_cb, ifi);
-		ifi->ifi_flags &= ~IFIF_QUERIER;
+		ifi->ifi_flags &= ~IFIF_IGMP_QUERIER;
 	    }
 
 	    time(&ifi->ifi_querier->al_ctime);
@@ -506,7 +506,7 @@ void accept_membership_query(int ifindex, uint32_t src, uint32_t dst, uint32_t g
      * we must set our membership timer to [Last Member Query Count] *
      * the [Max Response Time] in the packet.
      */
-    if (!(ifi->ifi_flags & (IFIF_IGMPV1|IFIF_QUERIER))
+    if (!(ifi->ifi_flags & (IFIF_IGMPV1|IFIF_IGMP_QUERIER))
 	&& group != 0 && src != ifi->ifi_curr_addr) {
 	struct listaddr *g;
 
@@ -685,7 +685,7 @@ void accept_leave_message(int ifindex, uint32_t src, uint32_t dst, uint32_t grou
     if (!ifi)
 	return;
 
-    if (!(ifi->ifi_flags & IFIF_QUERIER) || (ifi->ifi_flags & IFIF_IGMPV1)) {
+    if (!(ifi->ifi_flags & IFIF_IGMP_QUERIER) || (ifi->ifi_flags & IFIF_IGMPV1)) {
 	logit(LOG_DEBUG, 0, "Ignoring group leave, not querier or interface in IGMPv1 mode.");
 	return;
     }
@@ -903,7 +903,7 @@ static void router_timeout_cb(int timeout, void *arg)
     free(ifi->ifi_querier);
     ifi->ifi_querier = NULL;
 
-    ifi->ifi_flags |= IFIF_QUERIER;
+    ifi->ifi_flags |= IFIF_IGMP_QUERIER;
     send_query(ifi, allhosts_group, igmp_response_interval * IGMP_TIMER_SCALE, 0);
 }
 

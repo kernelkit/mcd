@@ -291,7 +291,7 @@ static const char *ifstate(struct ifi *ifi)
 	if (ifi->ifi_flags & IFIF_DISABLED)
 		return "Disabled";
 
-	if (ifi->ifi_flags & IFIF_PROXY_QUERIES)
+	if (ifi->ifi_flags & IFIF_PROXY_QUERIER)
 		return "Proxy";
 
 	return "Up";

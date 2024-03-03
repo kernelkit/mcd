@@ -117,7 +117,7 @@ ifmods	: /* empty */
 
 ifmod	: DISABLE		{ ifi->ifi_flags |= IFIF_DISABLED; }
 	| ENABLE		{ ifi->ifi_flags &= ~IFIF_DISABLED; }
-	| PROXY_QUERIES		{ ifi->ifi_flags |= IFIF_PROXY_QUERIES; }
+	| PROXY_QUERIES		{ ifi->ifi_flags |= IFIF_PROXY_QUERIER; }
 	| IGMPV1		{ ifi->ifi_flags &= ~IFIF_IGMPV2; ifi->ifi_flags |= IFIF_IGMPV1; }
 	| IGMPV2		{ ifi->ifi_flags &= ~IFIF_IGMPV1; ifi->ifi_flags |= IFIF_IGMPV2; }
 	| IGMPV3		{ ifi->ifi_flags &= ~IFIF_IGMPV1; ifi->ifi_flags &= ~IFIF_IGMPV2; }
