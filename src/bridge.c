@@ -22,7 +22,9 @@
 #include <string.h>
 #include <arpa/inet.h>
 #include <netinet/if_ether.h>
+
 #include "defs.h"
+#include "inet.h"
 #include "queue.h"
 
 #define SYSFS_PATH_ "/sys/class/net/"

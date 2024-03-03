@@ -8,6 +8,7 @@
 #include <linux/if_packet.h>
 
 #include "defs.h"
+#include "inet.h"
 
 #define PIM_QUERY           0
 #define PIM_REGISTER        1

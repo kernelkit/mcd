@@ -3,18 +3,18 @@
  * by the license in the accompanying file named "LICENSE".
  */
 
-#include <arpa/inet.h>
 #include <netdb.h>
 
 #include "defs.h"
+#include "inet.h"
 
 /*
  * Exported variables.
  */
-char s1[MAX_INET_BUF_LEN];		/* buffers to hold the string representations  */
-char s2[MAX_INET_BUF_LEN];		/* of IP addresses, to be passed to inet_fmt() */
-char s3[MAX_INET_BUF_LEN];		/* or inet_fmts().                             */
-char s4[MAX_INET_BUF_LEN];
+char s1[INET_ADDRSTR_LEN];		/* buffers to hold the string representations  */
+char s2[INET_ADDRSTR_LEN];		/* of IP addresses, to be passed to inet_fmt() */
+char s3[INET_ADDRSTR_LEN];		/* or inet_fmts().                             */
+char s4[INET_ADDRSTR_LEN];
 
 
 /*

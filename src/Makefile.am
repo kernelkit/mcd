@@ -13,7 +13,8 @@ sbin_PROGRAMS    = mcd mctl
 mcd_SOURCES      = main.c cfparse.y config.c defs.h	\
 		   iface.c iface.h netlink.c		\
 		   igmp.c igmpv2.h igmpv3.h 		\
-		   inet.c ipc.c kern.c log.c 		\
+		   inet.c inet.h			\
+		   ipc.c kern.c log.c			\
 		   bridge.c pev.c pev.h			\
 		   pathnames.h queue.h
 mcd_CPPFLAGS     = $(AM_CPPFLAGS)

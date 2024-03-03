@@ -78,12 +78,6 @@ extern int		running;
 extern int		haveterminal;
 extern int		did_final_init;
 
-#define MAX_INET_BUF_LEN 19
-extern char		s1[MAX_INET_BUF_LEN];
-extern char		s2[MAX_INET_BUF_LEN];
-extern char		s3[MAX_INET_BUF_LEN];
-extern char		s4[MAX_INET_BUF_LEN];
-
 #define IGMP_PROXY_QUERY_MAXLEN (sizeof(struct ether_header)	+ \
                                  sizeof(struct ip)		+ \
                                  4 +				  \
@@ -119,14 +113,6 @@ extern char		s4[MAX_INET_BUF_LEN];
 
 #ifndef INADDR_MAX_LOCAL_GROUP
 #define INADDR_MAX_LOCAL_GROUP	(uint32_t)0xe00000ff	/* 224.0.0.255 */
-#endif
-
-/*
- * Checks if addr is IPv4LL
- */
-#ifndef IN_LINKLOCAL
-#define IN_LINKLOCALNETNUM 0xa9fe0000
-#define IN_LINKLOCAL(addr) ((addr & IN_CLASSB_NET) == IN_LINKLOCALNETNUM)
 #endif
 
 

@@ -4,6 +4,7 @@
  */
 
 #include "defs.h"
+#include "inet.h"
 
 int curttl = 0;
 

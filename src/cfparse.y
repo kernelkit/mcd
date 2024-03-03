@@ -9,9 +9,12 @@
  */
 #include <stdio.h>
 #include <stdarg.h>
-#include "defs.h"
 #include <netdb.h>
 #include <ifaddrs.h>
+
+#include "defs.h"
+#include "inet.h"
+
 
 /*
  * Local function declarations

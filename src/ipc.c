@@ -46,7 +46,9 @@
 
 #include <fcntl.h>
 #include <stddef.h>
+
 #include "defs.h"
+#include "inet.h"
 
 #define ENABLED(v) (v ? "Enabled" : "Disabled")
 

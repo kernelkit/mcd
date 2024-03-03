@@ -4,7 +4,9 @@
  */
 
 #include <ifaddrs.h>
+
 #include "defs.h"
+#include "inet.h"
 
 /*
  * Exported variables.
