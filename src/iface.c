@@ -102,8 +102,8 @@ static int is_igmp_proxy(const struct ifi *ifi)
  * Start by figuring out the best local address for the iface.  Check if
  * the current address is better (RFC), make sure an IPv4LL doesn't win.
  * Usually we want a real address if available.  0.0.0.0 is reserved for
- * proxy querys, which we resort to if proxy mode is active and no real
- * querier has been seen.
+ * proxy querys, which we resort to when we have nothing better and no
+ * real querier has been seen.
  */
 void iface_check_election(struct ifi *ifi)
 {
@@ -111,14 +111,19 @@ void iface_check_election(struct ifi *ifi)
     struct phaddr *pa;
 
     if (is_igmp_proxy(ifi)) {
-        if (ifi->ifi_querier && ifi->ifi_querier->al_addr)
+	logit(LOG_DEBUG, 0, "%s is proxy", ifi->ifi_name);
+        if (ifi->ifi_querier && ifi->ifi_querier->al_addr) {
+	    logit(LOG_DEBUG, 0, "%s has known good querier", ifi->ifi_name);
             return;
+	}
 
         if (ifi->ifi_querier) {
             pev_timer_del(ifi->ifi_querier->al_timerid);
             free(ifi->ifi_querier);
             ifi->ifi_querier = NULL;
         }
+
+	logit(LOG_DEBUG, 0, "%s is proxy got elected", ifi->ifi_name);
         goto elected;
     }
 
@@ -154,12 +159,11 @@ void iface_check_election(struct ifi *ifi)
 	    ifi->ifi_querier = NULL;
 	    goto elected;
 	}
-    } else {
-	if (curr && ifi->ifi_prev_addr == 0)
-	    goto elected;
-    }
 
-    return;
+	/* querier exists and it is better than our best alternative */
+	return;
+    }
+    /* else: no querier exists and we may have a better, or at least proxy */
 
   elected:
     /*
