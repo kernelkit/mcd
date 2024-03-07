@@ -53,10 +53,24 @@ Description:
     the RFC algorithm, which may be necessary in some scenarios, it is
     however strongly recommended to leave this setting commented out!
 
-> **Note:** the daemon needs an address on interfaces to operate, it is
-> expected that mcd runs on top of a bridge. Also, currently the
-> daemon does not react automatically to IP address changes, so it needs
-> to be SIGHUP'ed to use any new interface or address.
+All interfaces in the system are probed at start (and SIGHUP), to enable
+mcd to act as a querier, use:
+
+    iface IFNAME enable
+
+This enables standard querier mode, using the interface's address as the
+source IP in IGMP queries, `igmpv3` is default but mcd knows how to fall
+back to IGMPv2 automatically if it detects legacy devices on the LAN.
+To force IGMPv2 operation from start, set only the `igmpv2` flag.
+
+If mcd should never participate in querier elections, only act as a LAN
+backup querier, set the `proxy-mode` flag.  It ensures mcd always uses
+the special source address 0.0.0.0 and is therefore guaranteed to never
+win an election.
+
+> **Note:** unless mcd has an IP address it will operate as if set to
+> `proxy-mode`.  If the interface has no address when mcd starts up it
+> needs to be SIGHUP'ed to use any new interface or address, e.g. DHCP.
 
 
 Motivation
