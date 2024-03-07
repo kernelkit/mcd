@@ -45,7 +45,7 @@ static struct ifi scrap;
 %token QUERY_INTERVAL QUERY_LAST_MEMBER_INTERVAL QUERY_RESPONSE_INTERVAL
 %token IGMP_ROBUSTNESS ROUTER_TIMEOUT ROUTER_ALERT
 %token NO PHYINT
-%token DISABLE ENABLE IGMPV1 IGMPV2 IGMPV3 STATIC_GROUP PROXY_QUERIES
+%token DISABLE ENABLE IGMPV1 IGMPV2 IGMPV3 STATIC_GROUP PROXY_QUERIER
 %token <num> BOOLEAN
 %token <num> NUMBER
 %token <ptr> STRING
@@ -120,7 +120,7 @@ ifmods	: /* empty */
 
 ifmod	: DISABLE		{ ifi->ifi_flags |= IFIF_DISABLED; }
 	| ENABLE		{ ifi->ifi_flags &= ~IFIF_DISABLED; }
-	| PROXY_QUERIES		{ ifi->ifi_flags |= IFIF_PROXY_QUERIER; }
+	| PROXY_QUERIER		{ ifi->ifi_flags |= IFIF_PROXY_QUERIER; }
 	| IGMPV1		{ ifi->ifi_flags &= ~IFIF_IGMPV2; ifi->ifi_flags |= IFIF_IGMPV1; }
 	| IGMPV2		{ ifi->ifi_flags &= ~IFIF_IGMPV1; ifi->ifi_flags |= IFIF_IGMPV2; }
 	| IGMPV3		{ ifi->ifi_flags &= ~IFIF_IGMPV1; ifi->ifi_flags &= ~IFIF_IGMPV2; }
@@ -236,7 +236,8 @@ static struct keyword {
 	{ "igmpv2",		IGMPV2, 0 },
 	{ "igmpv3",		IGMPV3, 0 },
 	{ "static-group",	STATIC_GROUP, 0 },
-	{ "proxy-queries",	PROXY_QUERIES, 0},
+	{ "proxy-queries",	PROXY_QUERIER, 0}, /* compat */
+	{ "proxy-mode",		PROXY_QUERIER, 0},
 	{ NULL,			0, 0 }
 };
 
