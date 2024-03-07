@@ -50,7 +50,8 @@ TAILQ_HEAD(, mdb) mdb_list = TAILQ_HEAD_INITIALIZER(mdb_list);
 static char *br   = "br0";
 static int compat = 0;
 extern int detail;
-
+extern int json;
+int prefix = 0;
 
 static struct mdb *find(char *group, int vid)
 {
@@ -108,7 +109,7 @@ static int populate(void)
 		return -1;
 
 	while (fgets(buf, sizeof(buf), fp)) {
-		char br[IFNAMSIZ + 1], port[IFNAMSIZ + 1], group[64];
+		char br[IFNAMSIZ + 1], port[IFNAMSIZ + 3], group[64];
 		char *tok, *dst;
 		int vid = 0;
 		size_t len;
@@ -150,7 +151,11 @@ static int populate(void)
 
 		if (e->port[0])
 			strcat(e->port, ", ");
+		if (json)
+			strcat(e->port, "\"");
 		strcat(e->port, port);
+		if (json)
+			strcat(e->port, "\"");
 		strlcpy(e->br, br, sizeof(e->br));
 		strlcpy(e->group, group, sizeof(e->group));
 		e->vid = vid;
@@ -629,28 +634,73 @@ int show_bridge_compat(FILE *fp)
 	return 0;
 }
 
+static void jprint(FILE *fp, const char *key, const char *val, int *first)
+{
+	fprintf(fp, "%s%*s\"%s\": \"%s\"", *first ? "" : ",\n", prefix, "", key, val);
+	*first = 0;
+}
+
+static void jprinti(FILE *fp, const char *key, int val, int *first)
+{
+	fprintf(fp, "%s%*s\"%s\": %d", *first ? "" : ",\n", prefix, "", key, val);
+	*first = 0;
+}
+
+static void jprinta(FILE *fp, const char *key, const char *val, int *first)
+{
+	fprintf(fp, "%s%*s\"%s\": [ %s ]", *first ? "" : ",\n", prefix, "", key, val);
+	*first = 0;
+}
 
 int show_bridge_groups(FILE *fp)
 {
 	struct mdb *e;
+	int first = 1;
 
 	if (populate()) {
 		logit(LOG_ERR, 0, "Failed reading MDB");
 		return 1;
 	}
 
-	fprintf(fp, " VID  Multicast MAC         Multicast Group       Ports=\n");
+	if (json) {
+		fprintf(fp, "%*s[\n", prefix, "");
+		prefix += 2;
+	}
+	else
+		fprintf(fp, " VID  Multicast MAC         Multicast Group       Ports=\n");
 
 	TAILQ_FOREACH(e, &mdb_list, link) {
-		uint8_t mac[ETH_ALEN];
+		char ena[20], vid[11] = { 0 };
+		unsigned char mac[ETH_ALEN];
 		struct in_addr ina;
+		int once = 1;
 
 		inet_aton(e->group, &ina);
 		ETHER_MAP_IP_MULTICAST(&ina, mac);
+		snprintf(ena, sizeof(ena), "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+		if (e->vid > 0)
+			snprintf(vid, sizeof(vid), "%4d", e->vid);
 
-		fprintf(fp, "%4d  %02X:%02X:%02X:%02X:%02X:%02X     %-20s  %s\n",
-			e->vid,mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
-			e->group, e->port);
+		if (json) {
+			fprintf(fp, "%s%*s{\n", first ? "" : ",\n", prefix, "");
+			prefix += 2;
+			first = 0;
+
+			if (e->vid > 0)
+				jprinti(fp, "vid", e->vid, &once);
+			jprint(fp, "group", e->group, &once);
+			jprint(fp, "mac", ena, &once);
+			jprinta(fp, "ports", e->port, &once);
+
+			prefix -= 2;
+			fprintf(fp, "\n%*s}", prefix, "");
+		} else
+			fprintf(fp, "%s  %s     %-20s  %s\n", vid, ena, e->group, e->port);
+	}
+
+	if (json) {
+		prefix -= 2;
+		fprintf(fp, "%*s\n]\n", prefix, "");
 	}
 
 	drop();

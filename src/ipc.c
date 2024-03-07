@@ -56,6 +56,7 @@ static struct sockaddr_un sun;
 static int ipc_sockid =  0;
 static int ipc_socket = -1;
 int detail = 0;
+int json = 0;
 
 enum {
 	IPC_ERR = -1,
@@ -77,7 +78,7 @@ struct ipcmd {
 } cmds[] = {
 	{ IPC_HELP,       "help", NULL, "This help text" },
 	{ IPC_VERSION,    "version", NULL, "Show daemon version" },
-	{ IPC_IGMP_GRP,   "show groups", NULL, "Show IGMP/MLD group memberships" },
+	{ IPC_IGMP_GRP,   "show groups", "[json]", "Show IGMP/MLD group memberships" },
 	{ IPC_IGMP_IFACE, "show interfaces", NULL, "Show IGMP/MLD interface status" },
 	{ IPC_STATUS,     "show status", NULL, "Show daemon status (default)" },
 	{ IPC_IGMP,       "show igmp", NULL, "Show interfaces and group memberships" },
@@ -146,21 +147,24 @@ static void strip(char *cmd, size_t len)
 	chomp(cmd);
 }
 
-static void check_detail(char *cmd, size_t len)
+static void check_opts(char *cmd, size_t len)
 {
-	const char *det = "detail";
-	char *ptr;
-
 	strip(cmd, len);
 
-	len = MIN(strlen(cmd), strlen(det));
-	if (len > 0 && !strncasecmp(cmd, det, len)) {
-		len = strcspn(cmd, " \t\n");
-		strip(cmd, len);
+	detail = 0;
+	json = 0;
 
-		detail = 1;
-	} else
-		detail = 0;
+	while (len > 0) {
+		len = strcspn(cmd, " \t\n");
+		if (!strncasecmp(cmd, "detail", len))
+			detail = 1;
+		else if (!strncasecmp(cmd, "json", len))
+			json = 1;
+		else
+			break;
+
+		strip(cmd, len);
+	}
 }
 
 static int ipc_read(int sd, char *cmd, ssize_t len)
@@ -186,7 +190,7 @@ static int ipc_read(int sd, char *cmd, ssize_t len)
 		size_t len = strlen(c->cmd);
 
 		if (!strncasecmp(cmd, c->cmd, len)) {
-			check_detail(cmd, len);
+			check_opts(cmd, len);
 			return c->op;
 		}
 	}
