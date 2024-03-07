@@ -398,8 +398,8 @@ static void print(char *line, int indent)
 		str_len = strlen(line);
 		len = 79;
 
-		if (str_len > len) {
-			for (int x=0; x <= str_len; x++) {
+		if (!plain && str_len > len) {
+			for (int x = 0; x <= str_len; x++) {
 				fputc(line[0], stdout);
 				
 				if (index >= len && line[0] == ' ') {
