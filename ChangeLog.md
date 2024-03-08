@@ -3,6 +3,24 @@ Change Log
 
 All relevant, user visible, changes are documented in this file.
 
+[v1.0][UNRELEASED] - 2024-03-08
+---------------------
+
+First release under new stewardship.
+
+### Changes
+ - Project forked and renamed to mcd
+ - Add JSON output support
+ - Renamed setting `proxy-queries` to `proxy-mode`, compat
+   for old setting name remains
+ - Update documentation, missing `iface` settings
+
+### Fixes
+ - Allow fallback to proxy mode if interface has no address
+ - Fix coding style
+ - Fix build warnings
+
+
 [v0.10][] - 2023-05-30
 ----------------------
 
@@ -109,6 +127,7 @@ Limited IGMPv1/v2/v3 querier with hard-coded query interval, etc.  Put
 interfaces in a .conf file, whitespace separated to enable querier.
 
 [UNRELEASED]: https://github.com/westermo/querierd/compare/v0.10...HEAD
+[v1.0]:       https://github.com/westermo/querierd/compare/v0.10...v1.0
 [v0.10]:      https://github.com/westermo/querierd/compare/v0.9...v0.10
 [v0.9]:       https://github.com/westermo/querierd/compare/v0.8...v0.9
 [v0.8]:       https://github.com/westermo/querierd/compare/v0.7...v0.8
