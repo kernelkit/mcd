@@ -52,6 +52,7 @@ typedef void (*ihfunc_t) (int);
 #include "pev.h"
 
 #define NELEMS(a)	(sizeof((a)) / sizeof((a)[0]))
+#define ENABLED(v)      (v ? "Enabled" : "Disabled")
 
 TAILQ_HEAD(ifaces, ifi);
 

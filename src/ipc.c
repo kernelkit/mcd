@@ -49,14 +49,15 @@
 
 #include "defs.h"
 #include "inet.h"
-
-#define ENABLED(v) (v ? "Enabled" : "Disabled")
+#include "ipc.h"
 
 static struct sockaddr_un sun;
 static int ipc_sockid =  0;
 static int ipc_socket = -1;
 int detail = 0;
 int json = 0;
+int prefix = 0;
+int nested = 0;
 
 enum {
 	IPC_ERR = -1,
@@ -79,11 +80,11 @@ struct ipcmd {
 	{ IPC_HELP,       "help", NULL, "This help text" },
 	{ IPC_VERSION,    "version", NULL, "Show daemon version" },
 	{ IPC_IGMP_GRP,   "show groups", "[json]", "Show IGMP/MLD group memberships" },
-	{ IPC_IGMP_IFACE, "show interfaces", NULL, "Show IGMP/MLD interface status" },
-	{ IPC_STATUS,     "show status", NULL, "Show daemon status (default)" },
-	{ IPC_IGMP,       "show igmp", NULL, "Show interfaces and group memberships" },
+	{ IPC_IGMP_IFACE, "show interfaces", "[json]", "Show IGMP/MLD interface status" },
+	{ IPC_STATUS,     "show status", "[json]", "Show daemon status (default)" },
+	{ IPC_IGMP,       "show igmp", "[json]", "Show interfaces and group memberships" },
 	{ IPC_COMPAT,     "show compat", "[detail]", "Show legacy output (test compat mode)" },
-	{ IPC_IGMP,       "show", NULL, NULL }, /* hidden default */
+	{ IPC_IGMP,       "show", "[json]", NULL }, /* hidden default */
 };
 
 extern void bridge_prop(FILE *fp, char *prop, int setval);
@@ -151,8 +152,8 @@ static void check_opts(char *cmd, size_t len)
 {
 	strip(cmd, len);
 
+	json = prefix = nested = 0; /* reset before each command */
 	detail = 0;
-	json = 0;
 
 	while (len > 0) {
 		len = strcspn(cmd, " \t\n");
@@ -305,17 +306,39 @@ static const char *ifstate(struct ifi *ifi)
 
 static int show_status(FILE *fp)
 {
-	if (detail)
-		fprintf(fp, "Process ID              : %d\n", getpid());
-	fprintf(fp, "Query Interval          : %d sec\n", igmp_query_interval);
-	if (detail) {
-		fprintf(fp, "Query Response Interval : %d sec\n", igmp_response_interval);
-		fprintf(fp, "Last Member Interval    : %d\n", igmp_last_member_interval);
+	if (json) {
+		int first = 1;
+
+		if (!nested) {
+			fprintf(fp, "{\n");
+			prefix += 2;
+		}
+
+		jprinti(fp, "pid", getpid(), &first);
+		jprinti(fp, "query-interval", igmp_query_interval, &first);
+		jprinti(fp, "query-response-interval", igmp_response_interval, &first);
+		jprinti(fp, "query-last-member-interval", igmp_last_member_interval, &first);
+		jprinti(fp, "robustness", igmp_robustness, &first);
+		jprinti(fp, "router-timeout", router_timeout, &first);
+		jprintb(fp, "router-alert", router_alert, &first);
+
+		if (!nested) {
+			prefix -= 2;
+			fprintf(fp, "\n%*s}", prefix, "");
+		}
+	} else {
+		if (detail)
+			fprintf(fp, "Process ID              : %d\n", getpid());
+		fprintf(fp, "Query Interval          : %d sec\n", igmp_query_interval);
+		if (detail) {
+			fprintf(fp, "Query Response Interval : %d sec\n", igmp_response_interval);
+			fprintf(fp, "Last Member Interval    : %d\n", igmp_last_member_interval);
+		}
+		fprintf(fp, "Robustness Value        : %d\n", igmp_robustness);
+		fprintf(fp, "Router Timeout          : %d\n", router_timeout);
+		if (detail)
+			fprintf(fp, "Router Alert            : %s\n", ENABLED(router_alert));
 	}
-	fprintf(fp, "Robustness Value        : %d\n", igmp_robustness);
-	fprintf(fp, "Router Timeout          : %d\n", router_timeout);
-	if (detail)
-		fprintf(fp, "Router Alert            : %s\n", ENABLED(router_alert));
 
 	return 0;
 }
@@ -323,10 +346,17 @@ static int show_status(FILE *fp)
 static int show_igmp_iface(FILE *fp)
 {
 	struct ifi *ifi;
+	int first = 1;
 
-	fprintf(fp, "Interface         State     Querier               Timeout  Ver=\n");
+	if (json) {
+		fprintf(fp, "[\n");
+		prefix += 2;
+	} else
+		fprintf(fp, "Interface         State     Querier               Timeout  Ver=\n");
+
 	for (ifi = config_iface_iter(1); ifi; ifi = config_iface_iter(0)) {
 		char timeout[10];
+		int rt_tmo = -1;
 		int version;
 
 		if (!ifi->ifi_querier) {
@@ -337,7 +367,8 @@ static int show_igmp_iface(FILE *fp)
 
 			inet_fmt(ifi->ifi_querier->al_addr, s1, sizeof(s1));
 			t = time(NULL) - ifi->ifi_querier->al_ctime;
-			snprintf(timeout, sizeof(timeout), "%u", router_timeout - (int)t);
+			rt_tmo = (int)router_timeout - (int)t;
+			snprintf(timeout, sizeof(timeout), "%u", rt_tmo);
 		}
 
 		if (ifi->ifi_flags & IFIF_IGMPV1)
@@ -347,8 +378,30 @@ static int show_igmp_iface(FILE *fp)
 		else
 			version = 3;
 
-		fprintf(fp, "%-16s  %-8s  %-20s  %7s  %3d\n", ifi->ifi_name,
-			ifstate(ifi), s1, timeout, version);
+		if (json) {
+			int once = 1;
+
+			fprintf(fp, "%s%*s{\n", first ? "" : ",\n", prefix, "");
+			prefix += 2;
+
+			jprint(fp, "interface", ifi->ifi_name, &once);
+			jprint(fp, "state", ifi->ifi_name, &once);
+			jprint(fp, "querier", ifi->ifi_name, &once);
+			if (rt_tmo > -1)
+				jprinti(fp, "timeout", rt_tmo, &once);
+			jprinti(fp, "version", version, &once);
+
+			prefix -= 2;
+			fprintf(fp, "\n%*s}", prefix, "");
+			first = 0;
+		} else
+			fprintf(fp, "%-16s  %-8s  %-20s  %7s  %3d\n", ifi->ifi_name,
+				ifstate(ifi), s1, timeout, version);
+	}
+
+	if (json) {
+		prefix -= 2;
+		fprintf(fp, "\n%*s]", prefix, "");
 	}
 
 	return 0;
@@ -358,16 +411,49 @@ static int show_igmp(FILE *fp)
 {
 	int rc = 0;
 
-	fprintf(fp, "Multicast Overview=\n");
+	if (json) {
+		fprintf(fp, "{\n");
+		prefix += 2;
+	} else
+		fprintf(fp, "Multicast Overview=\n");
+
+	nested = 1;
 	show_status(fp);
-	fprintf(fp, "%-23s : ", "Fast Leave Ports"); bridge_prop(fp, "multicast_fast_leave", 1);
-	fprintf(fp, "%-23s : ", "Router Ports");     bridge_router_ports(fp);
-	fprintf(fp, "%-23s : ", "Flood Ports");      bridge_prop(fp, "multicast_flood", 1);
-	fprintf(fp, "\n");
+
+	if (json) {
+		fprintf(fp, ",\n%*s\"fast-leave-ports\": [ ", prefix, "");
+		bridge_prop(fp, "multicast_fast_leave", 1);
+		fprintf(fp, "],\n");
+
+		fprintf(fp, "%*s\"multicast-router-ports\": [ ", prefix, "");
+		bridge_router_ports(fp);
+		fprintf(fp, "],\n");
+
+		fprintf(fp, "%*s\"multicast-flood-ports\": [ ", prefix, "");
+		bridge_prop(fp, "multicast_flood", 1);
+		fprintf(fp, "]");
+	} else {
+		fprintf(fp, "%-23s : ", "Fast Leave Ports"); bridge_prop(fp, "multicast_fast_leave", 1);
+		fprintf(fp, "%-23s : ", "Router Ports");     bridge_router_ports(fp);
+		fprintf(fp, "%-23s : ", "Flood Ports");      bridge_prop(fp, "multicast_flood", 1);
+		fprintf(fp, "\n");
+	}
+
+	if (json)
+		fprintf(fp, ",\n%*s\"multicast-queriers\": ", prefix, "");
 
 	rc += show_igmp_iface(fp);
-	fprintf(fp, "\n");
+	if (!json)
+		fprintf(fp, "\n");
+
+	if (json)
+		fprintf(fp, ",\n%*s\"multicast-groups\": ", prefix, "");
 	rc += show_bridge_groups(fp);
+
+	if (json) {
+		prefix -= 2;
+		fprintf(fp, "}\n");
+	}
 
 	return rc;
 }

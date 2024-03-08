@@ -25,6 +25,7 @@
 
 #include "defs.h"
 #include "inet.h"
+#include "ipc.h"
 #include "queue.h"
 
 #define SYSFS_PATH_ "/sys/class/net/"
@@ -49,9 +50,6 @@ struct mdb {
 TAILQ_HEAD(, mdb) mdb_list = TAILQ_HEAD_INITIALIZER(mdb_list);
 static char *br   = "br0";
 static int compat = 0;
-extern int detail;
-extern int json;
-int prefix = 0;
 
 static struct mdb *find(char *group, int vid)
 {
@@ -268,7 +266,7 @@ static int cmpstringp(const void *p1, const void *p2)
 void bridge_prop(FILE *fp, char *prop, int setval)
 {
 	struct port_name *name = NULL, *next = NULL;
-	const size_t len = IFNAMSIZ + 1;
+	const size_t len = IFNAMSIZ + 3;
 	char **array = NULL;
 	char *ifname;
 	int num = 0;
@@ -299,7 +297,10 @@ void bridge_prop(FILE *fp, char *prop, int setval)
 	
 	TAILQ_FOREACH(name, &pnl, link) {
 		logit(LOG_DEBUG, 0, "Foreach, port name: %s", name->ifname);
-		strlcpy(array[x], name->ifname, len);
+		if (json)
+			snprintf(array[x], len, "\"%s\"", name->ifname);
+		else
+			strlcpy(array[x], name->ifname, len);
 		x++;
 	}
 
@@ -327,9 +328,11 @@ out:
 		free(name);
 	}
 
-	if (!num && compat)
-		fprintf(fp, "---");
-	fprintf(fp, "\n");
+	if (!json) {
+		if (!num && compat)
+			fprintf(fp, "---");
+		fprintf(fp, "\n");
+	}
 }
 
 /*
@@ -400,7 +403,10 @@ void bridge_router_ports(FILE *fp)
 
 		logit(LOG_DEBUG, 0, "Found router port %s with %.2f s timeout\n", ifname, timer);
 		if (timer > 0.0 && !seen) {
-			fprintf(fp, "%s%s", num ? ", " : "", ifname);
+			if (json)
+				fprintf(fp, "%s\"%s\"", num ? ", " : "", ifname);
+			else
+				fprintf(fp, "%s%s", num ? ", " : "", ifname);
 			num++;
 			memcpy(prev_ifname, ifname, sizeof(prev_ifname));
 		}
@@ -408,9 +414,11 @@ void bridge_router_ports(FILE *fp)
 	pclose(rfp);
 
 fail:
-	if (!num && compat)
-		fprintf(fp, "---");
-	fprintf(fp, "\n");
+	if (!json) {
+		if (!num && compat)
+			fprintf(fp, "---");
+		fprintf(fp, "\n");
+	}
 }
 
 static int enabled(void)
@@ -634,24 +642,6 @@ int show_bridge_compat(FILE *fp)
 	return 0;
 }
 
-static void jprint(FILE *fp, const char *key, const char *val, int *first)
-{
-	fprintf(fp, "%s%*s\"%s\": \"%s\"", *first ? "" : ",\n", prefix, "", key, val);
-	*first = 0;
-}
-
-static void jprinti(FILE *fp, const char *key, int val, int *first)
-{
-	fprintf(fp, "%s%*s\"%s\": %d", *first ? "" : ",\n", prefix, "", key, val);
-	*first = 0;
-}
-
-static void jprinta(FILE *fp, const char *key, const char *val, int *first)
-{
-	fprintf(fp, "%s%*s\"%s\": [ %s ]", *first ? "" : ",\n", prefix, "", key, val);
-	*first = 0;
-}
-
 int show_bridge_groups(FILE *fp)
 {
 	struct mdb *e;
@@ -663,7 +653,7 @@ int show_bridge_groups(FILE *fp)
 	}
 
 	if (json) {
-		fprintf(fp, "%*s[\n", prefix, "");
+		fprintf(fp, "[\n");
 		prefix += 2;
 	}
 	else
@@ -700,7 +690,7 @@ int show_bridge_groups(FILE *fp)
 
 	if (json) {
 		prefix -= 2;
-		fprintf(fp, "%*s\n]\n", prefix, "");
+		fprintf(fp, "\n%*s]\n", prefix, "");
 	}
 
 	drop();
