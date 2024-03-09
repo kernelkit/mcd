@@ -667,7 +667,7 @@ int show_bridge_groups(FILE *fp)
 
 		inet_aton(e->group, &ina);
 		ETHER_MAP_IP_MULTICAST(&ina, mac);
-		snprintf(ena, sizeof(ena), "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+		snprintf(ena, sizeof(ena), "%02x:%02x:%02x:%02x:%02x:%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 		if (e->vid > 0)
 			snprintf(vid, sizeof(vid), "%4d", e->vid);
 
