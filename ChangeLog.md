@@ -3,7 +3,7 @@ Change Log
 
 All relevant, user visible, changes are documented in this file.
 
-[v1.0][UNRELEASED] - 2024-03-08
+[v1.0][] - 2024-03-09
 ---------------------
 
 First release under new stewardship.
@@ -13,6 +13,7 @@ First release under new stewardship.
  - Add JSON output support
  - Renamed setting `proxy-queries` to `proxy-mode`, compat
    for old setting name remains
+ - Use lower-case characters for MAC addresses
  - Update documentation, missing `iface` settings
 
 ### Fixes
