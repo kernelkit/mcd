@@ -670,6 +670,8 @@ int show_bridge_groups(FILE *fp)
 		snprintf(ena, sizeof(ena), "%02x:%02x:%02x:%02x:%02x:%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 		if (e->vid > 0)
 			snprintf(vid, sizeof(vid), "%4d", e->vid);
+		else
+			snprintf(vid, sizeof(vid), "%4s", "");
 
 		if (json) {
 			fprintf(fp, "%s%*s{\n", first ? "" : ",\n", prefix, "");
