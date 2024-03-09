@@ -653,7 +653,7 @@ int show_bridge_groups(FILE *fp)
 	}
 
 	if (json) {
-		fprintf(fp, "[\n");
+		fprintf(fp, "[");
 		prefix += 2;
 	}
 	else
@@ -674,7 +674,7 @@ int show_bridge_groups(FILE *fp)
 			snprintf(vid, sizeof(vid), "%4s", "");
 
 		if (json) {
-			fprintf(fp, "%s%*s{\n", first ? "" : ",\n", prefix, "");
+			fprintf(fp, "%s%*s{\n", first ? "\n" : ",\n", prefix, "");
 			prefix += 2;
 			first = 0;
 
@@ -692,7 +692,10 @@ int show_bridge_groups(FILE *fp)
 
 	if (json) {
 		prefix -= 2;
-		fprintf(fp, "\n%*s]\n", prefix, "");
+		if (first)
+			fprintf(fp, "]\n");
+		else
+			fprintf(fp, "%*s]\n", prefix, "");
 	}
 
 	drop();
