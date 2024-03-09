@@ -48,7 +48,7 @@ jobs:
           cat release.md
       - uses: ncipollo/release-action@v1
         with:
-          name: mcd v${{ github.ref_name }}
+          name: mcd ${{ github.ref_name }}
           prerelease: ${{ steps.build.outputs.pre }}
           makeLatest: ${{ steps.build.outputs.latest }}
           bodyFile: "release.md"
