@@ -141,6 +141,12 @@ ifmod	: DISABLE		{ ifi->ifi_flags |= IFIF_DISABLED; }
 
 	    TAILQ_INSERT_TAIL(&ifi->ifi_static, a, al_link);
 	}
+	| QUERY_INTERVAL NUMBER
+	{
+	    if ($2 < 1 || $2 > 1024)
+		fatal("Invalid multicast query interval [1,1024]: %d", $2);
+	    ifi->ifi_query_interval = $2;
+	}
 	;
 
 %%

@@ -19,6 +19,7 @@ struct ifi {
     int		     ifi_ifindex;        /* Primarily for Linux systems       */
     uint32_t	     ifi_curr_addr;      /* Current address of this interface */
     uint32_t	     ifi_prev_addr;      /* Previous address of this interace */
+    uint32_t	     ifi_query_interval; /* IGMP query interval               */
     struct listaddr *ifi_querier;        /* IGMP querier (one or none)        */
     int		     ifi_timerid;	 /* IGMP query timer           	      */
     int		     ifi_igmpv1_warn;    /* To rate-limit IGMPv1 warnings     */

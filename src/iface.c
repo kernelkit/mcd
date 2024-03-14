@@ -329,6 +329,12 @@ static void send_query(struct ifi *ifi, uint32_t dst, int code, uint32_t group)
 
 static void start_iface(struct ifi *ifi)
 {
+    uint32_t qi = ifi->ifi_query_interval;
+
+    /* Check interface specific settings */
+    if (!qi)
+	qi = igmp_query_interval;
+
     /*
      * Join the ALL-ROUTERS multicast group on the interface.
      * This allows mtrace requests to loop back if they are run
@@ -344,7 +350,7 @@ static void start_iface(struct ifi *ifi)
      */
     if (ifi->ifi_timerid > 0)
 	pev_timer_del(ifi->ifi_timerid);
-    ifi->ifi_timerid = pev_timer_add(0, igmp_query_interval * 1000000, query_groups, ifi);
+    ifi->ifi_timerid = pev_timer_add(0, qi * 1000000, query_groups, ifi);
 
     /*
      * Check if we should assume the querier role
