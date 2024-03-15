@@ -82,6 +82,7 @@ void iface_zero(struct ifi *ifi)
 {
     ifi->ifi_flags	= IFIF_DISABLED;
     ifi->ifi_curr_addr	= 0;
+    ifi->ifi_vlan	= 0;
     ifi->ifi_name[0]	= '\0';
     TAILQ_INIT(&ifi->ifi_static);
     TAILQ_INIT(&ifi->ifi_groups);
@@ -321,8 +322,7 @@ static void send_query(struct ifi *ifi, uint32_t dst, int code, uint32_t group)
 	  ifi->ifi_name, inet_name(ifi->ifi_curr_addr, 1));
 
     if (ifi->ifi_curr_addr)
-        send_igmp(ifi->ifi_ifindex, ifi->ifi_curr_addr, dst, IGMP_MEMBERSHIP_QUERY,
-                  code, group, datalen);
+        send_igmp(ifi, dst, IGMP_MEMBERSHIP_QUERY, code, group, datalen);
     else
         send_igmp_proxy(ifi);
 }
@@ -334,16 +334,6 @@ static void start_iface(struct ifi *ifi)
     /* Check interface specific settings */
     if (!qi)
 	qi = igmp_query_interval;
-
-    /*
-     * Join the ALL-ROUTERS multicast group on the interface.
-     * This allows mtrace requests to loop back if they are run
-     * on the multicast router.
-     */
-    k_join(allrtrs_group, ifi->ifi_ifindex);
-
-    /* Join INADDR_ALLRPTS_GROUP to support IGMPv3 membership reports */
-    k_join(allreports_group, ifi->ifi_ifindex);
 
     /*
      * Periodically query for local group memberships.
@@ -380,15 +370,6 @@ static void stop_iface(struct ifi *ifi)
 	TAILQ_REMOVE(&ifi->ifi_groups, a, al_link);
 	free(a);
     }
-    /*
-     * Depart from the ALL-ROUTERS multicast group on the interface.
-     */
-    k_leave(allrtrs_group, ifi->ifi_ifindex);
-
-    /*
-     * Depart from the ALL-REPORTS multicast group on the interface.
-     */
-    k_leave(allreports_group, ifi->ifi_ifindex);
 
     logit(LOG_DEBUG, 0, "Releasing querier duties on interface %s", ifi->ifi_name);
     ifi->ifi_flags &= ~IFIF_IGMP_QUERIER;

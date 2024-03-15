@@ -59,7 +59,7 @@ TAILQ_HEAD(ifaces, ifi);
 /*
  * External declarations for global variables and functions.
  */
-#define RECV_BUF_SIZE 8192
+#define RECV_BUF_SIZE 1536
 extern uint8_t		*recv_buf;
 extern uint8_t		*send_buf;
 extern int		igmp_socket;
@@ -138,9 +138,9 @@ extern void             resetlogging(void *);
 /* igmp.c */
 extern void		igmp_init(void);
 extern void		igmp_exit(void);
-extern void		accept_igmp(int, size_t);
+extern void		accept_igmp(int, uint8_t *, size_t);
 extern size_t		build_igmp(uint8_t *, uint32_t, uint32_t, int, int, uint32_t, int);
-extern void		send_igmp(int, uint32_t, uint32_t, int, int, uint32_t, int);
+extern void		send_igmp(const struct ifi *, uint32_t, int, int, uint32_t, int);
 extern void		send_igmp_proxy(const struct ifi *);
 extern char *		igmp_packet_kind(uint32_t, uint32_t);
 extern int		igmp_debug_kind(uint32_t, uint32_t);
@@ -193,17 +193,7 @@ extern int		inet_cksum(uint16_t *, uint32_t);
 extern void             ipc_init(char *);
 extern void             ipc_exit(void);
 
-/* kern.c */
-extern int              curttl;
-
-extern void		k_set_rcvbuf(int, int);
-extern void		k_hdr_include(int);
-extern void		k_set_pktinfo(int);
-extern void		k_set_ttl(int);
-extern void		k_set_if(int);
-extern void		k_join(uint32_t, int);
-extern void		k_leave(uint32_t, int);
-
+/* lib/ */
 #ifndef HAVE_STRLCPY
 extern size_t		strlcpy(char *dst, const char *src, size_t siz);
 #endif

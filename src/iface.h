@@ -15,6 +15,7 @@ struct ifi {
     TAILQ_HEAD(,listaddr) ifi_groups;    /* list of local groups  (phyints)   */
     TAILQ_HEAD(,phaddr) ifi_addrs;	 /* Secondary addresses               */
     uint32_t	     ifi_flags;	         /* IFIF_ flags defined below         */
+    uint32_t	     ifi_vlan;	         /* Raw VLAN ID for send and accept   */
     char	     ifi_name[IFNAMSIZ]; /* interface name                    */
     int		     ifi_ifindex;        /* Primarily for Linux systems       */
     uint32_t	     ifi_curr_addr;      /* Current address of this interface */

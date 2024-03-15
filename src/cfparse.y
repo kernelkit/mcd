@@ -3,7 +3,8 @@
  * Configuration file parser for mcd
  *
  * Written originally for mrouted by Bill Fenner, NRL, 1994
- * Adapted to mcd by Joachim Wiberg, Westermo, 2022
+ * Adapted to queried by Joachim Wiberg, Westermo, 2022
+ * Adapted to mcd by Joachim Wiberg, KernelKit, 2024
  *
  * cfparse.y,v 3.8.4.30 1998/03/01 01:48:58 fenner Exp
  */
@@ -46,6 +47,7 @@ static struct ifi scrap;
 %token IGMP_ROBUSTNESS ROUTER_TIMEOUT ROUTER_ALERT
 %token NO PHYINT
 %token DISABLE ENABLE IGMPV1 IGMPV2 IGMPV3 STATIC_GROUP PROXY_QUERIER
+%token VLAN
 %token <num> BOOLEAN
 %token <num> NUMBER
 %token <ptr> STRING
@@ -147,6 +149,12 @@ ifmod	: DISABLE		{ ifi->ifi_flags |= IFIF_DISABLED; }
 		fatal("Invalid multicast query interval [1,1024]: %d", $2);
 	    ifi->ifi_query_interval = $2;
 	}
+	| VLAN NUMBER
+	{
+	    if ($2 < 1 || $2 > 4094)
+		fatal("Invalid VLAN ID [1,4094]");
+	    ifi->ifi_vlan = $2;
+	}
 	;
 
 %%
@@ -235,6 +243,7 @@ static struct keyword {
 	{ "no",                 NO, 0 },
 	{ "phyint",		PHYINT, 0 },
 	{ "iface",		PHYINT, 0 },
+	{ "vlan",		VLAN, 0 },
 	{ "disable",		DISABLE, 0 },
 	{ "enable",		ENABLE, 0 },
 	{ "router-alert",	ROUTER_ALERT, 0 },

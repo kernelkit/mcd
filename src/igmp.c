@@ -19,13 +19,17 @@
 #define PIM_GRAFT           6
 #define PIM_GRAFT_ACK       7
 
+struct vlan {
+	uint16_t tci;    /* Tag Control Information: PCP (3 bits), DEI (1 bit), VID (12 bits) */
+	uint16_t tpid;   /* Tag Protocol ID (EtherType of encapsulated protocol) */
+};
+
 /*
  * Exported variables.
  */
 uint8_t		*recv_buf; 		     /* input packet buffer         */
 uint8_t		*send_buf; 		     /* output packet buffer        */
-int		igmp_socket;		     /* socket for all network I/O  */
-int		igmp_raw_pkt_socket;	     /* socket for ethernet frames  */
+int		igmp_socket;		     /* socket for ethernet frames  */
 int             router_alert;		     /* IP option Router Alert      */
 uint32_t        router_timeout;		     /* Other querier present intv. */
 uint32_t	igmp_query_interval;	     /* Default: 125 sec            */
@@ -40,14 +44,11 @@ uint32_t	allreports_group;	     /* IGMPv3 member reports       */
  * Private variables.
  */
 static int	igmp_sockid;
-static uint8_t	proxy_send_buf[IGMP_PROXY_QUERY_MAXLEN];
-static size_t	proxy_send_len;
 
 /*
  * Local function definitions.
  */
 static void	igmp_read(int sd, void *arg);
-static void	ipv4_set_static_fields(uint8_t *buf);
 static size_t	build_ipv4(uint8_t *buf, uint32_t src, uint32_t dst, short unsigned int datalen);
 
 /*
@@ -58,6 +59,7 @@ void igmp_init(void)
 {
     const int BUFSZ = 256 * 1024;
     const int MINSZ =  48 * 1024;
+    int ena = 1;
 
     recv_buf = calloc(1, RECV_BUF_SIZE);
     send_buf = calloc(1, RECV_BUF_SIZE);
@@ -67,18 +69,12 @@ void igmp_init(void)
 	exit(1);
     }
 
-    igmp_socket = socket(AF_INET, SOCK_RAW, IPPROTO_IGMP);
+    igmp_socket = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
     if (igmp_socket < 0)
-	logit(LOG_ERR, errno, "Failed creating IGMP socket");
-
-    igmp_raw_pkt_socket = socket(AF_PACKET, SOCK_RAW, IPPROTO_RAW);
-    if (igmp_raw_pkt_socket < 0)
 	logit(LOG_ERR, errno, "Failed creating IGMP raw packet socket");
 
-    k_hdr_include(1);		/* include IP header when sending */
-    k_set_pktinfo(1);		/* ifindex in aux data on receive */
-    k_set_rcvbuf(BUFSZ, MINSZ);	/* lots of input buffering        */
-    k_set_ttl(1);		/* restrict multicasts to one hop */
+    if (setsockopt(igmp_socket, SOL_PACKET, PACKET_AUXDATA, &ena, sizeof(ena)) < 0)
+	logit(LOG_ERR, errno, "Failed enabling PACKET_AUXDATA on IGMP socket");
 
     allhosts_group   = htonl(INADDR_ALLHOSTS_GROUP);
     allrtrs_group    = htonl(INADDR_ALLRTRS_GROUP);
@@ -91,13 +87,6 @@ void igmp_init(void)
     router_timeout            = IGMP_OTHER_QUERIER_PRESENT_INTERVAL;
     router_alert              = 1;
 
-    ipv4_set_static_fields(send_buf);
-
-    ipv4_set_static_fields(proxy_send_buf + sizeof(struct ether_header));
-    proxy_send_len = sizeof(struct ether_header);
-    proxy_send_len += build_ipv4(proxy_send_buf + proxy_send_len, 0, allhosts_group, sizeof(struct igmp));
-    proxy_send_len += build_igmp(proxy_send_buf + proxy_send_len, 0, allhosts_group, IGMP_MEMBERSHIP_QUERY, 0, 0, 0);
-
     igmp_sockid = pev_sock_add(igmp_socket, igmp_read, NULL);
     if (igmp_sockid == -1)
 	logit(LOG_ERR, errno, "Failed registering IGMP handler");
@@ -106,7 +95,6 @@ void igmp_init(void)
 void igmp_exit(void)
 {
     pev_sock_del(igmp_sockid);
-    close(igmp_raw_pkt_socket);
     close(igmp_socket);
     free(recv_buf);
     free(send_buf);
@@ -129,20 +117,25 @@ char *igmp_packet_kind(uint32_t type, uint32_t code)
 }
 
 /*
- * Read an IGMP message from igmp_socket
+ * Read an IGMP message from the socket
  */
 static void igmp_read(int sd, void *arg)
 {
+    struct tpacket_auxdata *auxdata;
+    struct sockaddr_ll sll = { 0 };
     struct cmsghdr *cmsg;
     struct msghdr msgh;
     char cmbuf[0x100];
     struct iovec iov;
-    int ifindex = -1;
+    size_t eth_len;
     ssize_t len;
+    int vid = 0;
 
     memset(&msgh, 0, sizeof(msgh));
     iov.iov_base = recv_buf;
     iov.iov_len = RECV_BUF_SIZE;
+    msgh.msg_name = &sll;
+    msgh.msg_namelen = sizeof(sll);
     msgh.msg_control = cmbuf;
     msgh.msg_controllen = sizeof(cmbuf);
     msgh.msg_iov  = &iov;
@@ -157,27 +150,22 @@ static void igmp_read(int sd, void *arg)
 	return;
     }
 
-    for (cmsg = CMSG_FIRSTHDR(&msgh); cmsg; cmsg = CMSG_NXTHDR(&msgh, cmsg)) {
-#ifdef IP_PKTINFO
-	struct in_pktinfo *ipi = (struct in_pktinfo *)CMSG_DATA(cmsg);
-	char tmp[IF_NAMESIZE + 1] = { 0 };
-
-	if (cmsg->cmsg_level != SOL_IP || cmsg->cmsg_type != IP_PKTINFO)
-	    continue;
-
-	ifindex = ipi->ipi_ifindex;
-	break;
-#endif
+    for (cmsg = CMSG_FIRSTHDR(&msgh); cmsg != NULL; cmsg = CMSG_NXTHDR(&msgh, cmsg)) {
+	if (cmsg->cmsg_level == SOL_PACKET && cmsg->cmsg_type == PACKET_AUXDATA) {
+	    auxdata = (struct tpacket_auxdata *)CMSG_DATA(cmsg);
+	    vid = auxdata->tp_vlan_tci & 0x0fff;
+	}
     }
 
-    accept_igmp(ifindex, len);
+    eth_len = sizeof(struct ether_header);
+    accept_igmp(sll.sll_ifindex, recv_buf + eth_len, len - eth_len);
 }
 
 /*
  * Process a newly received IGMP packet that is sitting in the input
  * packet buffer.
  */
-void accept_igmp(int ifindex, size_t recvlen)
+void accept_igmp(int ifindex, uint8_t *buf, size_t len)
 {
     struct igmp *igmp;
     struct ip *ip;
@@ -185,12 +173,12 @@ void accept_igmp(int ifindex, size_t recvlen)
     int ipdatalen, iphdrlen, igmpdatalen;
     int igmp_version = 3;
 
-    if (recvlen < sizeof(struct ip)) {
-	logit(LOG_INFO, 0, "received packet too short (%zu bytes) for IP header", recvlen);
+    if (len < sizeof(struct ip)) {
+	logit(LOG_INFO, 0, "received packet too short (%zu bytes) for IP header", len);
 	return;
     }
 
-    ip        = (struct ip *)recv_buf;
+    ip        = (struct ip *)buf;
     src       = ip->ip_src.s_addr;
     dst       = ip->ip_dst.s_addr;
 
@@ -208,14 +196,14 @@ void accept_igmp(int ifindex, size_t recvlen)
     iphdrlen  = ip->ip_hl << 2;
     ipdatalen = ntohs(ip->ip_len) - iphdrlen;
 
-    if ((size_t)(iphdrlen + ipdatalen) != recvlen) {
+    if ((size_t)(iphdrlen + ipdatalen) != len) {
 	logit(LOG_INFO, 0,
 	      "received packet from %s shorter (%zu bytes) than hdr+data length (%d+%d)",
-	      inet_fmt(src, s1, sizeof(s1)), recvlen, iphdrlen, ipdatalen);
+	      inet_fmt(src, s1, sizeof(s1)), len, iphdrlen, ipdatalen);
 	return;
     }
 
-    igmp        = (struct igmp *)(recv_buf + iphdrlen);
+    igmp        = (struct igmp *)(buf + iphdrlen);
     group       = igmp->igmp_group.s_addr;
     igmpdatalen = ipdatalen - IGMP_MINLEN;
     if (igmpdatalen < 0) {
@@ -260,7 +248,7 @@ void accept_igmp(int ifindex, size_t recvlen)
 		      igmpdatalen, IGMP_V3_GROUP_RECORD_MIN_SIZE);
 		return;
 	    }
-	    accept_membership_report(ifindex, src, dst, (struct igmpv3_report *)(recv_buf + iphdrlen), recvlen - iphdrlen);
+	    accept_membership_report(ifindex, src, dst, (struct igmpv3_report *)(buf + iphdrlen), len - iphdrlen);
 	    return;
 
 	default:
@@ -268,7 +256,7 @@ void accept_igmp(int ifindex, size_t recvlen)
     }
 }
 
-static size_t build_ether_ipv4_mc(uint8_t *buf, const uint8_t *srcmac, const uint32_t *dst)
+static size_t build_ether(uint8_t *buf, const uint8_t *srcmac, const uint32_t *dst, uint16_t proto)
 {
     struct ether_header *eh = (struct ether_header *)buf;
 
@@ -276,46 +264,41 @@ static size_t build_ether_ipv4_mc(uint8_t *buf, const uint8_t *srcmac, const uin
 
     memcpy(eh->ether_shost, srcmac, sizeof(eh->ether_shost));
     ETHER_MAP_IP_MULTICAST(dst, eh->ether_dhost);
-    eh->ether_type = htons(ETH_P_IP);
+    eh->ether_type = htons(proto);
 
     return sizeof(*eh);
 }
 
-static void ipv4_set_static_fields(uint8_t *buf)
+static size_t build_vlan(uint8_t *buf, uint16_t vid, uint16_t proto)
 {
-    struct ip *ip;
-    uint8_t *ip_opt;
+    struct vlan *v = (struct vlan *)buf;
+    uint16_t pcp = 6;
+    uint16_t dei = 0;
 
-    ip         = (struct ip *)buf;
-    ip->ip_v   = IPVERSION;
-    ip->ip_hl  = IP_HEADER_RAOPT_LEN >> 2;
-    ip->ip_tos = 0xc0;		/* Internet Control */
-    ip->ip_ttl = MAXTTL;	/* applies to unicasts only */
-    ip->ip_p   = IPPROTO_IGMP;
+    v->tci  = htons((pcp << 13) | (dei << 12) | vid);
+    v->tpid = htons(proto);
 
-    /*
-     * RFC2113 IP Router Alert.  Per spec this is required to
-     * force certain routers/switches to inspect this frame.
-     */
-    ip_opt    = buf + sizeof(struct ip);
-    ip_opt[0] = IPOPT_RA;
-    ip_opt[1] = 4;
-    ip_opt[2] = 0;
-    ip_opt[3] = 0;
+    return sizeof(*v);
 }
+
 
 static size_t build_ipv4(uint8_t *buf, uint32_t src, uint32_t dst, short unsigned int datalen)
 {
     struct ip *ip = (struct ip *)(buf);
     size_t len = IP_HEADER_RAOPT_LEN;
+    uint8_t *ip_opt;
+
+    ip->ip_v   = IPVERSION;
+    ip->ip_hl  = len >> 2;
+    ip->ip_tos = 0xc0;		/* Internet Control */
+    ip->ip_off = 0;
+    ip->ip_ttl = 1;
+    ip->ip_p   = IPPROTO_IGMP;
 
     ip->ip_src.s_addr = src;
     ip->ip_dst.s_addr = dst;
     ip->ip_len        = htons(len + datalen);
-    if (IN_MULTICAST(ntohl(dst)))
-        ip->ip_ttl = curttl;
-    else
-        ip->ip_ttl = MAXTTL;
+    ip->ip_ttl        = 1;
 
     /*
      *  We don't have anything unique to set this to - for proxy queries,
@@ -328,6 +311,16 @@ static size_t build_ipv4(uint8_t *buf, uint32_t src, uint32_t dst, short unsigne
 
     ip->ip_sum = 0;
     ip->ip_sum = inet_cksum((uint16_t *)buf, len);
+
+    /*
+     * RFC2113 IP Router Alert.  Per spec this is required to
+     * force certain routers/switches to inspect this frame.
+     */
+    ip_opt    = buf + sizeof(struct ip);
+    ip_opt[0] = IPOPT_RA;
+    ip_opt[1] = 4;
+    ip_opt[2] = 0;
+    ip_opt[3] = 0;
 
     return len;
 }
@@ -408,10 +401,10 @@ static inline uint8_t igmp_floating_point(unsigned int mantissa)
 size_t build_query(uint8_t *buf, uint32_t src, uint32_t dst, int type, int code, uint32_t group, int datalen)
 {
     struct igmpv3_query *igmp = (struct igmpv3_query *)buf;
-    struct ip *ip;
     size_t igmp_len = IGMP_MINLEN + datalen;
+    struct ip *ip;
 
-    memset(igmp, 0, sizeof(*igmp));
+    memset(igmp, 0, igmp_len);
 
     igmp->type        = type;
     if (datalen >= 4)
@@ -456,34 +449,39 @@ size_t build_igmp(uint8_t *buf, uint32_t src, uint32_t dst, int type, int code, 
  * Then send the message from the interface with IP address 'src' to
  * destination 'dst'.
  */
-void send_igmp(int ifindex, uint32_t src, uint32_t dst, int type, int code, uint32_t group, int datalen)
+void send_igmp(const struct ifi *ifi, uint32_t dst, int type, int code, uint32_t group, int datalen)
 {
-    struct sockaddr_in sin;
+    uint32_t src = ifi->ifi_curr_addr;
+    struct sockaddr_ll sll = { 0 };
     struct ip *ip;
     size_t len = 0;
     int rc;
 
+    memset(send_buf, 0, RECV_BUF_SIZE);
+
+    if (ifi->ifi_vlan) {
+	len = build_ether(send_buf, ifi->ifi_hwaddr, &dst, ETH_P_8021Q);
+	len += build_vlan(send_buf + len, ifi->ifi_vlan, ETH_P_IP);
+    } else
+	len = build_ether(send_buf, ifi->ifi_hwaddr, &dst, ETH_P_IP);
+
     /* Set IP header length,  router-alert is optional */
-    ip        = (struct ip *)send_buf;
+    ip        = (struct ip *)(send_buf + len);
     ip->ip_hl = IP_HEADER_RAOPT_LEN >> 2;
 
-    len += build_ipv4(send_buf, src, dst, datalen);
+    len += build_ipv4(send_buf + len, src, dst, IGMP_MINLEN + datalen);
 
     if (IGMP_MEMBERSHIP_QUERY == type)
        len += build_query(send_buf + len, src, dst, type, code, group, datalen);
-    else {
+    else
        len += build_igmp(send_buf + len, src, dst, type, code, group, datalen);
-    }
 
-    /* For all IGMP, change egress interface (we have only one socket) */
-    if (IN_MULTICAST(ntohl(dst)))
-	k_set_if(ifindex);
+    sll.sll_family = AF_PACKET;
+    sll.sll_protocol = htons(ETH_P_ALL);
+    sll.sll_ifindex = ifi->ifi_ifindex;
+    sll.sll_halen = ETH_ALEN;
 
-    memset(&sin, 0, sizeof(sin));
-    sin.sin_family = AF_INET;
-    sin.sin_addr.s_addr = dst;
-
-    rc = sendto(igmp_socket, send_buf, len, MSG_DONTROUTE, (struct sockaddr *)&sin, sizeof(sin));
+    rc = sendto(igmp_socket, send_buf, len, MSG_DONTROUTE, (struct sockaddr *)&sll, sizeof(sll));
     if (rc < 0) {
 	if (errno == ENETDOWN)
 	    iface_check_state();
@@ -499,22 +497,7 @@ void send_igmp(int ifindex, uint32_t src, uint32_t dst, int type, int code, uint
 
 void send_igmp_proxy(const struct ifi *ifi)
 {
-    struct sockaddr_ll sa;
-    int rc;
-
-    /*
-     * The IP header and IGMP payload are static for proxy queries and have
-     * already been set when proxy_send_buf was initilized
-     */
-    build_ether_ipv4_mc(proxy_send_buf, ifi->ifi_hwaddr, &allhosts_group);
-
-    sa.sll_ifindex = ifi->ifi_ifindex;
-    sa.sll_halen = ETH_ALEN;
-
-    rc = sendto(igmp_raw_pkt_socket, proxy_send_buf, proxy_send_len, 0, (struct sockaddr *)&sa, sizeof(sa));
-    if (rc < 0) {
-        logit(LOG_WARNING, errno, "sendto for proxy query failed");
-    }
+    send_igmp(ifi, allhosts_group, IGMP_MEMBERSHIP_QUERY, igmp_response_interval * IGMP_TIMER_SCALE, 0, 4);
 
     logit(LOG_DEBUG, 0, "SENT proxy query from %s", ifi->ifi_name);
 }

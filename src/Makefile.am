@@ -15,7 +15,7 @@ mcd_SOURCES      = main.c cfparse.y config.c defs.h	\
 		   igmp.c igmpv2.h igmpv3.h 		\
 		   inet.c inet.h			\
 		   ipc.c  ipc.h				\
-		   kern.c log.c				\
+		   log.c				\
 		   bridge.c pev.c pev.h			\
 		   pathnames.h queue.h
 mcd_CPPFLAGS     = $(AM_CPPFLAGS)
