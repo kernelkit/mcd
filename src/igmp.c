@@ -3,9 +3,11 @@
  * by the license in the accompanying file named "LICENSE".
  */
 
+#include <stddef.h>
 #include <net/ethernet.h>
 #include <netinet/if_ether.h>
 #include <linux/if_packet.h>
+#include <linux/filter.h>
 
 #include "defs.h"
 #include "inet.h"
@@ -51,6 +53,30 @@ static int	igmp_sockid;
 static void	igmp_read(int sd, void *arg);
 static size_t	build_ipv4(uint8_t *buf, uint32_t src, uint32_t dst, short unsigned int datalen);
 
+
+static int set_filter(int sd)
+{
+	struct sock_filter code[] = {
+		/* Load the IP protocol field from the IP header */
+		BPF_STMT(BPF_LD + BPF_B + BPF_ABS, ETH_HLEN + offsetof(struct iphdr, protocol)),
+		/* Check if it's IGMP (protocol number 2) */
+		BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, IPPROTO_IGMP, 0, 1),
+		/* Return -1 (all bytes) if the condition is true */
+		BPF_STMT(BPF_RET + BPF_K, (u_int)-1),
+		/* Otherwise, ignore the packet */
+		BPF_STMT(BPF_RET + BPF_K, 0),
+	};
+	struct sock_fprog bpf = {
+		.len = sizeof(code) / sizeof(code[0]),
+		.filter = code,
+	};
+
+	if (setsockopt(sd, SOL_SOCKET, SO_ATTACH_FILTER, &bpf, sizeof(bpf)) < 0)
+		return -1;
+
+	return 0;
+}
+
 /*
  * Open and initialize the igmp socket, and fill in the non-changing
  * IP header fields in the output packet buffer.
@@ -75,6 +101,9 @@ void igmp_init(void)
 
     if (setsockopt(igmp_socket, SOL_PACKET, PACKET_AUXDATA, &ena, sizeof(ena)) < 0)
 	logit(LOG_ERR, errno, "Failed enabling PACKET_AUXDATA on IGMP socket");
+
+    if (set_filter(igmp_socket))
+	logit(LOG_ERR, errno, "Failed setting socket filter");
 
     allhosts_group   = htonl(INADDR_ALLHOSTS_GROUP);
     allrtrs_group    = htonl(INADDR_ALLRTRS_GROUP);
