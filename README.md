@@ -77,7 +77,7 @@ win an election.
 
 [GitHub]:          https://github.com/kernelkit/mcd/actions/workflows/build.yml/
 [GitHub Status]:   https://github.com/kernelkit/mcd/actions/workflows/build.yml/badge.svg
-[License]:         http://www.openbsd.org/cgi-bin/cvsweb/src/usr.sbin/mrouted/LICENSE
-[License Badge]:   https://img.shields.io/badge/License-BSD%203--Clause-blue.svg
+[License]:         https://en.wikipedia.org/wiki/ISC_license
+[License Badge]:   https://img.shields.io/badge/License-ISC-blue.svg
 [Coverity Scan]:   https://scan.coverity.com/projects/24475
 [Coverity Status]: https://scan.coverity.com/projects/24475/badge.svg
