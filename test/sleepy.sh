@@ -43,7 +43,7 @@ ip -br a
 
 print "Creating config ..."
 cat <<EOF > "/tmp/$NM/config"
-query-interval 5
+global-query-interval 5
 iface eth0 enable igmpv3
 iface eth1 enable igmpv3
 iface eth2 enable igmpv3

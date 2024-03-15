@@ -43,7 +43,8 @@ static struct ifi scrap;
     uint32_t  addr, group;
 };
 
-%token QUERY_INTERVAL QUERY_LAST_MEMBER_INTERVAL QUERY_RESPONSE_INTERVAL
+%token GLOBAL_QUERY_INTERVAL GLOBAL_QUERY_LAST_MEMBER_INTERVAL GLOBAL_QUERY_RESPONSE_INTERVAL
+%token QUERY_INTERVAL
 %token IGMP_ROBUSTNESS ROUTER_TIMEOUT ROUTER_ALERT
 %token NO PHYINT
 %token DISABLE ENABLE IGMPV1 IGMPV2 IGMPV3 STATIC_GROUP PROXY_QUERIER
@@ -90,19 +91,19 @@ stmt	: error
 		fatal("Invalid multicast router timeout [1,1024]: %d", $2);
 	    router_timeout = $2;
 	}
-	| QUERY_INTERVAL NUMBER
+	| GLOBAL_QUERY_INTERVAL NUMBER
 	{
 	    if ($2 < 1 || $2 > 1024)
 		fatal("Invalid multicast query interval [1,1024]: %d", $2);
 	    igmp_query_interval = $2;
 	}
-	| QUERY_RESPONSE_INTERVAL NUMBER
+	| GLOBAL_QUERY_RESPONSE_INTERVAL NUMBER
 	{
 	    if ($2 < 1 || $2 > 1024)
 		fatal("Invalid multicast query response interval [1,1024]: %d", $2);
 	    igmp_response_interval = $2;
 	}
-	| QUERY_LAST_MEMBER_INTERVAL NUMBER
+	| GLOBAL_QUERY_LAST_MEMBER_INTERVAL NUMBER
 	{
 	    if ($2 < 1 || $2 > 1024)
 		fatal("Invalid multicast query interval [1,1024]: %d", $2);
@@ -235,9 +236,10 @@ static struct keyword {
 	int	val1;
 	int	val2;
 } words[] = {
+	{ "global-query-interval",       GLOBAL_QUERY_INTERVAL, 0 },
+	{ "global-response-interval",    GLOBAL_QUERY_RESPONSE_INTERVAL, 0 },
+	{ "global-last-member-interval", GLOBAL_QUERY_LAST_MEMBER_INTERVAL, 0 },
 	{ "query-interval",     QUERY_INTERVAL, 0 },
-	{ "query-response-interval", QUERY_RESPONSE_INTERVAL, 0 },
-	{ "query-last-member-interval", QUERY_LAST_MEMBER_INTERVAL, 0 },
 	{ "robustness",         IGMP_ROBUSTNESS, 0 },
 	{ "router-timeout",     ROUTER_TIMEOUT, 0 },
 	{ "no",                 NO, 0 },

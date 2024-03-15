@@ -26,21 +26,23 @@ different IGMP/MLD settings per interface at the moment, only protocol
 version.
 
     # /etc/mcd.conf syntax
-    query-interval [1-1024]                   # default: 125 sec
-    query-response-interval [1-1024]          # default: 10 sec
-    query-last-member-interval [1-1024]       # default: 1
+    global-query-interval [1-1024]            # default: 125 sec
+    global-response-interval [1-1024]         # default: 10 sec
+    global-last-member-interval [1-1024]      # default: 1
     robustness [2-10]                         # default: 2
     router-timeout [10-1024]                  # default: 255 sec
     
-    iface IFNAME [enable] [proxy-mode] [igmpv2 | igmpv3]   # default: disable
+    iface IFNAME [enable]                     # default: disable
+          [proxy-mode] [igmpv2 | igmpv3]
+          [query-interval [1-1024]]
 
 Description:
 
-  * `query-interval`: the interval between IGMP/MLD queries, when
-    elected as querier for a LAN
-  * `query-response-interval`: max response time to a query.  Can be
+  * `global-query-interval`, `query-interval`: the interval between
+    IGMP/MLD queries, when elected as querier for a LAN
+  * `global-response-interval`: max response time to a query.  Can be
     used to control the burstiness of IGMP/MLD traffic
-  * `query-last-member-interval`: time between group specific queries,
+  * `global-last-member-interval`: time between group specific queries,
     the `robustness` setting controls the number of queries sent
   * `robustness`: controls the tolerance to loss of replies from end
     devices and the loss of elected queriers (above)
