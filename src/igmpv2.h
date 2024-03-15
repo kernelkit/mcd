@@ -1,9 +1,4 @@
 /*
- * Parts of this program has been derived from mrouted.  It is covered
- * by the license in the accompanying file named "LICENSE".
- */
-
-/*
  * Constants for IGMP Version 2.  Several of these, especially the
  * robustness variable, should be variables and not constants.
  *

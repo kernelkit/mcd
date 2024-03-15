@@ -1,14 +1,10 @@
-/*
- * Parts of this program has been derived from mrouted.  It is covered
- * by the license in the accompanying file named "LICENSE".
- */
 #ifndef MCD_PATHNAMES_H_
 #define MCD_PATHNAMES_H_
 
 #include <paths.h>
 
-#define _PATH_MCD_CONF	SYSCONFDIR   "/%s.conf"
-#define _PATH_MCD_RUNDIR	RUNSTATEDIR
-#define _PATH_MCD_SOCK	RUNSTATEDIR  "/%s.sock"
+#define _PATH_MCD_CONF    SYSCONFDIR   "/%s.conf"
+#define _PATH_MCD_RUNDIR  RUNSTATEDIR
+#define _PATH_MCD_SOCK    RUNSTATEDIR  "/%s.sock"
 
 #endif /* MCD_PATHNAMES_H_ */

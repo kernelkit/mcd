@@ -1,7 +1,3 @@
-/*
- * Parts of this program has been derived from mrouted.  It is covered
- * by the license in the accompanying file named "LICENSE".
- */
 #ifndef MCD_IFACE_H_
 #define MCD_IFACE_H_
 

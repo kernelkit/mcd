@@ -1,8 +1,3 @@
-/*
- * Parts of this program has been derived from mrouted.  It is covered
- * by the license in the accompanying file named "LICENSE".
- */
-
 #include <stddef.h>
 #include <net/ethernet.h>
 #include <netinet/if_ether.h>

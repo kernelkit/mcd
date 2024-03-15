@@ -1,8 +1,3 @@
-/*
- * Parts of this program has been derived from mrouted.  It is covered
- * by the license in the accompanying file named "LICENSE".
- */
-
 #include "defs.h"
 #include "inet.h"
 
