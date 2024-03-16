@@ -69,12 +69,9 @@ stmt	: error
 	| NO PHYINT		{ config_set_ifflag(IFIF_DISABLED); }
 	| PHYINT STRING
 	{
-	    ifi = config_find_ifname($2);
-	    if (!ifi) {
-		ifi = config_iface_add($2);
-		if (!ifi)
-		    ifi = &scrap;
-	    }
+	    ifi = config_iface_add($2);
+	    if (!ifi)
+		ifi = &scrap;
 	}
 	ifmods
 	| NO ROUTER_ALERT
