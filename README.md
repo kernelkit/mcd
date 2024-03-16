@@ -32,7 +32,7 @@ version.
     robustness [2-10]                         # default: 2
     router-timeout [10-1024]                  # default: 255 sec
     
-    iface IFNAME [enable]                     # default: disable
+    iface IFNAME [enable] [vlan [1-4094]]     # default: disable
           [proxy-mode] [igmpv2 | igmpv3]
           [query-interval [1-1024]]
 
