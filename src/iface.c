@@ -267,9 +267,14 @@ void iface_check_state(void)
     static int checking_iface = 0;
     struct ifreq ifr;
     struct ifi *ifi;
+    int sd;
 
     if (checking_iface)
 	return;
+
+    sd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sd == -1)
+	logit(LOG_ERR, errno, "failed opening temporary socket for SIOCGIFFLAGS");
 
     checking_iface = 1;
     for (ifi = config_iface_iter(1); ifi; ifi = config_iface_iter(0)) {
@@ -278,7 +283,7 @@ void iface_check_state(void)
 
 	memset(&ifr, 0, sizeof(ifr));
 	memcpy(ifr.ifr_name, ifi->ifi_name, sizeof(ifr.ifr_name));
-	if (ioctl(igmp_socket, SIOCGIFFLAGS, &ifr) < 0) {
+	if (ioctl(sd, SIOCGIFFLAGS, &ifr) < 0) {
 	    if (errno == ENODEV) {
 		ifi->ifi_flags  |= IFIF_DISABLED;
 		continue;
@@ -290,6 +295,7 @@ void iface_check_state(void)
     }
 
     checking_iface = 0;
+    close(sd);
 }
 
 static void send_query(struct ifi *ifi, uint32_t dst, int code, uint32_t group)
@@ -330,6 +336,8 @@ static void start_iface(struct ifi *ifi)
     if (!qi)
 	qi = igmp_query_interval;
 
+    igmp_iface_init(ifi);
+
     /*
      * Periodically query for local group memberships.
      */
@@ -368,6 +376,8 @@ static void stop_iface(struct ifi *ifi)
 
     logit(LOG_DEBUG, 0, "Releasing querier duties on interface %s", ifi->ifi_name);
     ifi->ifi_flags &= ~IFIF_IGMP_QUERIER;
+
+    igmp_iface_exit(ifi);
 
     logit(LOG_INFO, 0, "Interface %s out of service", ifi->ifi_name);
 }

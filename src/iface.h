@@ -10,6 +10,8 @@ struct ifi {
     TAILQ_HEAD(,listaddr) ifi_static;    /* list of static groups (phyints)   */
     TAILQ_HEAD(,listaddr) ifi_groups;    /* list of local groups  (phyints)   */
     TAILQ_HEAD(,phaddr) ifi_addrs;	 /* Secondary addresses               */
+    int		     ifi_sock;		 /* Raw socket bound to interface     */
+    int		     ifi_sockid;	 /* Socket event identifier (pev)     */
     uint32_t	     ifi_flags;	         /* IFIF_ flags defined below         */
     uint32_t	     ifi_vlan;	         /* Raw VLAN ID for send and accept   */
     char	     ifi_name[IFNAMSIZ]; /* interface name                    */

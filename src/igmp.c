@@ -26,7 +26,6 @@ struct vlan {
  */
 uint8_t		*recv_buf; 		     /* input packet buffer         */
 uint8_t		*send_buf; 		     /* output packet buffer        */
-int		igmp_socket;		     /* socket for ethernet frames  */
 int             router_alert;		     /* IP option Router Alert      */
 uint32_t        router_timeout;		     /* Other querier present intv. */
 uint32_t	igmp_query_interval;	     /* Default: 125 sec            */
@@ -80,7 +79,6 @@ void igmp_init(void)
 {
     const int BUFSZ = 256 * 1024;
     const int MINSZ =  48 * 1024;
-    int ena = 1;
 
     recv_buf = calloc(1, RECV_BUF_SIZE);
     send_buf = calloc(1, RECV_BUF_SIZE);
@@ -89,16 +87,6 @@ void igmp_init(void)
 	logit(LOG_ERR, errno, "Failed allocating Rx/Tx buffers");
 	exit(1);
     }
-
-    igmp_socket = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
-    if (igmp_socket < 0)
-	logit(LOG_ERR, errno, "Failed creating IGMP raw packet socket");
-
-    if (setsockopt(igmp_socket, SOL_PACKET, PACKET_AUXDATA, &ena, sizeof(ena)) < 0)
-	logit(LOG_ERR, errno, "Failed enabling PACKET_AUXDATA on IGMP socket");
-
-    if (set_filter(igmp_socket))
-	logit(LOG_ERR, errno, "Failed setting socket filter");
 
     allhosts_group   = htonl(INADDR_ALLHOSTS_GROUP);
     allrtrs_group    = htonl(INADDR_ALLRTRS_GROUP);
@@ -110,18 +98,37 @@ void igmp_init(void)
     igmp_robustness           = IGMP_ROBUSTNESS_DEFAULT;
     router_timeout            = IGMP_OTHER_QUERIER_PRESENT_INTERVAL;
     router_alert              = 1;
-
-    igmp_sockid = pev_sock_add(igmp_socket, igmp_read, NULL);
-    if (igmp_sockid == -1)
-	logit(LOG_ERR, errno, "Failed registering IGMP handler");
 }
 
 void igmp_exit(void)
 {
-    pev_sock_del(igmp_sockid);
-    close(igmp_socket);
     free(recv_buf);
     free(send_buf);
+}
+
+void igmp_iface_init(struct ifi *ifi)
+{
+    int ena = 1;
+
+    ifi->ifi_sock = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
+    if (ifi->ifi_sock < 0)
+	logit(LOG_ERR, errno, "Failed creating IGMP raw packet socket");
+
+    if (setsockopt(ifi->ifi_sock, SOL_PACKET, PACKET_AUXDATA, &ena, sizeof(ena)) < 0)
+	logit(LOG_ERR, errno, "Failed enabling PACKET_AUXDATA on IGMP socket");
+
+    if (set_filter(ifi->ifi_sock))
+	logit(LOG_ERR, errno, "Failed setting socket filter");
+
+    ifi->ifi_sockid = pev_sock_add(ifi->ifi_sock, igmp_read, ifi);
+    if (ifi->ifi_sockid == -1)
+	logit(LOG_ERR, errno, "Failed registering IGMP handler");
+}
+
+void igmp_iface_exit(struct ifi *ifi)
+{
+    pev_sock_del(ifi->ifi_sockid);
+    close(ifi->ifi_sock);
 }
 
 char *igmp_packet_kind(uint32_t type, uint32_t code)
@@ -145,6 +152,7 @@ char *igmp_packet_kind(uint32_t type, uint32_t code)
  */
 static void igmp_read(int sd, void *arg)
 {
+    struct ifi *ifi = (struct ifi *)arg;
     struct tpacket_auxdata *auxdata;
     struct sockaddr_ll sll = { 0 };
     struct cmsghdr *cmsg;
@@ -181,8 +189,9 @@ static void igmp_read(int sd, void *arg)
 	}
     }
 
+    /* The sll.sll_ifindex holds the sender's ifindex */
     eth_len = sizeof(struct ether_header);
-    accept_igmp(sll.sll_ifindex, recv_buf + eth_len, len - eth_len);
+    accept_igmp(ifi->ifi_ifindex, recv_buf + eth_len, len - eth_len);
 }
 
 /*
@@ -505,7 +514,7 @@ void send_igmp(const struct ifi *ifi, uint32_t dst, int type, int code, uint32_t
     sll.sll_ifindex = ifi->ifi_ifindex;
     sll.sll_halen = ETH_ALEN;
 
-    rc = sendto(igmp_socket, send_buf, len, MSG_DONTROUTE, (struct sockaddr *)&sll, sizeof(sll));
+    rc = sendto(ifi->ifi_sock, send_buf, len, MSG_DONTROUTE, (struct sockaddr *)&sll, sizeof(sll));
     if (rc < 0) {
 	if (errno == ENETDOWN)
 	    iface_check_state();

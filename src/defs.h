@@ -58,7 +58,6 @@ TAILQ_HEAD(ifaces, ifi);
 #define RECV_BUF_SIZE 1536
 extern uint8_t		*recv_buf;
 extern uint8_t		*send_buf;
-extern int		igmp_socket;
 extern int		router_alert;
 extern uint32_t		router_timeout;
 extern uint32_t		allhosts_group;
@@ -134,6 +133,8 @@ extern void             resetlogging(void *);
 /* igmp.c */
 extern void		igmp_init(void);
 extern void		igmp_exit(void);
+extern void		igmp_iface_init(struct ifi *);
+extern void		igmp_iface_exit(struct ifi *);
 extern void		accept_igmp(int, uint8_t *, size_t);
 extern size_t		build_igmp(uint8_t *, uint32_t, uint32_t, int, int, uint32_t, int);
 extern void		send_igmp(const struct ifi *, uint32_t, int, int, uint32_t, int);
