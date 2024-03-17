@@ -108,6 +108,11 @@ void igmp_exit(void)
 
 void igmp_iface_init(struct ifi *ifi)
 {
+    struct sockaddr_ll sll = {
+	.sll_family   = AF_PACKET,
+	.sll_protocol = htons(ETH_P_ALL),
+	.sll_ifindex  = ifi->ifi_ifindex,
+    };
     int ena = 1;
 
     ifi->ifi_sock = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
@@ -119,6 +124,9 @@ void igmp_iface_init(struct ifi *ifi)
 
     if (set_filter(ifi->ifi_sock))
 	logit(LOG_ERR, errno, "Failed setting socket filter");
+
+    if (bind(ifi->ifi_sock, (struct sockaddr *)&sll, sizeof(sll)))
+	logit(LOG_ERR, errno, "Failed binding socket to interface %s", ifi->ifi_name);
 
     ifi->ifi_sockid = pev_sock_add(ifi->ifi_sock, igmp_read, ifi);
     if (ifi->ifi_sockid == -1)
