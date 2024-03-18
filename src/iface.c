@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: ISC */
+
 #include "defs.h"
 #include "inet.h"
 
@@ -322,10 +324,7 @@ static void send_query(struct ifi *ifi, uint32_t dst, int code, uint32_t group)
 	  (ifi->ifi_flags & IFIF_IGMPV2) ? "v2 " : "v3 ",
 	  ifi->ifi_name, inet_name(ifi->ifi_curr_addr, 1));
 
-    if (ifi->ifi_curr_addr)
-        send_igmp(ifi, dst, IGMP_MEMBERSHIP_QUERY, code, group, datalen);
-    else
-        send_igmp_proxy(ifi);
+    send_igmp(ifi, dst, IGMP_MEMBERSHIP_QUERY, code, group, datalen);
 }
 
 static void start_iface(struct ifi *ifi)

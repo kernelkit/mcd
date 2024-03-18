@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: ISC */
+
 #include <ifaddrs.h>
 
 #include "defs.h"

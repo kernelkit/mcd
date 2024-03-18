@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: ISC */
+
 #define SYSLOG_NAMES
 #include "defs.h"
 #include <stdarg.h>

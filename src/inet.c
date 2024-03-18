@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: ISC */
+
 #include <netdb.h>
 
 #include "defs.h"

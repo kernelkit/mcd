@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: ISC */
+
 #ifndef MCD_DEFS_H_
 #define MCD_DEFS_H_
 
@@ -74,11 +76,6 @@ extern int		running;
 extern int		haveterminal;
 extern int		did_final_init;
 
-#define IGMP_PROXY_QUERY_MAXLEN (sizeof(struct ether_header)	+ \
-                                 sizeof(struct ip)		+ \
-                                 4 +				  \
-                                 IGMP_MINLEN)
-
 /*
  * Limit on length of route data
  */
@@ -138,7 +135,6 @@ extern void		igmp_iface_exit(struct ifi *);
 extern void		accept_igmp(int, uint8_t *, size_t);
 extern size_t		build_igmp(uint8_t *, uint32_t, uint32_t, int, int, uint32_t, int);
 extern void		send_igmp(const struct ifi *, uint32_t, int, int, uint32_t, int);
-extern void		send_igmp_proxy(const struct ifi *);
 extern char *		igmp_packet_kind(uint32_t, uint32_t);
 extern int		igmp_debug_kind(uint32_t, uint32_t);
 

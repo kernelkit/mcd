@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: ISC */
+
 #include "defs.h"
 #include <err.h>
 #include <getopt.h>

@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: ISC */
+
 #include <stddef.h>
 #include <net/ethernet.h>
 #include <netinet/if_ether.h>
@@ -163,26 +165,25 @@ static void igmp_read(int sd, void *arg)
     struct ifi *ifi = (struct ifi *)arg;
     struct tpacket_auxdata *auxdata;
     struct sockaddr_ll sll = { 0 };
+    struct msghdr msg = { 0 };
     struct cmsghdr *cmsg;
-    struct msghdr msgh;
     char cmbuf[0x100];
     struct iovec iov;
     size_t eth_len;
     ssize_t len;
     int vid = 0;
 
-    memset(&msgh, 0, sizeof(msgh));
     iov.iov_base = recv_buf;
     iov.iov_len = RECV_BUF_SIZE;
-    msgh.msg_name = &sll;
-    msgh.msg_namelen = sizeof(sll);
-    msgh.msg_control = cmbuf;
-    msgh.msg_controllen = sizeof(cmbuf);
-    msgh.msg_iov  = &iov;
-    msgh.msg_iovlen = 1;
-    msgh.msg_flags = 0;
+    msg.msg_name = &sll;
+    msg.msg_namelen = sizeof(sll);
+    msg.msg_control = cmbuf;
+    msg.msg_controllen = sizeof(cmbuf);
+    msg.msg_iov  = &iov;
+    msg.msg_iovlen = 1;
+    msg.msg_flags = 0;
 
-    while ((len = recvmsg(sd, &msgh, 0)) < 0) {
+    while ((len = recvmsg(sd, &msg, 0)) < 0) {
 	if (errno == EINTR)
 	    continue;		/* Received signal, retry syscall. */
 
@@ -190,7 +191,7 @@ static void igmp_read(int sd, void *arg)
 	return;
     }
 
-    for (cmsg = CMSG_FIRSTHDR(&msgh); cmsg != NULL; cmsg = CMSG_NXTHDR(&msgh, cmsg)) {
+    for (cmsg = CMSG_FIRSTHDR(&msg); cmsg != NULL; cmsg = CMSG_NXTHDR(&msg, cmsg)) {
 	if (cmsg->cmsg_level == SOL_PACKET && cmsg->cmsg_type == PACKET_AUXDATA) {
 	    auxdata = (struct tpacket_auxdata *)CMSG_DATA(cmsg);
 	    vid = auxdata->tp_vlan_tci & 0x0fff;
@@ -208,11 +209,10 @@ static void igmp_read(int sd, void *arg)
  */
 void accept_igmp(int ifindex, uint8_t *buf, size_t len)
 {
+    int ipdatalen, iphdrlen, igmpdatalen, igmp_version = 3;
+    uint32_t src, dst, group;
     struct igmp *igmp;
     struct ip *ip;
-    uint32_t src, dst, group;
-    int ipdatalen, iphdrlen, igmpdatalen;
-    int igmp_version = 3;
 
     if (len < sizeof(struct ip)) {
 	logit(LOG_INFO, 0, "received packet too short (%zu bytes) for IP header", len);
@@ -495,7 +495,7 @@ void send_igmp(const struct ifi *ifi, uint32_t dst, int type, int code, uint32_t
     uint32_t src = ifi->ifi_curr_addr;
     struct sockaddr_ll sll = { 0 };
     struct ip *ip;
-    size_t len = 0;
+    size_t len;
     int rc;
 
     memset(send_buf, 0, RECV_BUF_SIZE);
@@ -517,12 +517,12 @@ void send_igmp(const struct ifi *ifi, uint32_t dst, int type, int code, uint32_t
     else
        len += build_igmp(send_buf + len, src, dst, type, code, group, datalen);
 
+    /* Make sure to send in same interface we're receiving */
     sll.sll_family = AF_PACKET;
     sll.sll_protocol = htons(ETH_P_ALL);
     sll.sll_ifindex = ifi->ifi_ifindex;
-    sll.sll_halen = ETH_ALEN;
 
-    rc = sendto(ifi->ifi_sock, send_buf, len, MSG_DONTROUTE, (struct sockaddr *)&sll, sizeof(sll));
+    rc = sendto(ifi->ifi_sock, send_buf, len, 0, (struct sockaddr *)&sll, sizeof(sll));
     if (rc < 0) {
 	if (errno == ENETDOWN)
 	    iface_check_state();
@@ -534,13 +534,6 @@ void send_igmp(const struct ifi *ifi, uint32_t dst, int type, int code, uint32_t
     logit(LOG_DEBUG, 0, "SENT %s from %-15s to %s", igmp_packet_kind(type, code),
 	  src == INADDR_ANY ? "INADDR_ANY" : inet_fmt(src, s1, sizeof(s1)),
 	  inet_fmt(dst, s2, sizeof(s2)));
-}
-
-void send_igmp_proxy(const struct ifi *ifi)
-{
-    send_igmp(ifi, allhosts_group, IGMP_MEMBERSHIP_QUERY, igmp_response_interval * IGMP_TIMER_SCALE, 0, 4);
-
-    logit(LOG_DEBUG, 0, "SENT proxy query from %s", ifi->ifi_name);
 }
 
 /**

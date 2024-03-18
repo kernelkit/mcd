@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: ISC */
+
 #ifndef MCD_IFACE_H_
 #define MCD_IFACE_H_
 

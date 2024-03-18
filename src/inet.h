@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: ISC */
+
 #ifndef MCD_INET_H_
 #define MCD_INET_H_
 

@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: ISC */
+
 #ifndef MCD_PATHNAMES_H_
 #define MCD_PATHNAMES_H_
 
