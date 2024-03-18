@@ -424,7 +424,7 @@ void accept_membership_query(int ifindex, uint32_t src, uint32_t dst, uint32_t g
 	    i >>= 1;
 
 	if (i == 1) {
-	    logit(LOG_WARNING, 0, "Received IGMPv%d report from %s on %s, configured for IGMPv%d",
+	    logit(LOG_WARNING, 0, "Received IGMPv%d query from %s on %s, configured for IGMPv%d",
 		  ver, inet_fmt(src, s1, sizeof(s1)), ifi->ifi_name, ifi->ifi_flags & IFIF_IGMPV1 ? 1 : 2);
 	}
     }
@@ -503,7 +503,7 @@ void accept_membership_query(int ifindex, uint32_t src, uint32_t dst, uint32_t g
 	&& group != 0 && src != ifi->ifi_inaddr) {
 	struct listaddr *g;
 
-	logit(LOG_DEBUG, 0, "Group-specific membership query for %s from %s on %s, timer %d",
+	logit(LOG_DEBUG, 0, "Group-specific membership query for %s from %s on %s, timeout %d",
 	      inet_fmt(group, s2, sizeof(s2)),
 	      inet_fmt(src, s1, sizeof(s1)), ifi->ifi_name, tmo);
 
