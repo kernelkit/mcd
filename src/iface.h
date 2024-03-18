@@ -18,7 +18,7 @@ struct ifi {
     uint32_t	     ifi_vlan;	         /* Raw VLAN ID for send and accept   */
     char	     ifi_name[IFNAMSIZ]; /* interface name                    */
     int		     ifi_index;          /* Primarily for Linux systems       */
-    uint32_t	     ifi_address;      /* Current address of this interface */
+    uint32_t	     ifi_inaddr;      /* Current address of this interface */
     uint32_t	     ifi_query_interval; /* IGMP query interval               */
     struct listaddr *ifi_querier;        /* IGMP querier (one or none)        */
     int		     ifi_timerid;	 /* IGMP query timer           	      */

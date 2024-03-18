@@ -492,7 +492,7 @@ size_t build_igmp(uint8_t *buf, uint32_t src, uint32_t dst, int type, int code, 
  */
 void send_igmp(const struct ifi *ifi, uint32_t dst, int type, int code, uint32_t group, int datalen)
 {
-    uint32_t src = ifi->ifi_address;
+    uint32_t src = ifi->ifi_inaddr;
     struct sockaddr_ll sll = { 0 };
     struct ip *ip;
     size_t len;
