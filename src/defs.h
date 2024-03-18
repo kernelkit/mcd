@@ -156,6 +156,7 @@ extern void             netlink_init(void);
 extern void             netlink_exit(void);
 
 /* config.c */
+extern void             config_init(void);
 extern void		config_set_ifflag(uint32_t);
 extern struct ifi      *config_iface_iter(int);
 extern struct ifi      *config_iface_add(char *);
@@ -165,10 +166,10 @@ extern struct ifi      *config_find_ifaddr(in_addr_t);
 extern struct ifi      *config_find_iface(int);
 extern struct ifi      *config_init_tunnel(in_addr_t, in_addr_t, uint32_t);
 extern void             config_iface_addr_add(int, struct sockaddr *, unsigned int);
-extern void		config_iface_from_kernel(void);
+extern void		config_iface_init(void);
 
 /* cfparse.y */
-extern void		config_iface_from_file(void);
+extern void		config_parse(const char *file);
 
 /* inet.c */
 extern int		inet_valid_group(uint32_t);

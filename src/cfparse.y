@@ -16,19 +16,17 @@
 #include "defs.h"
 #include "inet.h"
 
-
 /*
  * Local function declarations
  */
 static void        fatal(const char *fmt, ...);
 static void        warn(const char *fmt, ...);
 static void        yyerror(char *s);
-static char       *next_word(void);
+static char       *yytoken(void);
 static int         yylex(void);
 int                yyparse(void);
 
-static FILE *fp;
-
+static FILE *yyin;
 static int lineno;
 
 static struct ifi *ifi;
@@ -186,7 +184,7 @@ static void yyerror(char *msg)
     logit(LOG_ERR, 0, "%s:%d: %s", config_file, lineno, msg);
 }
 
-static char *next_word(void)
+static char *yytoken(void)
 {
     static char buf[1024];
     static char *p = NULL;
@@ -195,7 +193,7 @@ static char *next_word(void)
     while (1) {
         if (!p || !*p) {
             lineno++;
-            if (fgets(buf, sizeof(buf), fp) == NULL)
+            if (fgets(buf, sizeof(buf), yyin) == NULL)
                 return NULL;
             p = buf;
         }
@@ -262,7 +260,7 @@ static int yylex(void)
     uint32_t addr, n;
     char *q;
 
-    q = next_word();
+    q = yytoken();
     if (!q)
         return 0;
 
@@ -313,12 +311,19 @@ static int yylex(void)
     return STRING;
 }
 
-void config_iface_from_file(void)
+void config_init(void)
 {
     TAILQ_INIT(&scrap.ifi_static);
     TAILQ_INIT(&scrap.ifi_groups);
 
     lineno = 0;
+
+    config_parse(config_file);
+}
+
+void config_parse(const char *file)
+{
+    FILE *fp;
 
     fp = fopen(config_file, "r");
     if (!fp) {
@@ -327,8 +332,8 @@ void config_iface_from_file(void)
         return;
     }
 
+    yyin = fp;
     yyparse();
-
     fclose(fp);
 }
 

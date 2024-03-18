@@ -39,8 +39,7 @@ void iface_init(void)
 {
     struct ifi *ifi;
 
-    config_iface_from_file();
-    config_iface_from_kernel();
+    config_iface_init();
 
     for (ifi = config_iface_iter(1); ifi; ifi = config_iface_iter(0)) {
 	if (ifi->ifi_flags & IFIF_DOWN) {

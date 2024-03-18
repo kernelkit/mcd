@@ -256,7 +256,7 @@ void config_iface_addr_del(int ifindex, struct sockaddr *sa)
 /*
  * Query the kernel to find network interfaces that are multicast-capable
  */
-void config_iface_from_kernel(void)
+void config_iface_init(void)
 {
     struct ifaddrs *ifa, *ifap;
 
