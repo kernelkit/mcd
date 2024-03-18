@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: ISC */
 
 #include <string.h>
 #include <netinet/in.h>
@@ -63,7 +64,7 @@ static void netlink_read(int sd, void *arg)
 
 void netlink_init(void)
 {
-    struct sockaddr_nl addr;
+    struct sockaddr_nl addr = { 0 };
 
     sd = socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
     if (sd == -1) {
@@ -71,7 +72,6 @@ void netlink_init(void)
 	return;
     }
 
-    memset(&addr, 0, sizeof(addr));
     addr.nl_family = AF_NETLINK;
     addr.nl_groups = RTMGRP_IPV4_IFADDR | RTMGRP_LINK;
     if (bind(sd, (struct sockaddr *)&addr, sizeof(addr)) == -1) {

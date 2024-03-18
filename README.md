@@ -71,9 +71,9 @@ the special source address 0.0.0.0 and is therefore guaranteed to never
 win an election.
 
 > **Note:** unless mcd has an IP address it will operate as if set to
-> `proxy-mode`.  If the interface has no address when mcd starts up it
-> needs to be SIGHUP'ed to use any new interface or address, e.g. DHCP.
-
+> `proxy-mode`.  If the interface has no address, or does not yet exist
+> when mcd starts up, mcd will adjust automatically since listens to
+> Linux NETLINK events.
 
 [GitHub]:          https://github.com/kernelkit/mcd/actions/workflows/build.yml/
 [GitHub Status]:   https://github.com/kernelkit/mcd/actions/workflows/build.yml/badge.svg
