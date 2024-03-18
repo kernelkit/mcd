@@ -56,7 +56,7 @@ struct ifi *config_find_ifaddr(in_addr_t addr)
     struct ifi *ifi;
 
     TAILQ_FOREACH(ifi, &ifaces, ifi_link) {
-	if (addr == ifi->ifi_curr_addr)
+	if (addr == ifi->ifi_address)
             return ifi;
     }
 

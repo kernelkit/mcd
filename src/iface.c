@@ -78,7 +78,7 @@ void iface_exit(void)
 void iface_zero(struct ifi *ifi)
 {
     ifi->ifi_flags	= IFIF_DISABLED;
-    ifi->ifi_curr_addr	= 0;
+    ifi->ifi_address	= 0;
     ifi->ifi_vlan	= 0;
     ifi->ifi_name[0]	= '\0';
     TAILQ_INIT(&ifi->ifi_static);
@@ -139,19 +139,18 @@ void iface_check_election(struct ifi *ifi)
 	curr = cand;
     }
 
-    if (curr != ifi->ifi_curr_addr) {
+    if (curr != ifi->ifi_address) {
 	logit(LOG_INFO, 0, "Using %s address %s", ifi->ifi_name, inet_fmt(curr, s1, sizeof(s1)));
-	ifi->ifi_prev_addr = ifi->ifi_curr_addr;
-	ifi->ifi_curr_addr = curr;
+	ifi->ifi_address = curr;
     }
 
     if (curr && ifi->ifi_querier) {
 	uint32_t cur = ifi->ifi_querier->al_addr;
 
-	if (ntohl(ifi->ifi_curr_addr) < ntohl(cur)) {
+	if (ntohl(ifi->ifi_address) < ntohl(cur)) {
 	    inet_fmt(cur, s1, sizeof(s1));
 	    logit(LOG_DEBUG, 0, "New local querier on %s, was %s (%u vs %u)",
-		  ifi->ifi_name, s1, ntohl(ifi->ifi_curr_addr), ntohl(cur));
+		  ifi->ifi_name, s1, ntohl(ifi->ifi_address), ntohl(cur));
 	    pev_timer_del(ifi->ifi_querier->al_timerid);
 	    free(ifi->ifi_querier);
 	    ifi->ifi_querier = NULL;
@@ -228,8 +227,7 @@ void iface_del(int ifindex, int flags)
 	free(pa);
     }
 
-    ifi->ifi_prev_addr = 0;
-    ifi->ifi_curr_addr = 0;
+    ifi->ifi_address = 0;
     ifi->ifi_index = 0;
     ifi->ifi_flags |= IFIF_DOWN;
 }
@@ -322,7 +320,7 @@ static void send_query(struct ifi *ifi, uint32_t dst, int code, uint32_t group)
     logit(LOG_DEBUG, 0, "Sending %squery on %s src %s",
 	  (ifi->ifi_flags & IFIF_IGMPV1) ? "v1 " :
 	  (ifi->ifi_flags & IFIF_IGMPV2) ? "v2 " : "v3 ",
-	  ifi->ifi_name, inet_name(ifi->ifi_curr_addr, 1));
+	  ifi->ifi_name, inet_name(ifi->ifi_address, 1));
 
     send_igmp(ifi, dst, IGMP_MEMBERSHIP_QUERY, code, group, datalen);
 }
@@ -433,7 +431,7 @@ void accept_membership_query(int ifindex, uint32_t src, uint32_t dst, uint32_t g
     }
 
     if (ifi->ifi_querier == NULL || ifi->ifi_querier->al_addr != src) {
-	uint32_t cur = ifi->ifi_querier ? ifi->ifi_querier->al_addr : ifi->ifi_curr_addr;
+	uint32_t cur = ifi->ifi_querier ? ifi->ifi_querier->al_addr : ifi->ifi_address;
 
 	/*
 	 * This might be:
@@ -476,7 +474,7 @@ void accept_membership_query(int ifindex, uint32_t src, uint32_t dst, uint32_t g
 		 * address, go back and fix.  We do not consider a
 		 * link-local address better than, e.g., a 192.168.
 		 */
-		if (IN_LINKLOCAL(ntohl(ifi->ifi_curr_addr)) && !IN_LINKLOCAL(ntohl(src)))
+		if (IN_LINKLOCAL(ntohl(ifi->ifi_address)) && !IN_LINKLOCAL(ntohl(src)))
 		    goto again;
 	    }
 #if 0
@@ -503,7 +501,7 @@ void accept_membership_query(int ifindex, uint32_t src, uint32_t dst, uint32_t g
      * the [Max Response Time] in the packet.
      */
     if (!(ifi->ifi_flags & (IFIF_IGMPV1|IFIF_IGMP_QUERIER))
-	&& group != 0 && src != ifi->ifi_curr_addr) {
+	&& group != 0 && src != ifi->ifi_address) {
 	struct listaddr *g;
 
 	logit(LOG_DEBUG, 0, "Group-specific membership query for %s from %s on %s, timer %d",

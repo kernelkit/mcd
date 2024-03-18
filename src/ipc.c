@@ -333,7 +333,7 @@ static int show_igmp_iface(FILE *fp)
 		int version;
 
 		if (!ifi->ifi_querier) {
-			inet_fmt(ifi->ifi_curr_addr, s1, sizeof(s1));
+			inet_fmt(ifi->ifi_address, s1, sizeof(s1));
 			snprintf(timeout, sizeof(timeout), "None   ");
 		} else {
 			time_t t;
