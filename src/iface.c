@@ -508,12 +508,12 @@ void accept_membership_query(int ifindex, uint32_t src, uint32_t dst, uint32_t g
 	      inet_fmt(src, s1, sizeof(s1)), ifi->ifi_name, tmo);
 
 	TAILQ_FOREACH(g, &ifi->ifi_groups, al_link) {
-	    if (group == g->al_addr && g->al_query == 0) {
+	    if (group == g->al_addr && g->al_queryid == 0) {
 		if (g->al_timerid > 0)
 		    g->al_timerid = pev_timer_del(g->al_timerid);
 
-		if (g->al_query > 0)
-		    g->al_query = pev_timer_del(g->al_query);
+		if (g->al_queryid > 0)
+		    g->al_queryid = pev_timer_del(g->al_queryid);
 
 		/* setup a timeout to remove the group membership */
 		g->al_timerid = delete_group_timer(ifi->ifi_index, g, IGMP_LAST_MEMBER_QUERY_COUNT
@@ -593,8 +593,8 @@ void accept_group_report(int ifindex, uint32_t src, uint32_t dst, uint32_t group
 	    g->al_reporter = src;
 
 	    /** delete old timers, set a timer for expiration **/
-	    if (g->al_query > 0)
-		g->al_query = pev_timer_del(g->al_query);
+	    if (g->al_queryid > 0)
+		g->al_queryid = pev_timer_del(g->al_queryid);
 
 	    if (g->al_timerid > 0)
 		g->al_timerid = pev_timer_del(g->al_timerid);
@@ -644,7 +644,7 @@ void accept_group_report(int ifindex, uint32_t src, uint32_t dst, uint32_t group
 	group_debug(g, s3, 0);
 
 	/** set a timer for expiration **/
-        g->al_query	= 0;
+        g->al_queryid	= 0;
 	g->al_reporter	= src;
 	g->al_timerid	= delete_group_timer(ifi->ifi_index, g, IGMP_GROUP_MEMBERSHIP_INTERVAL);
 
@@ -709,7 +709,7 @@ void accept_leave_message(int ifindex, uint32_t src, uint32_t dst, uint32_t grou
 	}
 
 	/* still waiting for a reply to a query, ignore the leave */
-	if (g->al_query) {
+	if (g->al_queryid) {
 	    logit(LOG_DEBUG, 0, "Ignoring IGMP LEAVE for %s on %s, pending group-specific query.", s3, s1);
 	    return;
 	}
@@ -719,7 +719,7 @@ void accept_leave_message(int ifindex, uint32_t src, uint32_t dst, uint32_t grou
 	    g->al_timerid = pev_timer_del(g->al_timerid);
 
 	/** send a group specific query **/
-	g->al_query = send_query_timer(ifi->ifi_index, g, igmp_last_member_interval,
+	g->al_queryid = send_query_timer(ifi->ifi_index, g, igmp_last_member_interval,
 				       IGMP_LAST_MEMBER_QUERY_COUNT);
 	g->al_timerid = delete_group_timer(ifi->ifi_index, g, igmp_last_member_interval
 					   * (IGMP_LAST_MEMBER_QUERY_COUNT + 1));
@@ -963,8 +963,8 @@ static void delete_group_cb(int timeout, void *arg)
 
     pev_timer_del(g->al_timerid);
 
-    if (g->al_query > 0)
-	g->al_query = pev_timer_del(g->al_query);
+    if (g->al_queryid > 0)
+	g->al_queryid = pev_timer_del(g->al_queryid);
 
     if (g->al_pv_timerid > 0)
 	g->al_pv_timerid = pev_timer_del(g->al_pv_timerid);
@@ -1014,13 +1014,13 @@ static void send_query_cb(int timeout, void *arg)
 
     send_query(ifi, cbk->g->al_addr, cbk->delay * IGMP_TIMER_SCALE, cbk->g->al_addr);
     if (--cbk->num > 0) {
-	pev_timer_set(cbk->g->al_query, cbk->delay * 1000000);
+	pev_timer_set(cbk->g->al_queryid, cbk->delay * 1000000);
 	return;
     }
 
   end:
     /* we're done, clear us from group */
-    cbk->g->al_query = pev_timer_del(cbk->g->al_query);
+    cbk->g->al_queryid = pev_timer_del(cbk->g->al_queryid);
     free(cbk);
 }
 
