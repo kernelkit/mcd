@@ -681,7 +681,7 @@ int show_bridge_groups(FILE *fp)
 		if (first)
 			fprintf(fp, "]\n");
 		else
-			fprintf(fp, "%*s]\n", prefix, "");
+			fprintf(fp, "\n%*s]\n", prefix, "");
 	}
 
 	drop();
