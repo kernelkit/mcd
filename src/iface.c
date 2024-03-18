@@ -57,17 +57,17 @@ void iface_exit(void)
     struct listaddr *a, *tmp;
     struct ifi *ifi, *ifi_tmp;
 
-	/* Deletes the entire list and all sub-lists. */
-	TAILQ_FOREACH_SAFE(ifi, &ifaces, ifi_link, ifi_tmp) { 
+    /* Deletes the entire list and all sub-lists. */
+    TAILQ_FOREACH_SAFE(ifi, &ifaces, ifi_link, ifi_tmp) {
 	
-		iface_del(ifi->ifi_index, 0);
+	iface_del(ifi->ifi_index, 0);
 
-	    TAILQ_FOREACH_SAFE(a, &ifi->ifi_static, al_link, tmp) {
-			TAILQ_REMOVE(&ifi->ifi_static, a, al_link);
-			free(a);
-		}
-		TAILQ_REMOVE(&ifaces, ifi, ifi_link);
-		free(ifi);
+	TAILQ_FOREACH_SAFE(a, &ifi->ifi_static, al_link, tmp) {
+	    TAILQ_REMOVE(&ifi->ifi_static, a, al_link);
+	    free(a);
+	}
+	TAILQ_REMOVE(&ifaces, ifi, ifi_link);
+	free(ifi);
     }
 }
 
@@ -751,7 +751,7 @@ void accept_leave_message(int ifindex, uint32_t src, uint32_t dst, uint32_t grou
  *     POSIX OK (0) if succeeded, non-zero on failure.
  */
 int accept_sources(int ifindex, int r_type, uint32_t src, uint32_t dst, uint8_t *sources,
-    uint8_t *canary, int rec_num_sources)
+		   uint8_t *canary, int rec_num_sources)
 {
     uint8_t *ptr;
     int j;
@@ -817,67 +817,67 @@ void accept_membership_report(int ifindex, uint32_t src, uint32_t dst, struct ig
 	sources = (uint8_t *)record->grec_src;
 
 	switch (rec_type) {
-	    case IGMP_MODE_IS_EXCLUDE:
-	    case IGMP_CHANGE_TO_EXCLUDE_MODE:
-		if (rec_num_sources == 0) {
-		    /* RFC 5790: TO_EX({}) can be interpreted as a (*,G)
-		     *           join, i.e., to include all sources.
-		     */
-		    accept_group_report(ifindex, src, 0, rec_group.s_addr, report->type);
-		} else {
-		    /* RFC 5790: LW-IGMPv3 does not use TO_EX({x}),
-		     *           i.e., filter with non-null source.
-		     */
-		    logit(LOG_DEBUG, 0, "IS_EX/TO_EX({x}), not unsupported, RFC5790.");
-		}
-		break;
+	case IGMP_MODE_IS_EXCLUDE:
+	case IGMP_CHANGE_TO_EXCLUDE_MODE:
+	    if (rec_num_sources == 0) {
+		/* RFC 5790: TO_EX({}) can be interpreted as a (*,G)
+		 *           join, i.e., to include all sources.
+		 */
+		accept_group_report(ifindex, src, 0, rec_group.s_addr, report->type);
+	    } else {
+		/* RFC 5790: LW-IGMPv3 does not use TO_EX({x}),
+		 *           i.e., filter with non-null source.
+		 */
+		logit(LOG_DEBUG, 0, "IS_EX/TO_EX({x}), not unsupported, RFC5790.");
+	    }
+	    break;
 
-	    case IGMP_MODE_IS_INCLUDE:
-	    case IGMP_CHANGE_TO_INCLUDE_MODE:
-		if (rec_num_sources == 0) {
-		    /* RFC5790: TO_IN({}) can be interpreted as an
-		     *          IGMPv2 (*,G) leave.
-		     */
-		    accept_leave_message(ifindex, src, 0, rec_group.s_addr);
-		} else {
-		    /* RFC5790: TO_IN({x}), regular RFC3376 (S,G)
-		     *          join with >= 1 source, 'S'.
-		     */
-		    rc = accept_sources(ifindex, report->type, src, rec_group.s_addr,
-					sources, canary, rec_num_sources);
-		    if (rc)
-			return;
-		}
-		break;
-
-	    case IGMP_ALLOW_NEW_SOURCES:
-		/* RFC5790: Same as TO_IN({x}) */
+	case IGMP_MODE_IS_INCLUDE:
+	case IGMP_CHANGE_TO_INCLUDE_MODE:
+	    if (rec_num_sources == 0) {
+		/* RFC5790: TO_IN({}) can be interpreted as an
+		 *          IGMPv2 (*,G) leave.
+		 */
+		accept_leave_message(ifindex, src, 0, rec_group.s_addr);
+	    } else {
+		/* RFC5790: TO_IN({x}), regular RFC3376 (S,G)
+		 *          join with >= 1 source, 'S'.
+		 */
 		rc = accept_sources(ifindex, report->type, src, rec_group.s_addr,
 				    sources, canary, rec_num_sources);
 		if (rc)
 		    return;
-		break;
+	    }
+	    break;
 
-	    case IGMP_BLOCK_OLD_SOURCES:
-		/* RFC5790: Instead of TO_EX({x}) */
-		for (j = 0; j < rec_num_sources; j++) {
-		    uint8_t *gsrc = (uint8_t *)&record->grec_src[j];
-		    struct in_addr *ina = (struct in_addr *)gsrc;
+	case IGMP_ALLOW_NEW_SOURCES:
+	    /* RFC5790: Same as TO_IN({x}) */
+	    rc = accept_sources(ifindex, report->type, src, rec_group.s_addr,
+				sources, canary, rec_num_sources);
+	    if (rc)
+		return;
+	    break;
 
-		    if (gsrc > canary) {
-			logit(LOG_INFO, 0, "Invalid group record");
-			return;
-		    }
+	case IGMP_BLOCK_OLD_SOURCES:
+	    /* RFC5790: Instead of TO_EX({x}) */
+	    for (j = 0; j < rec_num_sources; j++) {
+		uint8_t *gsrc = (uint8_t *)&record->grec_src[j];
+		struct in_addr *ina = (struct in_addr *)gsrc;
 
-		    logit(LOG_DEBUG, 0, "Remove source[%d] (%s,%s)", j,
-			  inet_fmt(ina->s_addr, s2, sizeof(s2)), inet_ntoa(rec_group));
-		    accept_leave_message(ifindex, src, 0, rec_group.s_addr);
+		if (gsrc > canary) {
+		    logit(LOG_INFO, 0, "Invalid group record");
+		    return;
 		}
-		break;
 
-	    default:
-		/* RFC3376: Unrecognized Record Type values MUST be silently ignored. */
-		break;
+		logit(LOG_DEBUG, 0, "Remove source[%d] (%s,%s)", j,
+		      inet_fmt(ina->s_addr, s2, sizeof(s2)), inet_ntoa(rec_group));
+		accept_leave_message(ifindex, src, 0, rec_group.s_addr);
+	    }
+	    break;
+
+	default:
+	    /* RFC3376: Unrecognized Record Type values MUST be silently ignored. */
+	    break;
 	}
 
 	record = (struct igmpv3_grec *)((uint8_t *)record + record_size);
