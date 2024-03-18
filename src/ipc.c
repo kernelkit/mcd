@@ -17,6 +17,7 @@
  *           echo "help" |socat - UNIX-CONNECT:/run/mcd.sock
  */
 
+#include <ctype.h>
 #include <fcntl.h>
 #include <stddef.h>
 
@@ -325,7 +326,7 @@ static int show_igmp_iface(FILE *fp)
 		fprintf(fp, "[\n");
 		prefix += 2;
 	} else
-		fprintf(fp, "Interface         State     Querier               Interval  Timeout  Ver=\n");
+		fprintf(fp, "Interface          VID  State     Querier               Interval  Timeout  Ver=\n");
 
 	for (ifi = config_iface_iter(1); ifi; ifi = config_iface_iter(0)) {
 		int interval = ifi->ifi_query_interval, rt_tmo = -1;
@@ -353,14 +354,21 @@ static int show_igmp_iface(FILE *fp)
 			version = 3;
 
 		if (json) {
+			const char *State = ifstate(ifi);
+			char state[strlen(State)];
 			int once = 1;
 
 			fprintf(fp, "%s%*s{\n", first ? "" : ",\n", prefix, "");
 			prefix += 2;
 
+			for (size_t i = 0; i <= strlen(State); i++)
+				state[i] = tolower(State[i]);
+
 			jprint(fp, "interface", ifi->ifi_name, &once);
-			jprint(fp, "state", ifi->ifi_name, &once);
-			jprint(fp, "querier", ifi->ifi_name, &once);
+			if (ifi->ifi_vlan)
+				jprinti(fp, "vid", ifi->ifi_vlan, &once);
+			jprint(fp, "state", state, &once);
+			jprint(fp, "querier", s1, &once);
 			if (rt_tmo > -1)
 				jprinti(fp, "timeout", rt_tmo, &once);
 			jprinti(fp, "interval", interval, &once);
@@ -369,9 +377,14 @@ static int show_igmp_iface(FILE *fp)
 			prefix -= 2;
 			fprintf(fp, "\n%*s}", prefix, "");
 			first = 0;
-		} else
-			fprintf(fp, "%-16s  %-8s  %-20s  %8d  %7s  %3d\n", ifi->ifi_name,
-				ifstate(ifi), s1, interval, timeout, version);
+		} else {
+			char vlan[5] = { 0 };
+
+			if (ifi->ifi_vlan)
+				snprintf(vlan, sizeof(vlan), "%4d", ifi->ifi_vlan);
+			fprintf(fp, "%-16s  %4s  %-8s  %-20s  %8d  %7s  %3d\n", ifi->ifi_name,
+				vlan, ifstate(ifi), s1, interval, timeout, version);
+		}
 	}
 
 	if (json) {
