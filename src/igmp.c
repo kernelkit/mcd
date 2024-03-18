@@ -350,9 +350,6 @@ static size_t build_ipv4(uint8_t *buf, uint32_t src, uint32_t dst, short unsigne
      */
     ip->ip_id = 0;
 
-    ip->ip_sum = 0;
-    ip->ip_sum = inet_cksum((uint16_t *)buf, len);
-
     /*
      * RFC2113 IP Router Alert.  Per spec this is required to
      * force certain routers/switches to inspect this frame.
@@ -362,6 +359,9 @@ static size_t build_ipv4(uint8_t *buf, uint32_t src, uint32_t dst, short unsigne
     ip_opt[1] = 4;
     ip_opt[2] = 0;
     ip_opt[3] = 0;
+
+    ip->ip_sum = 0;
+    ip->ip_sum = inet_cksum((uint16_t *)buf, len);
 
     return len;
 }
