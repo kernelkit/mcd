@@ -13,6 +13,32 @@ char s2[INET_ADDRSTR_LEN];		/* of IP addresses, to be passed to inet_fmt() */
 char s3[INET_ADDRSTR_LEN];		/* or inet_fmts().                             */
 char s4[INET_ADDRSTR_LEN];
 
+int inet_addr_cmp(inet_addr_t *a, inet_addr_t *b)
+{
+	if (!a || !b) {
+		errno = EINVAL;
+		return 1;
+	}
+
+	if (a->ss_family == AF_INET && b->ss_family == AF_INET) {
+		struct sockaddr_in *sa = (struct sockaddr_in *)a;
+		struct sockaddr_in *sb = (struct sockaddr_in *)b;
+
+		return sa->sin_addr.s_addr - sb->sin_addr.s_addr;
+	}
+
+#ifdef HAVE_IPV6_MULTICAST_HOST
+	if (a->ss_family == AF_INET6 && b->ss_family == AF_INET6) {
+		struct sockaddr_in6 *sa = (struct sockaddr_in6 *)a;
+		struct sockaddr_in6 *sb = (struct sockaddr_in6 *)b;
+
+		return memcmp(sa, sb, sizeof(*sa));
+	}
+#endif
+
+	errno = EAFNOSUPPORT;
+	return 1;
+}
 
 /*
  * Verify that a given IP address is a valid multigast group
@@ -137,16 +163,12 @@ char *inet_name(uint32_t addr, int numeric)
 /*
  * Convert an IP address in uint32_t (network) format into a printable string.
  */
-char *inet_fmt(uint32_t addr, char *s, size_t len)
+char *inet_fmt(inet_addr_t *addr, char *s, size_t len)
 {
-    uint8_t *a;
-
-    a = (uint8_t *)&addr;
-    snprintf(s, len, "%u.%u.%u.%u", a[0], a[1], a[2], a[3]);
-
+    if (getnameinfo((struct sockaddr *)addr, sizeof(*addr), s, len, NULL, 0, NI_NUMERICHOST))
+	return NULL;
     return s;
 }
-
 
 /*
  * Convert an IP subnet number in uint32_t (network) format into a printable
