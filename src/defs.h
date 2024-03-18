@@ -44,8 +44,7 @@ typedef void (*cfunc_t) (void*);
 typedef void (*ihfunc_t) (int);
 
 #include "iface.h"
-#include "igmpv2.h"
-#include "igmpv3.h"
+#include "igmp.h"
 #include "pathnames.h"
 #include "pev.h"
 
