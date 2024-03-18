@@ -45,7 +45,8 @@ struct listaddr {
     time_t	     al_ctime;		/* entry creation time		    */
     uint32_t	     al_reporter;	/* a host which reported membership */
     int		     al_timerid;	/* timer for group membership	    */
-    int		     al_queryid;		/* timer for repeated leave query   */
+    int		     al_queryid;	/* timer for repeated leave query   */
+    int		     al_interval;	/* querier's query interval         */
     uint8_t	     al_pv;		/* group/router protocol version    */
     int 	     al_pv_timerid;	/* timer for version switch         */
     uint16_t	     al_flags;		/* flags related to neighbor/group  */

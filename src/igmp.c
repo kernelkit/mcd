@@ -210,7 +210,7 @@ static void igmp_read(int sd, void *arg)
  */
 void accept_igmp(int ifindex, uint8_t *buf, size_t len)
 {
-    int ipdatalen, iphdrlen, igmpdatalen, timeout, interval, igmp_version = 3;
+    int ipdatalen, iphdrlen, igmpdatalen, timeout, interval = 0, igmp_version = 3;
     uint32_t src, dst, group;
     struct igmp *igmp;
     struct ip *ip;
@@ -268,14 +268,17 @@ void accept_igmp(int ifindex, uint8_t *buf, size_t len)
 		    igmp_version = 2;
 		timeout = igmp->igmp_code * IGMP_TIMER_SCALE;
 	    } else if (ipdatalen >= 12) {
+		struct igmpv3_query *query = (struct igmpv3_query *)(buf + iphdrlen);
+
 		igmp_version = 3;
-		timeout = igmp_code_time(igmp->igmp_code);
+		timeout = igmp_code_time(query->code) / IGMP_TIMER_SCALE;
+		interval = igmp_code_time(query->qqic);
 	    } else {
 		logit(LOG_INFO, 0, "Received invalid IGMP query: Max Resp Code = %d, length = %d",
 		      igmp->igmp_code, ipdatalen);
 		timeout = 0;
 	    }
-	    accept_membership_query(ifindex, src, dst, group, timeout, igmp_version);
+	    accept_membership_query(ifindex, src, dst, group, interval, timeout, igmp_version);
 	    return;
 
 	case IGMP_V1_MEMBERSHIP_REPORT:

@@ -404,7 +404,8 @@ static void query_groups(int period, void *arg)
  * IGMP version mismatches, perform querier election, and
  * handle group-specific queries when we're not the querier.
  */
-void accept_membership_query(int ifindex, uint32_t src, uint32_t dst, uint32_t group, int tmo, int ver)
+void accept_membership_query(int ifindex, uint32_t src, uint32_t dst, uint32_t group,
+			     int intv, int tmo, int ver)
 {
     struct ifi *ifi;
     int notnew = 1;
@@ -412,6 +413,13 @@ void accept_membership_query(int ifindex, uint32_t src, uint32_t dst, uint32_t g
     ifi = config_find_iface(ifindex);
     if (!ifi)
 	return;
+
+    /*
+     * IGMPv1 + IGMPv2 don't send the query inteval (qqic field only in
+     * IGMPv3), assume we are configured correctly to match.
+     */
+    if (intv == 0)
+	intv = ifi->ifi_query_interval;
 
     if ((ver == 3 && (ifi->ifi_flags & IFIF_IGMPV2)) ||
 	(ver == 2 && (ifi->ifi_flags & IFIF_IGMPV1))) {
@@ -466,6 +474,7 @@ void accept_membership_query(int ifindex, uint32_t src, uint32_t dst, uint32_t g
 
 	    time(&ifi->ifi_querier->al_ctime);
 	    ifi->ifi_querier->al_addr = src;
+	    ifi->ifi_querier->al_interval = intv;
 	    notnew = 0;
 	} else {
 	    if (!ifi->ifi_querier) {

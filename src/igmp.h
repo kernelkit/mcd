@@ -203,11 +203,9 @@ static inline uint16_t igmp_code_time(uint8_t code)
     uint16_t time;
 
     if (code < 128)
-	time = code;
-    else
-	time = (mant | 0x10) << (exp + 3);
+	return code;
 
-    return time / IGMP_TIMER_SCALE;
+    return (mant | 0x10) << (exp + 3);
 }
 
 #endif /* MCD_IGMP_H_ */

@@ -325,20 +325,21 @@ static int show_igmp_iface(FILE *fp)
 		fprintf(fp, "[\n");
 		prefix += 2;
 	} else
-		fprintf(fp, "Interface         State     Querier               Timeout  Ver=\n");
+		fprintf(fp, "Interface         State     Querier               Interval  Timeout  Ver=\n");
 
 	for (ifi = config_iface_iter(1); ifi; ifi = config_iface_iter(0)) {
+		int interval = ifi->ifi_query_interval, rt_tmo = -1;
 		char timeout[10];
-		int rt_tmo = -1;
 		int version;
 
 		if (!ifi->ifi_querier) {
 			inet_fmt(ifi->ifi_inaddr, s1, sizeof(s1));
-			snprintf(timeout, sizeof(timeout), "None   ");
+			snprintf(timeout, sizeof(timeout), "None");
 		} else {
 			time_t t;
 
 			inet_fmt(ifi->ifi_querier->al_addr, s1, sizeof(s1));
+			interval = ifi->ifi_querier->al_interval;
 			t = time(NULL) - ifi->ifi_querier->al_ctime;
 			rt_tmo = (int)router_timeout - (int)t;
 			snprintf(timeout, sizeof(timeout), "%u", rt_tmo);
@@ -362,14 +363,15 @@ static int show_igmp_iface(FILE *fp)
 			jprint(fp, "querier", ifi->ifi_name, &once);
 			if (rt_tmo > -1)
 				jprinti(fp, "timeout", rt_tmo, &once);
+			jprinti(fp, "interval", interval, &once);
 			jprinti(fp, "version", version, &once);
 
 			prefix -= 2;
 			fprintf(fp, "\n%*s}", prefix, "");
 			first = 0;
 		} else
-			fprintf(fp, "%-16s  %-8s  %-20s  %7s  %3d\n", ifi->ifi_name,
-				ifstate(ifi), s1, timeout, version);
+			fprintf(fp, "%-16s  %-8s  %-20s  %8d  %7s  %3d\n", ifi->ifi_name,
+				ifstate(ifi), s1, interval, timeout, version);
 	}
 
 	if (json) {

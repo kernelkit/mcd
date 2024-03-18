@@ -148,7 +148,7 @@ extern void		iface_check_state(void);
 extern void		iface_exit(void);
 extern void		accept_group_report(int, uint32_t, uint32_t, uint32_t, int);
 extern void		accept_leave_message(int, uint32_t, uint32_t, uint32_t);
-extern void		accept_membership_query(int, uint32_t, uint32_t, uint32_t, int, int);
+extern void		accept_membership_query(int, uint32_t, uint32_t, uint32_t, int, int, int);
 extern void             accept_membership_report(int, uint32_t, uint32_t, struct igmpv3_report *, ssize_t);
 
 /* netlink.c */
