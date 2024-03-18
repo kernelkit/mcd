@@ -84,6 +84,7 @@ void iface_zero(struct ifi *ifi)
     TAILQ_INIT(&ifi->ifi_groups);
     TAILQ_INIT(&ifi->ifi_addrs);
     ifi->ifi_querier	= NULL;
+    ifi->ifi_query_interval = igmp_query_interval;
     ifi->ifi_timerid	= 0;
     ifi->ifi_igmpv1_warn = 0;
 }
