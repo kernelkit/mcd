@@ -51,12 +51,12 @@ struct ifi *config_find_ifname(char *nm)
     return NULL;
 }
 
-struct ifi *config_find_ifaddr(in_addr_t addr)
+struct ifi *config_find_ifaddr(inet_addr_t ina)
 {
     struct ifi *ifi;
 
     TAILQ_FOREACH(ifi, &ifaces, ifi_link) {
-	if (addr == ifi->ifi_inaddr)
+	if (!inet_addr_cmp(&ina, &ifi->ifi_inaddr))
             return ifi;
     }
 
@@ -75,7 +75,7 @@ struct ifi *config_find_iface(int ifindex, int vid)
     return NULL;
 }
 
-static int getmac(const char *ifname, uint8_t *mac, size_t size)
+static int getmac(const char *ifname, char *mac, size_t size)
 {
     struct ifreq ifr;
     int rc = 0;
@@ -204,7 +204,7 @@ static struct ifi *addr_add(int ifindex, struct sockaddr *sa, unsigned int flags
 
     /* kernel promotes secondary addresses, we know all addrs already */
     TAILQ_FOREACH(pa, &ifi->ifi_addrs, pa_link) {
-	if (pa->pa_addr == sin->sin_addr.s_addr)
+	if (!inet_addr_cmp(&pa->pa_addr, (inet_addr_t *)sin))
 	    return NULL;	/* Already have it */
     }
 
@@ -214,7 +214,7 @@ static struct ifi *addr_add(int ifindex, struct sockaddr *sa, unsigned int flags
 	exit(EX_OSERR);
     }
 
-    pa->pa_addr  = sin->sin_addr.s_addr;
+    memcpy(&pa->pa_addr, sin, sizeof(pa->pa_addr));
     TAILQ_INSERT_TAIL(&ifi->ifi_addrs, pa, pa_link);
 
     if (!(flags & IFF_UP))
@@ -243,7 +243,7 @@ static struct ifi *addr_del(int ifindex, struct sockaddr *sa)
 	return NULL;
 
     TAILQ_FOREACH_SAFE(pa, &ifi->ifi_addrs, pa_link, tmp) {
-	if (pa->pa_addr != sin->sin_addr.s_addr)
+	if (inet_addr_cmp(&pa->pa_addr, (inet_addr_t *)sin))
 	    continue;
 
 	TAILQ_REMOVE(&ifi->ifi_addrs, pa, pa_link);

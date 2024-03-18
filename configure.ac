@@ -14,8 +14,8 @@ AC_PROG_INSTALL
 AC_PROG_YACC
 
 # Check for linux/netlink.h is only to be able to define LINUX below
-AC_CHECK_HEADERS([fcntl.h ifaddrs.h sys/ioctl.h sys/time.h linux/netlink.h termios.h])
-AC_CHECK_HEADERS([net/if.h netinet/igmp.h], [], [], [
+AC_CHECK_HEADERS([fcntl.h ifaddrs.h sys/ioctl.h sys/time.h sys/socket.h linux/netlink.h termios.h])
+AC_CHECK_HEADERS([net/if.h netinet/igmp.h netinet/in.h], [], [], [
 #include <stdio.h>
 #ifdef STDC_HEADERS
 # include <stdlib.h>
@@ -40,6 +40,22 @@ AC_CHECK_FUNCS([atexit getifaddrs])
 # Check for usually missing API's, which we can replace
 AC_REPLACE_FUNCS([pidfile strlcpy strlcat strtonum tempfile utimensat])
 AC_CONFIG_LIBOBJ_DIR([lib])
+
+AC_MSG_CHECKING(for IPv6 multicast host support)
+AC_COMPILE_IFELSE([
+        AC_LANG_PROGRAM([[
+                #ifdef HAVE_SYS_SOCKET_H
+                # include <sys/socket.h>
+                #endif
+                #ifdef HAVE_NETINET_IN_H
+                # include <netinet/in.h>
+                #endif
+        ]],[[
+                struct ipv6_mreq mreq;
+        ]])],[
+        AC_DEFINE(HAVE_IPV6_MULTICAST_HOST, 1, [Define if your OS supports acting as an IPv6 multicast host])
+        AC_MSG_RESULT(yes)],[
+        AC_MSG_RESULT(no)])
 
 AC_ARG_ENABLE(test,
         AS_HELP_STRING([--enable-test], [enable tests, requries unshare, tshark, etc.]),

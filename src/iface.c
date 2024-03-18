@@ -81,7 +81,7 @@ void iface_exit(void)
 void iface_zero(struct ifi *ifi)
 {
     ifi->ifi_flags	= IFIF_DISABLED;
-    ifi->ifi_inaddr	= 0;
+    memset(&ifi->ifi_inaddr, 0, sizeof(ifi->ifi_inaddr));
     ifi->ifi_vlan	= 0;
     ifi->ifi_name[0]	= '\0';
     TAILQ_INIT(&ifi->ifi_static);
@@ -133,7 +133,7 @@ static void group_del(struct ifi *ifi, struct listaddr *g)
  */
 void iface_check_election(struct ifi *ifi)
 {
-    in_addr_t curr = 0;
+    inet_addr_t curr = { 0 };
     struct phaddr *pa;
 
     if (is_igmp_proxy(ifi)) {
@@ -150,7 +150,7 @@ void iface_check_election(struct ifi *ifi)
     }
 
     TAILQ_FOREACH(pa, &ifi->ifi_addrs, pa_link) {
-	in_addr_t cand = pa->pa_addr;
+	inet_addr_t cand = pa->pa_addr;
 
 	dbg("    candidate address %s ...", inet_fmt(cand, s1, sizeof(s1)));
 	if (curr) {
@@ -240,7 +240,7 @@ void iface_del(int ifindex, int flags)
 	free(pa);
     }
 
-    ifi->ifi_inaddr = 0;
+    memset(&ifi->ifi_inaddr, 0, sizeof(ifi->ifi_inaddr));
     ifi->ifi_index = 0;
     ifi->ifi_flags |= IFIF_DOWN;
 }

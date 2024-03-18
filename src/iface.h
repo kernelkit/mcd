@@ -3,8 +3,11 @@
 #ifndef MCD_IFACE_H_
 #define MCD_IFACE_H_
 
+#include <netinet/in.h>
 #include <net/if.h>
 #include <stdint.h>
+
+#include "inet.h"
 #include "queue.h"
 
 struct ifi {
@@ -18,13 +21,13 @@ struct ifi {
     int		     ifi_vlan;	         /* Raw VLAN ID for send and accept   */
     char	     ifi_name[IFNAMSIZ]; /* interface name                    */
     int		     ifi_index;          /* Primarily for Linux systems       */
-    uint32_t	     ifi_inaddr;         /* Current address of this interface */
+    inet_addr_t      ifi_inaddr;         /* Current address of this interface */
     uint32_t	     ifi_query_interval; /* IGMP query interval               */
     struct listaddr *ifi_querier;        /* IGMP querier (one or none)        */
     int		     ifi_timerid;	 /* IGMP query timer           	      */
     int		     ifi_startup_timerid;/* startup query burst timer         */
     int		     ifi_igmpv1_warn;    /* To rate-limit IGMPv1 warnings     */
-    uint8_t	     ifi_hwaddr[6];	 /* MAC address of this interface     */
+    char	     ifi_hwaddr[6];	 /* MAC address of this interface     */
 };
 
 #define IFIF_DOWN		0x000100 /* kernel state of interface */
@@ -36,7 +39,7 @@ struct ifi {
 
 struct phaddr {
     TAILQ_ENTRY(phaddr) pa_link;
-    uint32_t	        pa_addr;
+    inet_addr_t	     pa_addr;
 };
 
 struct listaddr {
