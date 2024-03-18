@@ -170,7 +170,7 @@ void iface_check_election(struct ifi *ifi)
     ifi->ifi_flags |= IFIF_IGMP_QUERIER;
     logit(LOG_DEBUG, 0, "Assuming %squerier duties on interface %s",
           is_igmp_proxy(ifi) ? "proxy " : "", ifi->ifi_name);
-    send_query(ifi, allhosts_group, igmp_response_interval * IGMP_TIMER_SCALE, 0);
+    send_query(ifi, allhosts_group, igmp_response_interval, 0);
 }
 
 /*
@@ -297,7 +297,7 @@ void iface_check_state(void)
     close(sd);
 }
 
-static void send_query(struct ifi *ifi, uint32_t dst, int code, uint32_t group)
+static void send_query(struct ifi *ifi, uint32_t dst, int qri, uint32_t group)
 {
     int datalen = 4;
 
@@ -313,7 +313,7 @@ static void send_query(struct ifi *ifi, uint32_t dst, int code, uint32_t group)
 	datalen = 0;
     } else if (ifi->ifi_flags & IFIF_IGMPV1) {
 	datalen = 0;
-	code = 0;
+	qri = 0;
     }
 
     logit(LOG_DEBUG, 0, "Sending %squery on %s src %s",
@@ -321,7 +321,7 @@ static void send_query(struct ifi *ifi, uint32_t dst, int code, uint32_t group)
 	  (ifi->ifi_flags & IFIF_IGMPV2) ? "v2 " : "v3 ",
 	  ifi->ifi_name, inet_name(ifi->ifi_inaddr, 1));
 
-    send_igmp(ifi, dst, IGMP_MEMBERSHIP_QUERY, code, group, datalen);
+    send_igmp(ifi, dst, IGMP_MEMBERSHIP_QUERY, qri, group, datalen);
 }
 
 static void start_iface(struct ifi *ifi)
@@ -395,7 +395,7 @@ static void query_groups(int period, void *arg)
 	return;
 
     if (ifi->ifi_flags & IFIF_IGMP_QUERIER)
-	send_query(ifi, allhosts_group, igmp_response_interval * IGMP_TIMER_SCALE, 0);
+	send_query(ifi, allhosts_group, igmp_response_interval, 0);
 }
 
 /*
@@ -516,8 +516,7 @@ void accept_membership_query(int ifindex, uint32_t src, uint32_t dst, uint32_t g
 		    g->al_queryid = pev_timer_del(g->al_queryid);
 
 		/* setup a timeout to remove the group membership */
-		g->al_timerid = delete_group_timer(ifi->ifi_index, g, IGMP_LAST_MEMBER_QUERY_COUNT
-						   * tmo / IGMP_TIMER_SCALE);
+		g->al_timerid = delete_group_timer(ifi->ifi_index, g, IGMP_LAST_MEMBER_QUERY_COUNT * tmo);
 
 		logit(LOG_DEBUG, 0, "Timer for grp %s on %s set to %d",
 		      inet_fmt(group, s2, sizeof(s2)), ifi->ifi_name, pev_timer_get(g->al_timerid) / 1000);
@@ -897,7 +896,7 @@ static void router_timeout_cb(int timeout, void *arg)
     ifi->ifi_querier = NULL;
 
     ifi->ifi_flags |= IFIF_IGMP_QUERIER;
-    send_query(ifi, allhosts_group, igmp_response_interval * IGMP_TIMER_SCALE, 0);
+    send_query(ifi, allhosts_group, igmp_response_interval, 0);
 }
 
 /*
@@ -1012,7 +1011,7 @@ static void send_query_cb(int timeout, void *arg)
     if (!ifi)
 	goto end;
 
-    send_query(ifi, cbk->g->al_addr, cbk->delay * IGMP_TIMER_SCALE, cbk->g->al_addr);
+    send_query(ifi, cbk->g->al_addr, cbk->delay, cbk->g->al_addr);
     if (--cbk->num > 0) {
 	pev_timer_set(cbk->g->al_queryid, cbk->delay * 1000000);
 	return;

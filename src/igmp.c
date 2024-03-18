@@ -7,6 +7,7 @@
 #include <linux/filter.h>
 
 #include "defs.h"
+#include "igmp.h"
 #include "inet.h"
 
 #define PIM_QUERY           0
@@ -209,7 +210,7 @@ static void igmp_read(int sd, void *arg)
  */
 void accept_igmp(int ifindex, uint8_t *buf, size_t len)
 {
-    int ipdatalen, iphdrlen, igmpdatalen, igmp_version = 3;
+    int ipdatalen, iphdrlen, igmpdatalen, timeout, interval, igmp_version = 3;
     uint32_t src, dst, group;
     struct igmp *igmp;
     struct ip *ip;
@@ -265,13 +266,16 @@ void accept_igmp(int ifindex, uint8_t *buf, size_t len)
 		    igmp_version = 1;
 		else
 		    igmp_version = 2;
+		timeout = igmp->igmp_code * IGMP_TIMER_SCALE;
 	    } else if (ipdatalen >= 12) {
 		igmp_version = 3;
+		timeout = igmp_code_time(igmp->igmp_code);
 	    } else {
 		logit(LOG_INFO, 0, "Received invalid IGMP query: Max Resp Code = %d, length = %d",
 		      igmp->igmp_code, ipdatalen);
+		timeout = 0;
 	    }
-	    accept_membership_query(ifindex, src, dst, group, igmp->igmp_code, igmp_version);
+	    accept_membership_query(ifindex, src, dst, group, timeout, igmp_version);
 	    return;
 
 	case IGMP_V1_MEMBERSHIP_REPORT:
@@ -366,84 +370,12 @@ static size_t build_ipv4(uint8_t *buf, uint32_t src, uint32_t dst, short unsigne
     return len;
 }
 
-/*
- * RFC-3376 states that Max Resp Code (MRC) and Querier's Query Interval Code
- * (QQIC) should be presented in floating point value if their value exceeds
- * 128. The following formula is used by IGMPv3 clients to calculate the
- * actual value of the floating point:
- *
- *       0 1 2 3 4 5 6 7
- *      +-+-+-+-+-+-+-+-+
- *      |1| exp | mant  |
- *      +-+-+-+-+-+-+-+-+
- *
- *   QQI / MRT = (mant | 0x10) << (exp + 3)
- *
- * This requires us to find the largest set (fls) bit in the 15-bit number
- * and set the exponent based on its index in the bits 15-8. ie.
- *
- *   exponent 0: igmp_fls(0000 0000 1000 0010)
- *   exponent 5: igmp_fls(0001 0000 0000 0000)
- *   exponent 7: igmp_fls(0111 0101 0000 0000)
- *
- * and set that as the exponent. The mantissa is set to the last 4 bits
- * remaining after the (3 + exponent) shifts to the right.
- *
- * Note!
- * The numbers 31744-32767 are the maximum we can present with floating
- * point that has an exponent of 3 and a mantissa of 4. After this the
- * implementation just wraps around back to zero.
- */
-static inline uint8_t igmp_floating_point(unsigned int mantissa)
-{
-    unsigned int exponent;
-
-    /* Wrap around numbers larger than 2^15, since those can not be
-     * presented with 7-bit floating point. */
-    mantissa &= 0x00007FFF;
-
-    /* If top 8 bits are zero. */
-    if (!(mantissa & 0x00007F80))
-        return mantissa;
-
-    /* Shift the mantissa and mark this code floating point. */
-    mantissa >>= 3;
-    /* At this point the actual exponent (bits 7-5) are still 0, but the
-     * exponent might be incremented below. */
-    exponent   = 0x00000080;
-
-    /* If bits 7-4 are not zero. */
-    if (mantissa & 0x00000F00) {
-        mantissa >>= 4;
-        /* The index of largest set bit is at least 4. */
-        exponent  |= 0x00000040;
-    }
-
-    /* If bits 7-6 OR bits 3-2 are not zero. */
-    if (mantissa & 0x000000C0) {
-        mantissa >>= 2;
-        /* The index of largest set bit is atleast 6 if we shifted the
-         * mantissa earlier or atleast 2 if we did not shift it. */
-        exponent  |= 0x00000020;
-    }
-
-    /* If bit 7 OR bit 3 OR bit 1 is not zero. */
-    if (mantissa & 0x00000020) {
-        mantissa >>= 1;
-        /* The index of largest set bit is atleast 7 if we shifted the
-         * mantissa two times earlier or atleast 3 if we shifted the
-         * mantissa last time or atleast 1 if we did not shift it. */
-        exponent  |= 0x00000010;
-    }
-
-    return exponent | (mantissa & 0x0000000F);
-}
-
-size_t build_query(uint8_t *buf, uint32_t src, uint32_t dst, int type, int code, int interval,
+size_t build_query(uint8_t *buf, uint32_t src, uint32_t dst, int type, int qri, int interval,
 		   uint32_t group, int datalen)
 {
     struct igmpv3_query *igmp = (struct igmpv3_query *)buf;
     size_t igmp_len = IGMP_MINLEN + datalen;
+    int code = qri * IGMP_TIMER_SCALE;
     struct ip *ip;
 
     memset(igmp, 0, igmp_len);
