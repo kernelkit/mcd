@@ -61,7 +61,7 @@ void iface_exit(void)
 	/* Deletes the entire list and all sub-lists. */
 	TAILQ_FOREACH_SAFE(ifi, &ifaces, ifi_link, ifi_tmp) { 
 	
-		iface_del(ifi->ifi_ifindex, 0);
+		iface_del(ifi->ifi_index, 0);
 
 	    TAILQ_FOREACH_SAFE(a, &ifi->ifi_static, al_link, tmp) {
 			TAILQ_REMOVE(&ifi->ifi_static, a, al_link);
@@ -192,7 +192,7 @@ void iface_add(int ifindex, int flags)
 	return;
 
     logit(LOG_DEBUG, 0, "Marking %s as now available in system", ifi->ifi_name);
-    ifi->ifi_ifindex = ifindex;
+    ifi->ifi_index = ifindex;
 
     iface_check(ifindex, flags);
 }
@@ -230,7 +230,7 @@ void iface_del(int ifindex, int flags)
 
     ifi->ifi_prev_addr = 0;
     ifi->ifi_curr_addr = 0;
-    ifi->ifi_ifindex = 0;
+    ifi->ifi_index = 0;
     ifi->ifi_flags |= IFIF_DOWN;
 }
 
@@ -293,7 +293,7 @@ void iface_check_state(void)
 	    logit(LOG_WARNING, errno, "Failed ioctl SIOCGIFFLAGS for %s", ifr.ifr_name);
 	}
 
-	iface_check(ifi->ifi_ifindex, ifr.ifr_flags);
+	iface_check(ifi->ifi_index, ifr.ifr_flags);
     }
 
     checking_iface = 0;
@@ -519,7 +519,7 @@ void accept_membership_query(int ifindex, uint32_t src, uint32_t dst, uint32_t g
 		    g->al_query = pev_timer_del(g->al_query);
 
 		/* setup a timeout to remove the group membership */
-		g->al_timerid = delete_group_timer(ifi->ifi_ifindex, g, IGMP_LAST_MEMBER_QUERY_COUNT
+		g->al_timerid = delete_group_timer(ifi->ifi_index, g, IGMP_LAST_MEMBER_QUERY_COUNT
 						   * tmo / IGMP_TIMER_SCALE);
 
 		logit(LOG_DEBUG, 0, "Timer for grp %s on %s set to %d",
@@ -602,7 +602,7 @@ void accept_group_report(int ifindex, uint32_t src, uint32_t dst, uint32_t group
 	    if (g->al_timerid > 0)
 		g->al_timerid = pev_timer_del(g->al_timerid);
 
-	    g->al_timerid = delete_group_timer(ifi->ifi_ifindex, g, IGMP_GROUP_MEMBERSHIP_INTERVAL);
+	    g->al_timerid = delete_group_timer(ifi->ifi_index, g, IGMP_GROUP_MEMBERSHIP_INTERVAL);
 
 	    /*
 	     * Reset timer for switching version back every time an older
@@ -612,7 +612,7 @@ void accept_group_report(int ifindex, uint32_t src, uint32_t dst, uint32_t group
 		if (g->al_pv_timerid)
 		    g->al_pv_timerid = pev_timer_del(g->al_pv_timerid);
 
-		g->al_pv_timerid = group_version_timer(ifi->ifi_ifindex, g);
+		g->al_pv_timerid = group_version_timer(ifi->ifi_index, g);
 	    }
 	    break;
 	}
@@ -649,14 +649,14 @@ void accept_group_report(int ifindex, uint32_t src, uint32_t dst, uint32_t group
 	/** set a timer for expiration **/
         g->al_query	= 0;
 	g->al_reporter	= src;
-	g->al_timerid	= delete_group_timer(ifi->ifi_ifindex, g, IGMP_GROUP_MEMBERSHIP_INTERVAL);
+	g->al_timerid	= delete_group_timer(ifi->ifi_index, g, IGMP_GROUP_MEMBERSHIP_INTERVAL);
 
 	/*
 	 * Set timer for swithing version back if an older version
 	 * report is received
 	 */
 	if (g->al_pv < 3)
-	    g->al_pv_timerid = group_version_timer(ifi->ifi_ifindex, g);
+	    g->al_pv_timerid = group_version_timer(ifi->ifi_index, g);
 
 	TAILQ_INSERT_TAIL(&ifi->ifi_groups, g, al_link);
 	time(&g->al_ctime);
@@ -722,9 +722,9 @@ void accept_leave_message(int ifindex, uint32_t src, uint32_t dst, uint32_t grou
 	    g->al_timerid = pev_timer_del(g->al_timerid);
 
 	/** send a group specific query **/
-	g->al_query = send_query_timer(ifi->ifi_ifindex, g, igmp_last_member_interval,
+	g->al_query = send_query_timer(ifi->ifi_index, g, igmp_last_member_interval,
 				       IGMP_LAST_MEMBER_QUERY_COUNT);
-	g->al_timerid = delete_group_timer(ifi->ifi_ifindex, g, igmp_last_member_interval
+	g->al_timerid = delete_group_timer(ifi->ifi_index, g, igmp_last_member_interval
 					   * (IGMP_LAST_MEMBER_QUERY_COUNT + 1));
 
 	logit(LOG_DEBUG, 0, "Accepted group leave for %s on %s", s3, s1);

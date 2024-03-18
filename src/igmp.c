@@ -113,7 +113,7 @@ void igmp_iface_init(struct ifi *ifi)
     struct sockaddr_ll sll = {
 	.sll_family   = AF_PACKET,
 	.sll_protocol = htons(ETH_P_ALL),
-	.sll_ifindex  = ifi->ifi_ifindex,
+	.sll_ifindex  = ifi->ifi_index,
     };
     int ena = 1;
 
@@ -200,7 +200,7 @@ static void igmp_read(int sd, void *arg)
 
     /* The sll.sll_ifindex holds the sender's ifindex */
     eth_len = sizeof(struct ether_header);
-    accept_igmp(ifi->ifi_ifindex, recv_buf + eth_len, len - eth_len);
+    accept_igmp(ifi->ifi_index, recv_buf + eth_len, len - eth_len);
 }
 
 /*
@@ -520,7 +520,7 @@ void send_igmp(const struct ifi *ifi, uint32_t dst, int type, int code, uint32_t
     /* Make sure to send in same interface we're receiving */
     sll.sll_family = AF_PACKET;
     sll.sll_protocol = htons(ETH_P_ALL);
-    sll.sll_ifindex = ifi->ifi_ifindex;
+    sll.sll_ifindex = ifi->ifi_index;
 
     rc = sendto(ifi->ifi_sock, send_buf, len, 0, (struct sockaddr *)&sll, sizeof(sll));
     if (rc < 0) {

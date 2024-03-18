@@ -68,7 +68,7 @@ struct ifi *config_find_iface(int ifindex)
     struct ifi *ifi;
 
     TAILQ_FOREACH(ifi, &ifaces, ifi_link) {
-	if (ifindex == ifi->ifi_ifindex)
+	if (ifindex == ifi->ifi_index)
             return ifi;
     }
 
@@ -126,7 +126,7 @@ struct ifi *config_iface_add(char *ifname)
      */
     ifindex = if_nametoindex(ifname);
     if (ifindex)
-	ifi->ifi_ifindex = ifindex;
+	ifi->ifi_index = ifindex;
     else
 	ifi->ifi_flags |= IFIF_DOWN;
 
