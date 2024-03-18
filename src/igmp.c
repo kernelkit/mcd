@@ -439,7 +439,8 @@ static inline uint8_t igmp_floating_point(unsigned int mantissa)
     return exponent | (mantissa & 0x0000000F);
 }
 
-size_t build_query(uint8_t *buf, uint32_t src, uint32_t dst, int type, int code, uint32_t group, int datalen)
+size_t build_query(uint8_t *buf, uint32_t src, uint32_t dst, int type, int code, int interval,
+		   uint32_t group, int datalen)
 {
     struct igmpv3_query *igmp = (struct igmpv3_query *)buf;
     size_t igmp_len = IGMP_MINLEN + datalen;
@@ -457,7 +458,7 @@ size_t build_query(uint8_t *buf, uint32_t src, uint32_t dst, int type, int code,
 
     if (datalen >= 4) {
         igmp->qrv     = igmp_robustness;
-        igmp->qqic    = igmp_floating_point(igmp_query_interval);
+        igmp->qqic    = igmp_floating_point(interval);
     }
 
     /* Note: calculate IGMP checksum last. */
@@ -513,9 +514,9 @@ void send_igmp(const struct ifi *ifi, uint32_t dst, int type, int code, uint32_t
     len += build_ipv4(send_buf + len, src, dst, IGMP_MINLEN + datalen);
 
     if (IGMP_MEMBERSHIP_QUERY == type)
-       len += build_query(send_buf + len, src, dst, type, code, group, datalen);
+	len += build_query(send_buf + len, src, dst, type, code, ifi->ifi_query_interval, group, datalen);
     else
-       len += build_igmp(send_buf + len, src, dst, type, code, group, datalen);
+	len += build_igmp(send_buf + len, src, dst, type, code, group, datalen);
 
     /* Make sure to send in same interface we're receiving */
     sll.sll_family = AF_PACKET;
