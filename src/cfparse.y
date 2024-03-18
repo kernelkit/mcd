@@ -8,6 +8,8 @@
  *
  * cfparse.y,v 3.8.4.30 1998/03/01 01:48:58 fenner Exp
  */
+
+#include <glob.h>
 #include <stdio.h>
 #include <stdarg.h>
 #include <netdb.h>
@@ -43,7 +45,7 @@ static struct ifi scrap;
 
 %token GLOBAL_QUERY_INTERVAL GLOBAL_QUERY_LAST_MEMBER_INTERVAL GLOBAL_QUERY_RESPONSE_INTERVAL
 %token QUERY_INTERVAL
-%token IGMP_ROBUSTNESS ROUTER_TIMEOUT ROUTER_ALERT
+%token IGMP_ROBUSTNESS ROUTER_TIMEOUT ROUTER_ALERT INCLUDE
 %token NO PHYINT
 %token DISABLE ENABLE IGMPV1 IGMPV2 IGMPV3 STATIC_GROUP PROXY_QUERIER
 %token VLAN
@@ -64,6 +66,19 @@ stmts	: /* Empty */
 	;
 
 stmt	: error
+	| INCLUDE STRING
+	{
+	    glob_t gl;
+	    int rc;
+
+	    rc = glob($2, 0, NULL, &gl);
+	    for (size_t i = 0; i < gl.gl_pathc; i++) {
+		logit(LOG_DEBUG, 0, "Including file %s ...", gl.gl_pathv[i]);
+		if (config_parse(gl.gl_pathv[i]))
+		    logit(LOG_WARNING, errno, "Failed reading %s", gl.gl_pathv[i]);
+	    }
+	    globfree(&gl);
+	}
 	| NO PHYINT		{ config_set_ifflag(IFIF_DISABLED); }
 	| PHYINT STRING
 	{
@@ -237,6 +252,7 @@ static struct keyword {
 	{ "query-interval",     QUERY_INTERVAL, 0 },
 	{ "robustness",         IGMP_ROBUSTNESS, 0 },
 	{ "router-timeout",     ROUTER_TIMEOUT, 0 },
+	{ "include",            INCLUDE, 0 },
 	{ "no",                 NO, 0 },
 	{ "phyint",		PHYINT, 0 },
 	{ "iface",		PHYINT, 0 },
@@ -318,23 +334,26 @@ void config_init(void)
 
     lineno = 0;
 
-    config_parse(config_file);
+    logit(LOG_DEBUG, 0, "Parsing file %s ...", config_file);
+    if (config_parse(config_file) && errno != ENOENT)
+	logit(LOG_ERR, errno, "Cannot open %s", config_file);
 }
 
-void config_parse(const char *file)
+int config_parse(const char *file)
 {
-    FILE *fp;
+    FILE *fp, *oldfp;
 
-    fp = fopen(config_file, "r");
-    if (!fp) {
-        if (errno != ENOENT)
-            logit(LOG_ERR, errno, "Cannot open %s", config_file);
-        return;
-    }
+    fp = fopen(file, "r");
+    if (!fp)
+	return -1;
 
+    oldfp = yyin;
     yyin = fp;
     yyparse();
     fclose(fp);
+    yyin = oldfp;
+
+    return 0;
 }
 
 /**

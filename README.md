@@ -36,6 +36,8 @@ version.
           [proxy-mode] [igmpv2 | igmpv3]
           [query-interval [1-1024]]
 
+    include /path/to.d/*.conf
+
 Description:
 
   * `global-query-interval`, `query-interval`: the interval between
@@ -54,6 +56,8 @@ Description:
     query-response-interval / 2`.  Setting this to any value overrides
     the RFC algorithm, which may be necessary in some scenarios, it is
     however strongly recommended to leave this setting commented out!
+  * `include`: include a single file, or a glob expression matching
+    files in a directory: `/etc/mc.d/*.conf`
 
 All interfaces in the system are probed at start (and SIGHUP), to enable
 mcd to act as a querier, use:

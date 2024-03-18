@@ -169,7 +169,7 @@ extern void             config_iface_addr_add(int, struct sockaddr *, unsigned i
 extern void		config_iface_init(void);
 
 /* cfparse.y */
-extern void		config_parse(const char *file);
+extern int		config_parse(const char *file);
 
 /* inet.c */
 extern int		inet_valid_group(uint32_t);
