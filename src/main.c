@@ -53,17 +53,33 @@ static int compose_paths(void)
 
 static int usage(int code)
 {
-    printf("Usage: %s [-himnpsv] [-f FILE] [-i NAME] [-p FILE]\n"
+    char pidbuf[strlen(pid_file) + 10];
+    char ipcbuf[strlen(_PATH_MCD_SOCK) + 42];
+    char *nm = PACKAGE_NAME;
+    char *sockfn = ipcbuf;
+    char *pidfn = pidbuf;
+
+    if (pid_file[0] == '/')
+	pidfn = pid_file;
+    else
+	snprintf(pidbuf, sizeof(pidbuf), "/run/%s.pid", pid_file);
+
+    if (sock_file)
+	sockfn = sock_file;
+    else
+	snprintf(ipcbuf, sizeof(ipcbuf), _PATH_MCD_SOCK, ident);
+
+    printf("Usage: %s [-himnpsv] [-f FILE] [-i NAME] [-l LEVEL] [-p FILE] [-u FILE]\n"
 	   "\n"
-	   "  -f, --config=FILE        Configuration file to use, default ident: /etc/%s.conf\n"
+	   "  -f, --config=FILE        Default filename derived from -i: %s\n"
 	   "  -h, --help               Show this help text\n"
 	   "  -i, --ident=NAME         Identity for syslog, .cfg & .pid file, default: %s\n"
 	   "  -l, --loglevel=LEVEL     Set log level: none, err, notice (default), info, debug\n"
 	   "  -n, --foreground         Run in foreground, do not detach from controlling terminal\n"
-	   "  -p, --pidfile=FILE       File to store process ID for signaling daemon, default ident\n"
+	   "  -p, --pidfile=FILE       Default pidfile, derived from -i: %s\n"
 	   "  -s, --syslog             Log to syslog, default unless running in --foreground\n"
-	   "  -u, --ipc=FILE           Override UNIX domain socket, default from identity, -i\n"
-	   "  -v, --version            Show %s version\n", prognm, ident, PACKAGE_NAME, prognm);
+	   "  -u, --ipc=FILE           UNIX domain socket, default from -i: %s\n"
+	   "  -v, --version            Show program version\n", prognm, config_file, nm, pidfn, sockfn);
 
     printf("\nBug report address: %-40s\n", PACKAGE_BUGREPORT);
 
@@ -111,6 +127,7 @@ int main(int argc, char *argv[])
 	    break;
 
 	case 'h':
+	    compose_paths();
 	    return usage(0);
 
 	case 'i':	/* --ident=NAME */
