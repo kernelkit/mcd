@@ -1,4 +1,4 @@
-/* This is free and unencumbered software released into the public domain. */
+/* SPDX-License-Identifier: Unlicense */
 
 #ifndef PEV_H_
 #define PEV_H_
