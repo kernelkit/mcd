@@ -221,8 +221,8 @@ int main(int argc, char *argv[])
     compose_paths();
 
     pev_init();
-    config_init();
     igmp_init();
+    config_init();
     netlink_init();
     iface_init();
 
@@ -293,8 +293,8 @@ void restart(void)
     netlink_exit();
     ipc_exit();
 
-    config_init();
     igmp_init();
+    config_init();
     netlink_init();
     iface_init();
     ipc_init(sock_file);
