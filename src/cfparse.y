@@ -164,7 +164,7 @@ ifmod	: DISABLE		{ ifi->ifi_flags |= IFIF_DISABLED; }
 	{
 	    if ($2 < 1 || $2 > 4094)
 		fatal("Invalid VLAN ID [1,4094]");
-	    ifi->ifi_vlan = $2;
+	    ifi = config_iface_vlan(ifi, $2);
 	}
 	;
 

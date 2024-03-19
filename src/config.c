@@ -138,6 +138,31 @@ struct ifi *config_iface_add(char *ifname)
     return ifi;
 }
 
+/*
+ * Called by parser for 'vlan NUM', may create an interface clone of
+ * the current interface with already learned settings.
+ */
+struct ifi *config_iface_vlan(struct ifi *ifi, int vid)
+{
+    struct ifi *clone;
+
+    if (ifi->ifi_vlan == 0) {
+	ifi->ifi_vlan = vid;
+	return ifi;
+    }
+
+    clone = malloc(sizeof(*clone));
+    if (!clone)
+	logit(LOG_ERR, errno, "failed cloning %s for new VLAN %d", ifi->ifi_name, vid);
+
+    memcpy(clone, ifi, sizeof(*clone));
+    TAILQ_INSERT_TAIL(&ifaces, clone, ifi_link);
+
+    clone->ifi_vlan = vid;
+
+    return clone;
+}
+
 static struct ifi *addr_add(int ifindex, struct sockaddr *sa, unsigned int flags)
 {
     struct sockaddr_in *sin = (struct sockaddr_in *)sa;

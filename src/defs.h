@@ -160,6 +160,7 @@ extern void             config_init(void);
 extern void		config_set_ifflag(uint32_t);
 extern struct ifi      *config_iface_iter(int);
 extern struct ifi      *config_iface_add(char *);
+extern struct ifi      *config_iface_vlan(struct ifi *, int);
 extern void             config_iface_addr_del(int, struct sockaddr *);
 extern struct ifi      *config_find_ifname(char *);
 extern struct ifi      *config_find_ifaddr(in_addr_t);
