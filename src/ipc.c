@@ -409,21 +409,21 @@ static int show_igmp(FILE *fp)
 	show_status(fp);
 
 	if (json) {
-		fprintf(fp, ",\n%*s\"fast-leave-ports\": [ ", prefix, "");
+		fprintf(fp, ",\n%*s\"fast-leave-ports\": [", prefix, "");
 		bridge_prop(fp, "multicast_fast_leave", 1);
-		fprintf(fp, "],\n");
+		fprintf(fp, " ],\n");
 
-		fprintf(fp, "%*s\"multicast-router-ports\": [ ", prefix, "");
+		fprintf(fp, "%*s\"multicast-router-ports\": [", prefix, "");
 		bridge_router_ports(fp);
-		fprintf(fp, "],\n");
+		fprintf(fp, " ],\n");
 
-		fprintf(fp, "%*s\"multicast-flood-ports\": [ ", prefix, "");
+		fprintf(fp, "%*s\"multicast-flood-ports\": [", prefix, "");
 		bridge_prop(fp, "multicast_flood", 1);
-		fprintf(fp, "]");
+		fprintf(fp, " ]");
 	} else {
-		fprintf(fp, "%-23s : ", "Fast Leave Ports"); bridge_prop(fp, "multicast_fast_leave", 1);
-		fprintf(fp, "%-23s : ", "Router Ports");     bridge_router_ports(fp);
-		fprintf(fp, "%-23s : ", "Flood Ports");      bridge_prop(fp, "multicast_flood", 1);
+		fprintf(fp, "%-23s :", "Fast Leave Ports"); bridge_prop(fp, "multicast_fast_leave", 1);
+		fprintf(fp, "%-23s :", "Router Ports");     bridge_router_ports(fp);
+		fprintf(fp, "%-23s :", "Flood Ports");      bridge_prop(fp, "multicast_flood", 1);
 		fprintf(fp, "\n");
 	}
 

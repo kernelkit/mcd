@@ -294,7 +294,7 @@ void bridge_prop(FILE *fp, char *prop, int setval)
 
 	for (int i = 0; i < num; i++) {
 		logit(LOG_DEBUG, 0, "Array val: %s, index: %d", array[i], i);
-		fprintf(fp, "%s%s", i ? ", " : "", array[i]);
+		fprintf(fp, "%s%s", i ? ", " : " ", array[i]);
 	}
 
 out:
@@ -390,9 +390,9 @@ void bridge_router_ports(FILE *fp)
 		logit(LOG_DEBUG, 0, "Found router port %s with %.2f s timeout\n", ifname, timer);
 		if (timer > 0.0 && !seen) {
 			if (json)
-				fprintf(fp, "%s\"%s\"", num ? ", " : "", ifname);
+				fprintf(fp, "%s\"%s\"", num ? ", " : " ", ifname);
 			else
-				fprintf(fp, "%s%s", num ? ", " : "", ifname);
+				fprintf(fp, "%s%s", num ? ", " : " ", ifname);
 			num++;
 			memcpy(prev_ifname, ifname, sizeof(prev_ifname));
 		}
