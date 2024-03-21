@@ -3,6 +3,33 @@ Change Log
 
 All relevant, user visible, changes are documented in this file.
 
+[v2.0][] - 2024-03-21
+---------------------
+
+Complete rewrite of core IGMP parts, nothing left of the original
+`mrouted` code base.
+
+> **Note:** breaking changes to `.conf` file format!
+
+### Changes
+ - Add support for IGMP query interval per interface
+ - IGMP global options renamed with `global-` prefix
+ - Add support for `include GLOB` directive to .conf parser, see
+   bundled sample `mcd.conf` for an example
+ - Add support for injecting VLAN tagged frames and receiving frames on
+   a VLAN filtering bridge without VLAN interfaces
+ - Add support for tracking remote querier's query interval using QQIC
+ - Relicense under the ISC license
+
+### Fixes
+ - Fix output from usage, `-h`, show correct paths used when
+   program identity changes, also add missing options
+ - Add missing linefeed in `show igmp json` output
+ - Fix parsing of max response time (IGMP code field), changed
+   in IGMPv3 to use float encoding for values >= 128
+ - Fix JSON output for interface state and querier fields
+
+
 [v1.0][] - 2024-03-09
 ---------------------
 
@@ -127,7 +154,8 @@ Initial public release.
 Limited IGMPv1/v2/v3 querier with hard-coded query interval, etc.  Put
 interfaces in a .conf file, whitespace separated to enable querier.
 
-[UNRELEASED]: https://github.com/westermo/querierd/compare/v0.10...HEAD
+[UNRELEASED]: https://github.com/westermo/querierd/compare/v2.0...HEAD
+[v2.0]:       https://github.com/westermo/querierd/compare/v1.0...v2.0
 [v1.0]:       https://github.com/westermo/querierd/compare/v0.10...v1.0
 [v0.10]:      https://github.com/westermo/querierd/compare/v0.9...v0.10
 [v0.9]:       https://github.com/westermo/querierd/compare/v0.8...v0.9
