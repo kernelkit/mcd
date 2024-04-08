@@ -664,6 +664,7 @@ int show_bridge_groups(FILE *fp)
 			prefix += 2;
 			first = 0;
 
+			jprint(fp, "bridge", e->br, &once);
 			if (e->vid > 0)
 				jprinti(fp, "vid", e->vid, &once);
 			jprint(fp, "group", e->group, &once);
@@ -673,7 +674,7 @@ int show_bridge_groups(FILE *fp)
 			prefix -= 2;
 			fprintf(fp, "\n%*s}", prefix, "");
 		} else
-			fprintf(fp, "%s  %s     %-20s  %s\n", vid, ena, e->group, e->port);
+			fprintf(fp, "%-15s%s  %-20s  %s\n", e->br, vid, group, e->port);
 	}
 
 	if (json) {
