@@ -7,8 +7,8 @@ AUTOMAKE_OPTIONS = subdir-objects
 #               but to build on older GLIBC systems we now need both ...
 AM_CPPFLAGS      = -D_BSD_SOURCE -D_DEFAULT_SOURCE -D_GNU_SOURCE -I$(top_srcdir)/include
 AM_CPPFLAGS     += -DSYSCONFDIR=\"@sysconfdir@\" -DRUNSTATEDIR=\"@runstatedir@\" -DPRESERVEDIR=\"@localstatedir@/lib\"
-AM_CFLAGS        = -W -Wall -Wextra -Wno-unused -Wno-unused-parameter
-
+AM_CFLAGS        = -W -Wall -Wextra -Wno-unused-parameter -Wformat=2 -Wformat-overflow=2 -Winit-self \
+		   -Wstrict-overflow=4 -Wno-format-truncation -Wno-format-nonliteral
 sbin_PROGRAMS    = mcd mctl
 mcd_SOURCES      = main.c cfparse.y config.c defs.h	\
 		   iface.c iface.h netlink.c		\

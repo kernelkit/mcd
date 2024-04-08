@@ -23,11 +23,7 @@ const char *versionstring = "mcd version " PACKAGE_VERSION;
 /*
  * Forward declarations.
  */
-static void timer(void*);
 static void handle_signals(int, void *);
-static int  check_signals(void);
-static int  timeout(int);
-static void cleanup(void);
 
 static int compose_paths(void)
 {
@@ -114,13 +110,10 @@ int main(int argc, char *argv[])
 	{ NULL, 0, 0, 0 }
     };
     int foreground = 0;
-    int i, ch;
-    FILE *fp;
+    int ch;
 
     prognm = ident = progname(argv[0]);
     while ((ch = getopt_long(argc, argv, "f:hi:l:np:su:v", long_options, NULL)) != EOF) {
-	const char *errstr = NULL;
-
 	switch (ch) {
 	case 'f':
 	    config_file = strdup(optarg);
@@ -172,11 +165,6 @@ int main(int argc, char *argv[])
 	    return usage(1);
 	}
     }
-
-    /* Check for unsupported command line arguments */
-    argc -= optind;
-    if (argc > 0)
-	return usage(1);
 
     if (geteuid() != 0) {
 	fprintf(stderr, "%s: must be root\n", ident);

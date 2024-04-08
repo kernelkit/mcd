@@ -68,10 +68,9 @@ stmts	: /* Empty */
 stmt	: error
 	| INCLUDE STRING
 	{
-	    glob_t gl;
-	    int rc;
+	    glob_t gl = { 0 };
 
-	    rc = glob($2, 0, NULL, &gl);
+	    glob($2, 0, NULL, &gl);
 	    for (size_t i = 0; i < gl.gl_pathc; i++) {
 		logit(LOG_DEBUG, 0, "Including file %s ...", gl.gl_pathv[i]);
 		if (config_parse(gl.gl_pathv[i]))

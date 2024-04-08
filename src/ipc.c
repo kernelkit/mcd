@@ -519,7 +519,6 @@ static void ipc_help(int sd, char *buf, size_t len)
 static void ipc_handle(int sd, void *arg)
 {
 	char cmd[768] = { 0 };
-	ssize_t len;
 	int client;
 	int rc = 0;
 

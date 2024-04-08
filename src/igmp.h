@@ -200,7 +200,6 @@ static inline uint16_t igmp_code_time(uint8_t code)
 {
     uint16_t exp = (code >> 4) & 0x7;
     uint16_t mant = code & 0xf;
-    uint16_t time;
 
     if (code < 128)
 	return code;

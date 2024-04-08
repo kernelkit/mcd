@@ -28,7 +28,6 @@ CODE prionm[] =
 int loglevel = LOG_NOTICE;
 
 static char *log_name = PACKAGE_NAME;
-static int log_nmsgs = 0;
 
 
 int log_str2lvl(char *level)

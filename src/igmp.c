@@ -40,11 +40,6 @@ uint32_t	allrtrs_group;		     /* All-Routers "  in net order */
 uint32_t	allreports_group;	     /* IGMPv3 member reports       */
 
 /*
- * Private variables.
- */
-static int	igmp_sockid;
-
-/*
  * Local function definitions.
  */
 static void	igmp_read(int sd, void *arg);
@@ -80,9 +75,6 @@ static int set_filter(int sd)
  */
 void igmp_init(void)
 {
-    const int BUFSZ = 256 * 1024;
-    const int MINSZ =  48 * 1024;
-
     recv_buf = calloc(1, RECV_BUF_SIZE);
     send_buf = calloc(1, RECV_BUF_SIZE);
 
@@ -379,7 +371,6 @@ size_t build_query(uint8_t *buf, uint32_t src, uint32_t dst, int type, int qri, 
     struct igmpv3_query *igmp = (struct igmpv3_query *)buf;
     size_t igmp_len = IGMP_MINLEN + datalen;
     int code = qri * IGMP_TIMER_SCALE;
-    struct ip *ip;
 
     memset(igmp, 0, igmp_len);
 
