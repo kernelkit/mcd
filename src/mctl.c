@@ -618,6 +618,9 @@ static int cmd(int argc, char *argv[])
 
 	cmd = compose(match(argc, argv), buf, sizeof(buf));
 	while (cmdind < argc) {
+		if (!strcmp(argv[cmdind], "json"))
+			plain = 1; /* enforce plain mode for json output */
+
 		strlcat(buf, " ", sizeof(buf));
 		strlcat(buf, argv[cmdind++], sizeof(buf));
 	}
