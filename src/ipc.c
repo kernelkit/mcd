@@ -326,7 +326,7 @@ static int show_igmp_iface(FILE *fp)
 		fprintf(fp, "[\n");
 		prefix += 2;
 	} else
-		fprintf(fp, "Interface          VID  State     Querier               Interval  Timeout  Ver=\n");
+		fprintf(fp, "Interface       VID  Querier                     State  Interval  Timeout  Ver=\n");
 
 	for (ifi = config_iface_iter(1); ifi; ifi = config_iface_iter(0)) {
 		int interval = ifi->ifi_query_interval, rt_tmo = -1;
@@ -382,8 +382,8 @@ static int show_igmp_iface(FILE *fp)
 
 			if (ifi->ifi_vlan)
 				snprintf(vlan, sizeof(vlan), "%4d", ifi->ifi_vlan);
-			fprintf(fp, "%-16s  %4s  %-8s  %-20s  %8d  %7s  %3d\n", ifi->ifi_name,
-				vlan, ifstate(ifi), s1, interval, timeout, version);
+			fprintf(fp, "%-15s%4s  %-23s  %8s  %8d  %7s  %3d\n", ifi->ifi_name,
+				vlan, s1, ifstate(ifi), interval, timeout, version);
 		}
 	}
 
