@@ -27,8 +27,8 @@ struct mdb {
 	TAILQ_ENTRY(mdb) link;
 
 	char br[IFNAMSIZ + 1];
-	char group[64];		/* XXX: audit for ipv6 */
-	char port[128];		/* XXX: too small prob */
+	char group[64];
+	char port[576];		/* 18 chars per port * 32 ports */
 	int  vid;
 };
 
@@ -119,10 +119,6 @@ static int populate(void)
 			tok = strtok(NULL, " \t");
 			strlcpy(dst, tok, len);
 		}
-
-		/* XXX: Filter out IPv6 and MAC for now ... */
-		if (strchr(group, ':'))
-			continue;
 
 		e = find(group, vid);
 		if (!e) {
@@ -643,17 +639,41 @@ int show_bridge_groups(FILE *fp)
 		prefix += 2;
 	}
 	else
-		fprintf(fp, " VID  Multicast MAC         Multicast Group       Ports=\n");
+		fprintf(fp, "Bridge          VID  Multicast Group       Ports=\n");
 
 	TAILQ_FOREACH(e, &mdb_list, link) {
 		char ena[20], vid[11] = { 0 };
 		unsigned char mac[ETH_ALEN];
-		struct in_addr ina;
 		int once = 1;
+		char *group;
 
-		inet_aton(e->group, &ina);
-		ETHER_MAP_IP_MULTICAST(&ina, mac);
-		snprintf(ena, sizeof(ena), "%02x:%02x:%02x:%02x:%02x:%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+		if (strchr(e->group, ':')) {
+			if (strncmp(e->group, "ff", 2)) {
+				strlcpy(ena, e->group, sizeof(ena));
+				group = ena;
+#ifdef AF_INET6
+			} else {
+				struct in6_addr in6a;
+
+				inet_pton(AF_INET6, e->group, &in6a);
+				mac[0] = 0x33;
+				mac[1] = 0x33;
+				memcpy(mac + 2, &in6a.s6_addr[12], 4);
+				snprintf(ena, sizeof(ena), "%02x:%02x:%02x:%02x:%02x:%02x",
+					 mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+				group = e->group;
+#endif
+			}
+		} else {
+			struct in_addr ina;
+
+			inet_aton(e->group, &ina);
+			ETHER_MAP_IP_MULTICAST(&ina, mac);
+			snprintf(ena, sizeof(ena), "%02x:%02x:%02x:%02x:%02x:%02x",
+				 mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+			group = e->group;
+		}
+
 		if (e->vid > 0)
 			snprintf(vid, sizeof(vid), "%4d", e->vid);
 		else
