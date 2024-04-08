@@ -3,6 +3,21 @@ Change Log
 
 All relevant, user visible, changes are documented in this file.
 
+[v2.1][] - 2024-04-08
+---------------------
+
+No daemon changes, only `mctl` output formatting changes.
+
+### Changes
+ - Include bridge name in multicast group listings
+ - Add support for showing IPv6 and MAC multicast groups
+ - Minor format adjustments to IGMP/MLD interface view
+
+### Fixes
+ - Enforce `-p` (plain) mode for JSON output.  Fixes spurious
+   NUL characters in JSON output, added by mctl formatter
+
+
 [v2.0][] - 2024-03-21
 ---------------------
 
@@ -154,7 +169,8 @@ Initial public release.
 Limited IGMPv1/v2/v3 querier with hard-coded query interval, etc.  Put
 interfaces in a .conf file, whitespace separated to enable querier.
 
-[UNRELEASED]: https://github.com/westermo/querierd/compare/v2.0...HEAD
+[UNRELEASED]: https://github.com/westermo/querierd/compare/v2.1...HEAD
+[v2.1]:       https://github.com/westermo/querierd/compare/v2.0...v2.1
 [v2.0]:       https://github.com/westermo/querierd/compare/v1.0...v2.0
 [v1.0]:       https://github.com/westermo/querierd/compare/v0.10...v1.0
 [v0.10]:      https://github.com/westermo/querierd/compare/v0.9...v0.10
