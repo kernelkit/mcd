@@ -34,7 +34,6 @@ struct mdb {
 
 
 TAILQ_HEAD(, mdb) mdb_list = TAILQ_HEAD_INITIALIZER(mdb_list);
-static char *br   = "br0";
 static int compat = 0;
 
 static struct mdb *find(char *group, int vid)
@@ -72,11 +71,11 @@ static void drop(void)
 	}
 }
 
-static char *bridge_path(char *setting)
+static char *bridge_path(const char *brname, char *setting)
 {
 	static char path[512];
 
-	snprintf(path, sizeof(path), SYSFS_PATH_"%s/bridge/%s", br, setting);
+	snprintf(path, sizeof(path), SYSFS_PATH_"%s/bridge/%s", brname, setting);
 
 	return path;
 }
@@ -173,22 +172,22 @@ static int has(char *path, char *setting)
 	return value(file);
 }
 
-static char *got(char *prop, int setval, int first)
+static char *got(const char *brname, char *prop, int setval, int first)
 {
 	struct dirent *d;
 	static char path[256];
 	static DIR *dir = NULL;
 
-	logit(LOG_DEBUG, 0, "Checking %s for property %s ...", br, prop);
+	logit(LOG_DEBUG, 0, "Checking %s for property %s ...", brname, prop);
 	if (first) {
 		if (dir)
 			closedir(dir);
 
-		snprintf(path, sizeof(path), SYSFS_PATH_"%s/brif", br);
-		logit(LOG_DEBUG, 0, "Opening %s to figure out %s ports ...", path, br);
+		snprintf(path, sizeof(path), SYSFS_PATH_"%s/brif", brname);
+		logit(LOG_DEBUG, 0, "Opening %s to figure out %s ports ...", path, brname);
 		dir = opendir(path);
 		if (!dir) {
-			logit(LOG_WARNING, errno, "Failed listing %s ports", br);
+			logit(LOG_WARNING, errno, "Failed listing %s ports", brname);
 			return NULL;
 		}
 	}
@@ -245,7 +244,7 @@ static int cmpstringp(const void *p1, const void *p2)
 	return 1;
 }
 
-void bridge_prop(FILE *fp, char *prop, int setval)
+void bridge_prop(FILE *fp, const char *brname, char *prop, int setval)
 {
 	struct port_name *name = NULL, *next = NULL;
 	const size_t len = IFNAMSIZ + 3;
@@ -254,7 +253,7 @@ void bridge_prop(FILE *fp, char *prop, int setval)
 	int num = 0;
 	int x = 0;
 
-	while ((ifname = got(prop, setval, !num))) {
+	while ((ifname = got(brname, prop, setval, !num))) {
 		name = calloc(1, sizeof(struct port_name));
 		if (!name)
 			goto out;
@@ -350,7 +349,7 @@ out:
  *   }
  * ]
  */
-void bridge_router_ports(FILE *fp)
+void bridge_router_ports(FILE *fp, const char *brname)
 {
 	static const char *bridge_args = "-json -s vlan global show dev";
 	static const char *jq_filter = ".[].vlans[] | " \
@@ -363,7 +362,7 @@ void bridge_router_ports(FILE *fp)
 	int ret;
 
 	ret = snprintf(cmd, sizeof(cmd), "bridge %s %s | jq -r '%s' | sort",
-		       bridge_args, br, jq_filter);
+		       bridge_args, brname, jq_filter);
 
 	if (ret < 0 || ret >= (int)sizeof(cmd))
 		goto fail;
@@ -403,9 +402,9 @@ fail:
 	}
 }
 
-static int enabled(void)
+static int enabled(const char *brname)
 {
-	return value(bridge_path("multicast_snooping"));
+	return value(bridge_path(brname, "multicast_snooping"));
 }
 
 /*
@@ -509,7 +508,8 @@ int show_bridge_compat(FILE *fp)
 	struct mdb *e;
 	int num, vnum;
 
-	if (!enabled()) {
+	/* Hard-coded to a single bridge */
+	if (!enabled("br0")) {
 		fprintf(fp, "IGMP/MLD snooping is disabled.\n");
 		return 0;
 	}
@@ -524,14 +524,14 @@ int show_bridge_compat(FILE *fp)
 	 * multicast flooded on    => multicast_flood
 	 */
 	fprintf(fp, " Static Multicast ports=\n");
-	fprintf(fp, " %-26s : ", "IGMP Fast Leave ports");      bridge_prop(fp, "multicast_fast_leave", 1);
-	fprintf(fp, " %-26s : ", "Static router ports");        bridge_prop(fp, "multicast_router", 2);
-	fprintf(fp, " %-26s : ", "Discovered router ports");    bridge_router_ports(fp);
+	fprintf(fp, " %-26s : ", "IGMP Fast Leave ports");      bridge_prop(fp, "br0", "multicast_fast_leave", 1);
+	fprintf(fp, " %-26s : ", "Static router ports");        bridge_prop(fp, "br0", "multicast_router", 2);
+	fprintf(fp, " %-26s : ", "Discovered router ports");    bridge_router_ports(fp, "br0");
 	if (detail) {
 		fprintf(fp, " %-26s : ---\n", "Dual Homing/Coupling ports");
 		fprintf(fp, " %-26s : ---\n", "FRNT ring ports");
 	}
-	fprintf(fp, " %-26s : ", "Multicast flooded on ports"); bridge_prop(fp, "multicast_flood", 1);
+	fprintf(fp, " %-26s : ", "Multicast flooded on ports"); bridge_prop(fp, "br0", "multicast_flood", 1);
 
 	/*
 	 *  VID  Querier IP       Querier MAC        Port     Interval  Timeout
@@ -552,7 +552,7 @@ int show_bridge_compat(FILE *fp)
 		time_t now;
 		char *ptr;
 
-		len = snprintf(dev, sizeof(dev), "%s.", br);
+		len = snprintf(dev, sizeof(dev), "%s.", "br0");
 		if (!strncmp(ifi->ifi_name, "vlan", 4))
 			ptr = &ifi->ifi_name[4];
 		else if (!strncmp(ifi->ifi_name, dev, len))
