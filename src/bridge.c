@@ -156,6 +156,9 @@ static int value(char *path)
 	n = fscanf(fp, "%d", &val);
 	fclose(fp);
 
+	if (n != 1)
+		return 0;
+
 	return val;
 }
 
