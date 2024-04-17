@@ -208,4 +208,20 @@ extern FILE *		tempfile(void);
 extern int		pidfile(const char *basename);
 #endif
 
+static inline char *chomp(char *str)
+{
+	char *p;
+
+	if (!str || strlen(str) < 1) {
+		errno = EINVAL;
+		return NULL;
+	}
+
+	p = str + strlen(str) - 1;
+        while (*p == '\n')
+		*p-- = 0;
+
+	return str;
+}
+
 #endif /* MCD_DEFS_H_ */
