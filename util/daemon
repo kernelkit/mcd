@@ -1,0 +1,4 @@
+#!/bin/sh
+export MCD_SOCK=/tmp/mcd.sock
+
+../src/mcd -n -f daemon.conf -l debug -p /tmp/mcd.pid

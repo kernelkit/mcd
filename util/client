@@ -1,0 +1,4 @@
+#!/bin/sh
+export MCD_SOCK=/tmp/mcd.sock
+
+../src/mctl $@

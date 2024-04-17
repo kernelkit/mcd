@@ -1,0 +1,16 @@
+#!/bin/sh
+DIR=$(dirname "$0")
+
+if [ "$1" = "-s" ]; then
+    unshare -run ./setup.sh
+else
+    pid=$(cat /tmp/mcd-setup.pid)
+    if [ -z "$*" ]; then
+	echo
+	echo "Entering virtual network stack up, PID $pid, using $DIR/.bashrc"
+	echo
+	sudo nsenter -r -u -n -t "$pid" bash --rcfile "$DIR/.bashrc"
+    else
+	sudo nsenter -r -u -n -t "$pid" $@
+    fi
+fi
