@@ -3,6 +3,22 @@ Change Log
 
 All relevant, user visible, changes are documented in this file.
 
+
+[v2.2][] - 2024-04-08
+---------------------
+
+### Changes
+ - Document required tools for installation
+ - Add support for `MCD_SOCK` environment variable
+ - Add helper tools for manual testing on Linux
+ - Hide IGMP robustness value from default `mctl show` output
+ - Improved output from `mctl show [json]` on multi-bridge systems
+
+### Fixes
+ - Fix detection of multicast router ports for `mctl show`
+ - Fix detection of IGMP/MLD fast-leave
+
+
 [v2.1][] - 2024-04-08
 ---------------------
 
