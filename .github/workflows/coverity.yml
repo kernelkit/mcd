@@ -8,8 +8,7 @@ on:
 env:
   PROJECT_NAME: mcd
   CONTACT_EMAIL: troglobit@gmail.com
-  COVERITY_NAME: kernelkit-mcd
-  COVERITY_PROJ: kernelkit%2Fmcd
+  COVERITY_PROJ: mcd
 
 jobs:
   coverity:
@@ -49,7 +48,6 @@ jobs:
         run: |
           tar czvf ${PROJECT_NAME}.tgz cov-int
           curl \
-            --form project=${COVERITY_NAME} \
             --form token=$TOKEN \
             --form email=${CONTACT_EMAIL} \
             --form file=@${PROJECT_NAME}.tgz \
