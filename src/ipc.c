@@ -283,12 +283,12 @@ static int show_status(FILE *fp)
 	} else {
 		if (detail)
 			fprintf(fp, "Process ID              : %d\n", getpid());
-		fprintf(fp, "Query Interval          : %d sec\n", igmp_query_interval);
+		fprintf(fp, "Query Interval (default): %d sec\n", igmp_query_interval);
 		if (detail) {
 			fprintf(fp, "Query Response Interval : %d sec\n", igmp_response_interval);
 			fprintf(fp, "Last Member Interval    : %d\n", igmp_last_member_interval);
+			fprintf(fp, "Robustness Value        : %d\n", igmp_robustness);
 		}
-		fprintf(fp, "Robustness Value        : %d\n", igmp_robustness);
 		fprintf(fp, "Router Timeout          : %d\n", router_timeout);
 		if (detail)
 			fprintf(fp, "Router Alert            : %s\n", ENABLED(router_alert));
