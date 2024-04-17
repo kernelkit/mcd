@@ -21,6 +21,7 @@
 #include <fcntl.h>
 #include <stddef.h>
 
+#include "bridge.h"
 #include "defs.h"
 #include "inet.h"
 #include "ipc.h"
@@ -60,11 +61,6 @@ struct ipcmd {
 	{ IPC_COMPAT,     "show compat", "[detail]", "Show legacy output (test compat mode)" },
 	{ IPC_IGMP,       "show", "[json]", NULL }, /* hidden default */
 };
-
-extern void bridge_prop(FILE *fp, char *prop, int setval);
-extern void bridge_router_ports(FILE *fp);
-extern int show_bridge_compat(FILE *fp);
-extern int show_bridge_groups(FILE *fp);
 
 
 static char *timetostr(time_t t, char *buf, size_t len)
@@ -394,20 +390,20 @@ static int show_igmp(FILE *fp)
 
 	if (json) {
 		fprintf(fp, ",\n%*s\"fast-leave-ports\": [", prefix, "");
-		bridge_prop(fp, "multicast_fast_leave", 1);
+		bridge_prop(fp, NULL, "fastleave");
 		fprintf(fp, " ],\n");
 
 		fprintf(fp, "%*s\"multicast-router-ports\": [", prefix, "");
-		bridge_router_ports(fp);
+		bridge_router_ports(fp, NULL);
 		fprintf(fp, " ],\n");
 
 		fprintf(fp, "%*s\"multicast-flood-ports\": [", prefix, "");
-		bridge_prop(fp, "multicast_flood", 1);
+		bridge_prop(fp, NULL, "mcast_flood");
 		fprintf(fp, " ]");
 	} else {
-		fprintf(fp, "%-23s :", "Fast Leave Ports"); bridge_prop(fp, "multicast_fast_leave", 1);
-		fprintf(fp, "%-23s :", "Router Ports");     bridge_router_ports(fp);
-		fprintf(fp, "%-23s :", "Flood Ports");      bridge_prop(fp, "multicast_flood", 1);
+		fprintf(fp, "%-23s :", "Fast Leave Ports"); bridge_prop(fp, NULL, "fastleave");
+		fprintf(fp, "%-23s :", "Router Ports");     bridge_router_ports(fp, NULL);
+		fprintf(fp, "%-23s :", "Flood Ports");      bridge_prop(fp, NULL, "mcast_flood");
 		fprintf(fp, "\n");
 	}
 

@@ -9,9 +9,11 @@
 #include <arpa/inet.h>
 #include <netinet/if_ether.h>
 
+#include "bridge.h"
 #include "defs.h"
 #include "inet.h"
 #include "ipc.h"
+#include "jsmn.h"
 #include "queue.h"
 
 #define SYSFS_PATH_ "/sys/class/net/"
@@ -247,7 +249,181 @@ static int cmpstringp(const void *p1, const void *p2)
 	return 1;
 }
 
-void bridge_prop(FILE *fp, const char *brname, char *prop, int setval)
+static int jsmneq(const char *json, jsmntok_t *tok, const char *str)
+{
+	if (tok->type == JSMN_STRING && (int)strlen(str) == tok->end - tok->start &&
+	    strncmp(json + tok->start, str, tok->end - tok->start) == 0)
+		return 1;
+	return 0;
+}
+
+static int jsmnbool(const char *json, jsmntok_t *tok)
+{
+	if (tok->type == JSMN_PRIMITIVE &&
+	    !strncmp("true", json + tok->start, tok->end - tok->start))
+		return 1;
+	return 0;
+}
+
+static char *jsmncp(const char *json, jsmntok_t *tok, char *dst, size_t len)
+{
+	size_t bytes = tok->end - tok->start;
+	char tmp[bytes + 1];
+
+	memcpy(tmp, json + tok->start, bytes);
+	tmp[bytes] = 0;
+
+	strlcpy(dst, tmp, len);
+
+	return dst;
+}
+
+#if 0
+static void jsmnpr(const char *data, const char *dscr, jsmntok_t *tok)
+{
+	char buf[tok->end - tok->start + 1];
+
+	strlcpy(buf, data + tok->start, sizeof(buf));
+	logit(LOG_DEBUG, 0, "%s type:%d: %s", dscr, tok->type, buf);
+}
+#endif
+
+/*
+ * The jq expression is used to filter out relevant properties so the
+ * output is smaller and easier to parse.
+ *
+ * TODO: add `mcast_router` to be able to show statically configured
+ *       multicast router ports as well.  (Linux >6.5)
+ */
+void bridge_prop(FILE *fp, const char *brname, const char *prop)
+{
+	const char *cmd = "bridge -d -j link show"
+		"| jq -r '.[] | {ifname, master, mcast_flood, fastleave }'";
+	jsmntok_t tokens[256];
+	jsmn_parser parser;
+	int first = 1;
+	size_t len;
+	char *data;
+	FILE *pp;
+	int rc;
+
+	jsmn_init(&parser);
+
+	data = malloc(BUFSIZ);
+	if (!data) {
+		logit(LOG_ERR, errno, "malloc");
+		return;
+	}
+
+	pp = popen(cmd, "r");
+	if (!pp) {
+		logit(LOG_ERR, errno, "popen");
+		goto err;
+	}
+
+	len = fread(data, 1, BUFSIZ, pp);
+	data[len] = 0;
+	pclose(pp);
+
+	rc = jsmn_parse(&parser, data, strlen(data), tokens, NELEMS(tokens));
+	if (rc < 0) {
+		logit(LOG_ERR, 0, "Failed parseing JSON: %d", rc);
+		goto err;
+	}
+
+	for (int i = 0; i < rc; i++) {
+		char port[IFNAMSIZ] = { 0 };
+		int skip = 0, onoff = 0;
+
+		if (tokens[i].type != JSMN_OBJECT)
+			continue;
+
+		/* Skip top-level element, it is always an array '[' or start of object '{' */
+		for (int j = i + 1; j < i + tokens[i].size * 2 + 1; j += 2) {
+			jsmntok_t *key = &tokens[j];
+			jsmntok_t *val = &tokens[j + 1];
+
+//			jsmnpr(data, "key", key);
+//			jsmnpr(data, "val", val);
+
+			if (jsmneq(data, key, "ifname"))
+				jsmncp(data, val, port, sizeof(port));
+			else if (brname && jsmneq(data, key, "master"))
+				skip = !jsmneq(data, val, brname);
+			else if (jsmneq(data, key, prop))
+				onoff = jsmnbool(data, val);
+		}
+
+		if (!skip && onoff) {
+			if (json)
+				fprintf(fp, "%s\"%s\"", first ? " " : ", ", port);
+			else
+				fprintf(fp, "%s%s", first ? " " : ", ", port);
+			first = 0;
+		}
+	}
+err:
+	if (!json)
+		fprintf(fp, "\n");
+
+	free(data);
+}
+
+/*
+ * Standardized way of reading out routers ports is now 'bridge -d mdb show'
+ */
+void bridge_router_ports(FILE *fp, const char *brname)
+{
+	const char *fmt = "bridge -d -j mdb show | jq -r '[.[] .router%s | .[] .port] | sort_by(.) | join(\" \")'";
+	char cmd[128], buf[128 * (IFNAMSIZ + 2)]; /* 128 ports should be enough for everyone. */
+	char bridge[IFNAMSIZ];
+	FILE *pp;
+
+	if (brname)
+		strlcpy(bridge, brname, sizeof(bridge));
+
+	/* Read mrouter ports from brname, or all bridges. */
+	snprintf(cmd, sizeof(cmd), fmt, brname ? bridge : "[]");
+	pp = popen(cmd, "r");
+	if (!pp) {
+		logit(LOG_ERR, errno, "popen");
+		goto err;
+	}
+
+	if (fgets(buf, sizeof(buf), pp)) {
+		char *port;
+		int first = 1;
+
+		chomp(buf);
+//		logit(LOG_DEBUG, 0, "Got data, parsing: %s", buf);
+
+		port = strtok(buf, " ");
+		if (!port) {
+//			logit(LOG_DEBUG, 0, "No mrouter ports");
+			goto err;
+		}
+
+		while (port) {
+//			logit(LOG_DEBUG, 0, "Got mrouter port: %s", port);
+
+			if (json)
+				fprintf(fp, "%s\"%s\"", first ? " " : ", ", port);
+			else
+				fprintf(fp, "%s%s", first ? " " : ", ", port);
+
+			first = 0;
+			port = strtok(NULL, " ");
+		}
+	}
+err:
+	if (!json)
+		fprintf(fp, "\n");
+}
+
+/*
+ * Kept for legacy (compat) API, new code should use bridge_prop()
+ */
+void compat_prop(FILE *fp, const char *brname, char *prop, int setval)
 {
 	struct port_name *name = NULL, *next = NULL;
 	const size_t len = IFNAMSIZ + 3;
@@ -352,12 +528,14 @@ out:
  *   }
  * ]
  */
-void bridge_router_ports(FILE *fp, const char *brname)
+static void compat_router_ports(FILE *fp, const char *brname)
 {
 	static const char *bridge_args = "-json -s vlan global show dev";
-	static const char *jq_filter = ".[].vlans[] | " \
-				       "if has(\"router_ports\") == true then .router_ports[].port + \" \" + " \
-					   ".router_ports[].timer + \" \" + .router_ports[].type else \"false\" end";
+	static const char *jq_filter = ".[].vlans[] | "
+				       "if has(\"router_ports\") == true then .router_ports[].port + \" \" + "
+					   ".router_ports[].timer + \" \" + .router_ports[].type "
+		                       "else "
+		                           "\"false\" end";
 	char prev_ifname[20] = { 0 };
 	char cmd[300], buf[80];
 	int num = 0;
@@ -526,14 +704,14 @@ int show_bridge_compat(FILE *fp)
 	 * multicast flooded on    => multicast_flood
 	 */
 	fprintf(fp, " Static Multicast ports=\n");
-	fprintf(fp, " %-26s : ", "IGMP Fast Leave ports");      bridge_prop(fp, "br0", "multicast_fast_leave", 1);
-	fprintf(fp, " %-26s : ", "Static router ports");        bridge_prop(fp, "br0", "multicast_router", 2);
-	fprintf(fp, " %-26s : ", "Discovered router ports");    bridge_router_ports(fp, "br0");
+	fprintf(fp, " %-26s : ", "IGMP Fast Leave ports");      compat_prop(fp, "br0", "multicast_fast_leave", 1);
+	fprintf(fp, " %-26s : ", "Static router ports");        compat_prop(fp, "br0", "multicast_router", 2);
+	fprintf(fp, " %-26s : ", "Discovered router ports");    compat_router_ports(fp, "br0");
 	if (detail) {
 		fprintf(fp, " %-26s : ---\n", "Dual Homing/Coupling ports");
 		fprintf(fp, " %-26s : ---\n", "FRNT ring ports");
 	}
-	fprintf(fp, " %-26s : ", "Multicast flooded on ports"); bridge_prop(fp, "br0", "multicast_flood", 1);
+	fprintf(fp, " %-26s : ", "Multicast flooded on ports"); compat_prop(fp, "br0", "multicast_flood", 1);
 
 	/*
 	 *  VID  Querier IP       Querier MAC        Port     Interval  Timeout
