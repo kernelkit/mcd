@@ -9,6 +9,14 @@ The daemon comes with a little helper tool called `mctl` which
 can be used to check the status of IGMP per interface, but also to
 dump the bridge's MDB in a more human-friendly format.
 
+Please note, for collecting status, `mcd` requires the tools `jq` and
+iproute2 (`ip` and `bridge`) to be installed, their BusyBox equivalents
+are not sufficient.
+
+
+Usage
+-----
+
 For controlling `mcd` from another application, use the basic IPC
 support that `mctl` employs:
 
