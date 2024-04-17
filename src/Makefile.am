@@ -16,7 +16,8 @@ mcd_SOURCES      = main.c cfparse.y config.c defs.h	\
 		   inet.c inet.h			\
 		   ipc.c  ipc.h				\
 		   jsmn.h log.c				\
-		   bridge.c pev.c pev.h			\
+		   bridge.c bridge.h			\
+		   pev.c pev.h				\
 		   pathnames.h queue.h
 mcd_CPPFLAGS     = $(AM_CPPFLAGS)
 mcd_LDADD        = $(LIBS) $(LIBOBJS)
