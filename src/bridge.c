@@ -369,9 +369,8 @@ void bridge_router_ports(FILE *fp, const char *brname)
 
 	if (ret < 0 || ret >= (int)sizeof(cmd))
 		goto fail;
-	
-	rfp = popen(cmd, "r");
 
+	rfp = popen(cmd, "r");
 	if (!rfp)
 		goto fail;
 
