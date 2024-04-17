@@ -89,36 +89,33 @@ static char *timetostr(time_t t, char *buf, size_t len)
 	return buf;
 }
 
-static void strip(char *cmd, size_t len)
+static size_t strip(char *cmd, size_t len)
 {
-	char *ptr;
+	char *ptr = cmd + len;
 
-	ptr = cmd + len;
 	len = strspn(ptr, " \t\n");
 	if (len > 0)
 		ptr += len;
 
-	memmove(cmd, ptr, strlen(ptr) + 1);
-	chomp(cmd);
+	len = strlen(ptr);
+	memmove(cmd, ptr, len + 1);
+
+	return len;
 }
 
 static void check_opts(char *cmd, size_t len)
 {
-	strip(cmd, len);
-
 	json = prefix = nested = 0; /* reset before each command */
 	detail = 0;
 
+	len = strip(cmd, len);
 	while (len > 0) {
-		len = strcspn(cmd, " \t\n");
 		if (!strncasecmp(cmd, "detail", len))
 			detail = 1;
 		else if (!strncasecmp(cmd, "json", len))
 			json = 1;
-		else
-			break;
 
-		strip(cmd, len);
+		len = strip(cmd, len);
 	}
 }
 
@@ -138,14 +135,15 @@ static int ipc_read(int sd, char *cmd, ssize_t len)
 		return IPC_OK;
 
 	cmd[len] = 0;
+	chomp(cmd);
 //	logit(LOG_DEBUG, 0, "IPC cmd: '%s'", cmd);
 
 	for (size_t i = 0; i < NELEMS(cmds); i++) {
 		struct ipcmd *c = &cmds[i];
-		size_t len = strlen(c->cmd);
+		size_t clen = strlen(c->cmd);
 
-		if (!strncasecmp(cmd, c->cmd, len)) {
-			check_opts(cmd, len);
+		if (!strncasecmp(cmd, c->cmd, clen)) {
+			check_opts(cmd, clen);
 			return c->op;
 		}
 	}
