@@ -652,6 +652,8 @@ int main(int argc, char *argv[])
 	int monitor = 0;
 	int c, rc;
 
+	sock_file = getenv("MCD_SOCK");
+
 	while ((c = getopt_long(argc, argv, "dh?i:mptu:v", long_options, NULL)) != EOF) {
 		switch(c) {
 		case 'd':

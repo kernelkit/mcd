@@ -113,6 +113,8 @@ int main(int argc, char *argv[])
     int ch;
 
     prognm = ident = progname(argv[0]);
+    sock_file = getenv("MCD_SOCK");
+
     while ((ch = getopt_long(argc, argv, "f:hi:l:np:su:v", long_options, NULL)) != EOF) {
 	switch (ch) {
 	case 'f':
