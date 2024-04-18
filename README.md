@@ -84,8 +84,15 @@ win an election.
 
 > **Note:** unless mcd has an IP address it will operate as if set to
 > `proxy-mode`.  If the interface has no address, or does not yet exist
-> when mcd starts up, mcd will adjust automatically since listens to
+> when mcd starts up, mcd will adjust automatically since it listens to
 > Linux NETLINK events.
+
+mcd supports acting as a querier on VLAN filtering bridges that do not
+have any "upper" interface.  In this raw mode of operating, mcd will
+always be in `proxy-mode`.  To activate:
+
+    iface br0 vlan 42 enable
+
 
 [GitHub]:          https://github.com/kernelkit/mcd/actions/workflows/build.yml/
 [GitHub Status]:   https://github.com/kernelkit/mcd/actions/workflows/build.yml/badge.svg
