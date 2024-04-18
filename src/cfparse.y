@@ -74,7 +74,7 @@ stmt	: error
 	    for (size_t i = 0; i < gl.gl_pathc; i++) {
 		logit(LOG_DEBUG, 0, "Including file %s ...", gl.gl_pathv[i]);
 		if (config_parse(gl.gl_pathv[i]))
-		    logit(LOG_WARNING, errno, "Failed reading %s", gl.gl_pathv[i]);
+		    warn("Failed including %s: %s", gl.gl_pathv[i], strerror(errno));
 	    }
 	    globfree(&gl);
 	}
