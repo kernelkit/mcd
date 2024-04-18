@@ -63,32 +63,6 @@ struct ipcmd {
 };
 
 
-static char *timetostr(time_t t, char *buf, size_t len)
-{
-	int sec, min, hour, day;
-	static char tmp[20];
-
-	if (!buf) {
-		buf = tmp;
-		len = sizeof(tmp);
-	}
-
-	day  = t / 86400;
-	t    = t % 86400;
-	hour = t / 3600;
-	t    = t % 3600;
-	min  = t / 60;
-	t    = t % 60;
-	sec  = t;
-
-	if (day)
-		snprintf(buf, len, "%dd%dh%dm%ds", day, hour, min, sec);
-	else
-		snprintf(buf, len, "%dh%dm%ds", hour, min, sec);
-
-	return buf;
-}
-
 static size_t strip(char *cmd, size_t len)
 {
 	char *ptr = cmd + len;
