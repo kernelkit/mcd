@@ -182,7 +182,7 @@ static struct ifi *addr_add(int ifindex, struct sockaddr *sa, unsigned int flags
     if ((flags & (IFF_LOOPBACK|IFF_MULTICAST)) != IFF_MULTICAST)
 	return NULL;
 
-    ifi = config_find_iface(ifindex);
+    ifi = config_find_iface(ifindex, 0);
     if (!ifi)
 	return NULL;
 
@@ -222,7 +222,7 @@ static struct ifi *addr_del(int ifindex, struct sockaddr *sa)
     if (!sa || sa->sa_family != AF_INET)
 	return NULL;
 
-    ifi = config_find_iface(ifindex);
+    ifi = config_find_iface(ifindex, 0);
     if (!ifi)
 	return NULL;
 

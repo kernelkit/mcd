@@ -206,7 +206,7 @@ void iface_del(int ifindex, int flags)
     struct phaddr *pa, *pat;
     struct ifi *ifi;
 
-    ifi = config_find_iface(ifindex);
+    ifi = config_find_iface(ifindex, 0);
     if (!ifi)
 	return;	/* unused in .conf */
 
@@ -233,11 +233,12 @@ void iface_del(int ifindex, int flags)
     ifi->ifi_flags |= IFIF_DOWN;
 }
 
+/* XXX: refactor to be a callback from config_find_ifname() */
 void iface_check(int ifindex, unsigned int flags)
 {
     struct ifi *ifi;
 
-    ifi = config_find_iface(ifindex);
+    ifi = config_find_iface(ifindex, 0);
     if (!ifi) {
 	logit(LOG_DEBUG, 0, "Cannot find an active ifindex %d in configuration, skipping ...", ifindex);
 	return;

@@ -8,6 +8,8 @@ General
    any is missing.  mcd depends on them
  - Look for better IP than 169 for each interface
  - Add basic bridge per-VLAN setup instead of setupd
+ - Handle creating and removal of bridge interfaces where mcd is
+   set to operate in raw VLAN mode
 
 
 Planned for v3.0

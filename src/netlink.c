@@ -49,7 +49,7 @@ static void netlink_read(int sd, void *arg)
                 struct ifinfomsg *ifi = (struct ifinfomsg *)NLMSG_DATA(nlh);
 
 		if (nlh->nlmsg_type == RTM_NEWLINK) {
-		    if (!config_find_iface(ifi->ifi_index))
+		    if (!config_find_iface(ifi->ifi_index, 0))
 			iface_add(ifi->ifi_index, ifi->ifi_flags);
 		    else
 			iface_check(ifi->ifi_index, ifi->ifi_flags);
