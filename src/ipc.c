@@ -121,7 +121,9 @@ static void check_opts(char *cmd, size_t len)
 
 static int ipc_read(int sd, char *cmd, ssize_t len)
 {
-	while ((len = read(sd, cmd, len - 1)) == -1) {
+	ssize_t num;
+
+	while ((num = read(sd, cmd, len - 1)) == -1) {
 		switch (errno) {
 		case EAGAIN:
 		case EINTR:
@@ -131,10 +133,10 @@ static int ipc_read(int sd, char *cmd, ssize_t len)
 		}
 		return IPC_ERR;
 	}
-	if (len == 0)
+	if (num == 0)
 		return IPC_OK;
 
-	cmd[len] = 0;
+	cmd[num] = 0;
 	chomp(cmd);
 //	logit(LOG_DEBUG, 0, "IPC cmd: '%s'", cmd);
 
