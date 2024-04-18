@@ -43,7 +43,8 @@ enum {
 	IPC_IGMP_GRP,
 	IPC_IGMP_IFACE,
 	IPC_COMPAT,
-	IPC_STATUS
+	IPC_STATUS,
+	IPC_MDB,
 };
 
 struct ipcmd {
@@ -58,6 +59,7 @@ struct ipcmd {
 	{ IPC_IGMP_IFACE, "show interfaces", "[json]", "Show IGMP/MLD interface status" },
 	{ IPC_STATUS,     "show status", "[json]", "Show daemon status (default)" },
 	{ IPC_IGMP,       "show igmp", "[json]", "Show interfaces and group memberships" },
+	{ IPC_MDB,        "show mdb", NULL, "Show multicast forwarding database" },
 	{ IPC_COMPAT,     "show compat", "[detail]", "Show legacy output (test compat mode)" },
 	{ IPC_IGMP,       "show", "[json]", NULL }, /* hidden default */
 };
@@ -422,10 +424,13 @@ static int show_mdb(FILE *fp)
 		char port[16];
 		char dev[16];
 		char grp[64];
-		int vid;
+		int vid, num;
 
-		sscanf(buf, "dev %s port %s grp %s %s vid %d", dev, port, grp, flags, &vid);
-		fprintf(fp, "%-28s %4d %-*s %s\n", grp, vid, devw, dev, port);
+		num = sscanf(buf, "dev %15s port %15s grp %63s %15s vid %d", dev, port, grp, flags, &vid);
+		if (num < 5)
+			fprintf(fp, "%-28s %4s %-*s %s\n", grp, "", devw, dev, port);
+		else
+			fprintf(fp, "%-28s %4d %-*s %s\n", grp, vid, devw, dev, port);
 	}
 
 	return pclose(pp);
@@ -499,6 +504,10 @@ static void ipc_handle(int sd, void *arg)
 
 	case IPC_IGMP:
 		ipc_show(client, show_igmp, cmd, sizeof(cmd));
+		break;
+
+	case IPC_MDB:
+		ipc_show(client, show_mdb, cmd, sizeof(cmd));
 		break;
 
 	case IPC_COMPAT:
