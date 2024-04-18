@@ -456,6 +456,7 @@ void send_igmp(const struct ifi *ifi, uint32_t dst, int type, int code, uint32_t
 	else
 	    logit(LOG_WARNING, errno, "sendto to %s on %s",
 		  inet_fmt(dst, s1, sizeof(s1)), inet_fmt(src, s2, sizeof(s2)));
+	return;
     }
 
     logit(LOG_DEBUG, 0, "SENT %s from %-15s to %s", igmp_packet_kind(type, code),
