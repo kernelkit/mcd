@@ -296,8 +296,8 @@ static int show_igmp_iface(FILE *fp)
 			inet_fmt(ifi->ifi_querier->al_addr, s1, sizeof(s1));
 			interval = ifi->ifi_querier->al_interval;
 			t = time(NULL) - ifi->ifi_querier->al_ctime;
-			rt_tmo = (int)router_timeout - (int)t;
-			snprintf(timeout, sizeof(timeout), "%u", rt_tmo);
+			rt_tmo = (int)((time_t)router_timeout - t);
+			snprintf(timeout, sizeof(timeout), "%d", rt_tmo);
 		}
 
 		if (ifi->ifi_flags & IFIF_IGMPV1)
