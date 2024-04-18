@@ -309,7 +309,7 @@ static int show_igmp_iface(FILE *fp)
 
 		if (json) {
 			const char *State = ifstate(ifi);
-			char state[strlen(State)];
+			char state[strlen(State) + 1];
 			int once = 1;
 
 			fprintf(fp, "%s%*s{\n", first ? "" : ",\n", prefix, "");
