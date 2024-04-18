@@ -63,12 +63,12 @@ struct ifi *config_find_ifaddr(in_addr_t addr)
     return NULL;
 }
 
-struct ifi *config_find_iface(int ifindex)
+struct ifi *config_find_iface(int ifindex, int vid)
 {
     struct ifi *ifi;
 
     TAILQ_FOREACH(ifi, &ifaces, ifi_link) {
-	if (ifindex == ifi->ifi_index)
+	if (ifindex == ifi->ifi_index && vid == ifi->ifi_vlan)
             return ifi;
     }
 

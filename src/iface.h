@@ -15,7 +15,7 @@ struct ifi {
     int		     ifi_sock;		 /* Raw socket bound to interface     */
     int		     ifi_sockid;	 /* Socket event identifier (pev)     */
     uint32_t	     ifi_flags;	         /* IFIF_ flags defined below         */
-    uint32_t	     ifi_vlan;	         /* Raw VLAN ID for send and accept   */
+    int		     ifi_vlan;	         /* Raw VLAN ID for send and accept   */
     char	     ifi_name[IFNAMSIZ]; /* interface name                    */
     int		     ifi_index;          /* Primarily for Linux systems       */
     uint32_t	     ifi_inaddr;      /* Current address of this interface */

@@ -9,6 +9,7 @@
 typedef struct {
     struct listaddr *g;
     int    ifindex;
+    int    vid;
     int    delay;
     int    num;
 } cbk_t;
@@ -27,13 +28,13 @@ static void query_groups       (int timeout, void *arg);
 static void router_timeout_cb  (int timeout, void *arg);
 
 static void delete_group_cb    (int timeout, void *arg);
-static int  delete_group_timer (int ifindex, struct listaddr *g, int tmo);
+static int  delete_group_timer (int ifindex, int vid, struct listaddr *g, int tmo);
 
 static void send_query_cb      (int timeout, void *arg);
 static int  send_query_timer   (int ifindex, struct listaddr *g, int delay, int num);
 
 static void group_version_cb   (int timeout, void *arg);
-static int  group_version_timer(int ifindex, struct listaddr *g);
+static int  group_version_timer(int ifindex, int vid, struct listaddr *g);
 
 void iface_init(void)
 {
@@ -404,13 +405,13 @@ static void query_groups(int period, void *arg)
  * IGMP version mismatches, perform querier election, and
  * handle group-specific queries when we're not the querier.
  */
-void accept_membership_query(int ifindex, uint32_t src, uint32_t dst, uint32_t group,
-			     int intv, int tmo, int ver)
+void accept_membership_query(int ifindex, int vid, uint32_t src, uint32_t dst,
+			     uint32_t group, int intv, int tmo, int ver)
 {
     struct ifi *ifi;
     int notnew = 1;
 
-    ifi = config_find_iface(ifindex);
+    ifi = config_find_iface(ifindex, vid);
     if (!ifi)
 	return;
 
@@ -526,7 +527,7 @@ void accept_membership_query(int ifindex, uint32_t src, uint32_t dst, uint32_t g
 		    g->al_queryid = pev_timer_del(g->al_queryid);
 
 		/* setup a timeout to remove the group membership */
-		g->al_timerid = delete_group_timer(ifi->ifi_index, g, IGMP_LAST_MEMBER_QUERY_COUNT * tmo);
+		g->al_timerid = delete_group_timer(ifindex, vid, g, IGMP_LAST_MEMBER_QUERY_COUNT * tmo);
 
 		logit(LOG_DEBUG, 0, "Timer for grp %s on %s set to %d",
 		      inet_fmt(group, s2, sizeof(s2)), ifi->ifi_name, pev_timer_get(g->al_timerid) / 1000);
@@ -545,7 +546,7 @@ static void group_debug(struct listaddr *g, char *s, int is_change)
 /*
  * Process an incoming group membership report.
  */
-void accept_group_report(int ifindex, uint32_t src, uint32_t dst, uint32_t group, int r_type)
+void accept_group_report(int ifindex, int vid, uint32_t src, uint32_t dst, uint32_t group, int r_type)
 {
     struct listaddr *g;
     struct ifi *ifi;
@@ -560,7 +561,7 @@ void accept_group_report(int ifindex, uint32_t src, uint32_t dst, uint32_t group
 	return;
     }
 
-    ifi = config_find_iface(ifindex);
+    ifi = config_find_iface(ifindex, vid);
     if (!ifi)
 	return;
 
@@ -608,7 +609,7 @@ void accept_group_report(int ifindex, uint32_t src, uint32_t dst, uint32_t group
 	    if (g->al_timerid > 0)
 		g->al_timerid = pev_timer_del(g->al_timerid);
 
-	    g->al_timerid = delete_group_timer(ifi->ifi_index, g, IGMP_GROUP_MEMBERSHIP_INTERVAL);
+	    g->al_timerid = delete_group_timer(ifindex, vid, g, IGMP_GROUP_MEMBERSHIP_INTERVAL);
 
 	    /*
 	     * Reset timer for switching version back every time an older
@@ -618,7 +619,7 @@ void accept_group_report(int ifindex, uint32_t src, uint32_t dst, uint32_t group
 		if (g->al_pv_timerid)
 		    g->al_pv_timerid = pev_timer_del(g->al_pv_timerid);
 
-		g->al_pv_timerid = group_version_timer(ifi->ifi_index, g);
+		g->al_pv_timerid = group_version_timer(ifindex, vid, g);
 	    }
 	    break;
 	}
@@ -655,14 +656,14 @@ void accept_group_report(int ifindex, uint32_t src, uint32_t dst, uint32_t group
 	/** set a timer for expiration **/
         g->al_queryid	= 0;
 	g->al_reporter	= src;
-	g->al_timerid	= delete_group_timer(ifi->ifi_index, g, IGMP_GROUP_MEMBERSHIP_INTERVAL);
+	g->al_timerid	= delete_group_timer(ifindex, vid, g, IGMP_GROUP_MEMBERSHIP_INTERVAL);
 
 	/*
 	 * Set timer for swithing version back if an older version
 	 * report is received
 	 */
 	if (g->al_pv < 3)
-	    g->al_pv_timerid = group_version_timer(ifi->ifi_index, g);
+	    g->al_pv_timerid = group_version_timer(ifindex, vid, g);
 
 	TAILQ_INSERT_TAIL(&ifi->ifi_groups, g, al_link);
 	time(&g->al_ctime);
@@ -675,7 +676,7 @@ void accept_group_report(int ifindex, uint32_t src, uint32_t dst, uint32_t group
  *
  * We detect IGMPv3 by the dst always being 0.
  */
-void accept_leave_message(int ifindex, uint32_t src, uint32_t dst, uint32_t group)
+void accept_leave_message(int ifindex, int vid, uint32_t src, uint32_t dst, uint32_t group)
 {
     struct listaddr *g;
     struct ifi *ifi;
@@ -683,7 +684,7 @@ void accept_leave_message(int ifindex, uint32_t src, uint32_t dst, uint32_t grou
     inet_fmt(src, s1, sizeof(s1));
     inet_fmt(group, s3, sizeof(s3));
 
-    ifi = config_find_iface(ifindex);
+    ifi = config_find_iface(ifindex, vid);
     if (!ifi)
 	return;
 
@@ -730,7 +731,7 @@ void accept_leave_message(int ifindex, uint32_t src, uint32_t dst, uint32_t grou
 	/** send a group specific query **/
 	g->al_queryid = send_query_timer(ifi->ifi_index, g, igmp_last_member_interval,
 				       IGMP_LAST_MEMBER_QUERY_COUNT);
-	g->al_timerid = delete_group_timer(ifi->ifi_index, g, igmp_last_member_interval
+	g->al_timerid = delete_group_timer(ifindex, vid, g, igmp_last_member_interval
 					   * (IGMP_LAST_MEMBER_QUERY_COUNT + 1));
 
 	logit(LOG_DEBUG, 0, "Accepted group leave for %s on %s", s3, s1);
@@ -759,7 +760,7 @@ void accept_leave_message(int ifindex, uint32_t src, uint32_t dst, uint32_t grou
  * Returns:
  *     POSIX OK (0) if succeeded, non-zero on failure.
  */
-int accept_sources(int ifindex, int r_type, uint32_t src, uint32_t dst, uint8_t *sources,
+int accept_sources(int ifindex, int vid, int r_type, uint32_t src, uint32_t dst, uint8_t *sources,
 		   uint8_t *canary, int rec_num_sources)
 {
     uint8_t *ptr;
@@ -776,7 +777,7 @@ int accept_sources(int ifindex, int r_type, uint32_t src, uint32_t dst, uint8_t 
 	logit(LOG_DEBUG, 0, "Add source (%s,%s)", inet_fmt(ina->s_addr, s2, sizeof(s2)),
 	      inet_fmt(dst, s1, sizeof(s1)));
 
-        accept_group_report(ifindex, src, ina->s_addr, dst, r_type);
+        accept_group_report(ifindex, vid, src, ina->s_addr, dst, r_type);
     }
 
     return 0;
@@ -786,7 +787,7 @@ int accept_sources(int ifindex, int r_type, uint32_t src, uint32_t dst, uint8_t 
 /*
  * Handle IGMP v3 membership reports (join/leave)
  */
-void accept_membership_report(int ifindex, uint32_t src, uint32_t dst, struct igmpv3_report *report, ssize_t reportlen)
+void accept_membership_report(int ifindex, int vid, uint32_t src, uint32_t dst, struct igmpv3_report *report, ssize_t reportlen)
 {
     uint8_t *canary = (uint8_t *)report + reportlen;
     struct igmpv3_grec *record;
@@ -832,7 +833,7 @@ void accept_membership_report(int ifindex, uint32_t src, uint32_t dst, struct ig
 		/* RFC 5790: TO_EX({}) can be interpreted as a (*,G)
 		 *           join, i.e., to include all sources.
 		 */
-		accept_group_report(ifindex, src, 0, rec_group.s_addr, report->type);
+		accept_group_report(ifindex, vid, src, 0, rec_group.s_addr, report->type);
 	    } else {
 		/* RFC 5790: LW-IGMPv3 does not use TO_EX({x}),
 		 *           i.e., filter with non-null source.
@@ -847,12 +848,12 @@ void accept_membership_report(int ifindex, uint32_t src, uint32_t dst, struct ig
 		/* RFC5790: TO_IN({}) can be interpreted as an
 		 *          IGMPv2 (*,G) leave.
 		 */
-		accept_leave_message(ifindex, src, 0, rec_group.s_addr);
+		accept_leave_message(ifindex, vid, src, 0, rec_group.s_addr);
 	    } else {
 		/* RFC5790: TO_IN({x}), regular RFC3376 (S,G)
 		 *          join with >= 1 source, 'S'.
 		 */
-		rc = accept_sources(ifindex, report->type, src, rec_group.s_addr,
+		rc = accept_sources(ifindex, vid, report->type, src, rec_group.s_addr,
 				    sources, canary, rec_num_sources);
 		if (rc)
 		    return;
@@ -861,7 +862,7 @@ void accept_membership_report(int ifindex, uint32_t src, uint32_t dst, struct ig
 
 	case IGMP_ALLOW_NEW_SOURCES:
 	    /* RFC5790: Same as TO_IN({x}) */
-	    rc = accept_sources(ifindex, report->type, src, rec_group.s_addr,
+	    rc = accept_sources(ifindex, vid, report->type, src, rec_group.s_addr,
 				sources, canary, rec_num_sources);
 	    if (rc)
 		return;
@@ -880,7 +881,7 @@ void accept_membership_report(int ifindex, uint32_t src, uint32_t dst, struct ig
 
 		logit(LOG_DEBUG, 0, "Remove source[%d] (%s,%s)", j,
 		      inet_fmt(ina->s_addr, s2, sizeof(s2)), inet_ntoa(rec_group));
-		accept_leave_message(ifindex, src, 0, rec_group.s_addr);
+		accept_leave_message(ifindex, vid, src, 0, rec_group.s_addr);
 	    }
 	    break;
 
@@ -917,7 +918,7 @@ static void group_version_cb(int timeout, void *arg)
     cbk_t *cbk = (cbk_t *)arg;
     struct ifi *ifi;
 
-    ifi = config_find_iface(cbk->ifindex);
+    ifi = config_find_iface(cbk->ifindex, cbk->vid);
     if (!ifi)
 	return;
 
@@ -938,7 +939,7 @@ static void group_version_cb(int timeout, void *arg)
 /*
  * Set a timer to switch version back on an interface.
  */
-static int group_version_timer(int ifindex, struct listaddr *g)
+static int group_version_timer(int ifindex, int vid, struct listaddr *g)
 {
     cbk_t *cbk;
 
@@ -949,6 +950,7 @@ static int group_version_timer(int ifindex, struct listaddr *g)
     }
 
     cbk->ifindex = ifindex;
+    cbk->vid     = vid;
     cbk->g       = g;
 
     return pev_timer_add(IGMP_GROUP_MEMBERSHIP_INTERVAL * 1000000, 0, group_version_cb, cbk);
@@ -963,7 +965,7 @@ static void delete_group_cb(int timeout, void *arg)
     struct listaddr *g = cbk->g;
     struct ifi *ifi;
 
-    ifi = config_find_iface(cbk->ifindex);
+    ifi = config_find_iface(cbk->ifindex, cbk->vid);
     if (!ifi)
 	return;
 
@@ -985,7 +987,7 @@ static void delete_group_cb(int timeout, void *arg)
 /*
  * Set a timer to delete the record of a group membership on an interface.
  */
-static int delete_group_timer(int ifindex, struct listaddr *g, int tmo)
+static int delete_group_timer(int ifindex, int vid, struct listaddr *g, int tmo)
 {
     cbk_t *cbk;
     int tid;
@@ -998,6 +1000,7 @@ static int delete_group_timer(int ifindex, struct listaddr *g, int tmo)
     }
 
     cbk->ifindex = ifindex;
+    cbk->vid     = vid;
     cbk->g       = g;
 
     /* Record mtime for IPC "show igmp" */
@@ -1017,7 +1020,7 @@ static void send_query_cb(int timeout, void *arg)
     cbk_t *cbk = (cbk_t *)arg;
     struct ifi *ifi;
 
-    ifi = config_find_iface(cbk->ifindex);
+    ifi = config_find_iface(cbk->ifindex, cbk->vid);
     if (!ifi)
 	goto end;
 

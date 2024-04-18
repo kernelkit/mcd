@@ -193,14 +193,14 @@ static void igmp_read(int sd, void *arg)
 
     /* The sll.sll_ifindex holds the sender's ifindex */
     eth_len = sizeof(struct ether_header);
-    accept_igmp(ifi->ifi_index, recv_buf + eth_len, len - eth_len);
+    accept_igmp(ifi->ifi_index, vid, recv_buf + eth_len, len - eth_len);
 }
 
 /*
  * Process a newly received IGMP packet that is sitting in the input
  * packet buffer.
  */
-void accept_igmp(int ifindex, uint8_t *buf, size_t len)
+void accept_igmp(int ifindex, int vid, uint8_t *buf, size_t len)
 {
     int ipdatalen, iphdrlen, igmpdatalen, timeout, interval = 0, igmp_version = 3;
     uint32_t src, dst, group;
@@ -246,9 +246,9 @@ void accept_igmp(int ifindex, uint8_t *buf, size_t len)
 	return;
     }
 
-    logit(LOG_DEBUG, 0, "RECV %s from %-15s ifi %-2d to %s",
+    logit(LOG_DEBUG, 0, "RECV %s from %-15s ifi %-2d.%d to %s",
 	  igmp_packet_kind(igmp->igmp_type, igmp->igmp_code),
-	  inet_fmt(src, s1, sizeof(s1)), ifindex, inet_fmt(dst, s2, sizeof(s2)));
+	  inet_fmt(src, s1, sizeof(s1)), ifindex, vid, inet_fmt(dst, s2, sizeof(s2)));
 
     switch (igmp->igmp_type) {
 	case IGMP_MEMBERSHIP_QUERY:
@@ -270,16 +270,16 @@ void accept_igmp(int ifindex, uint8_t *buf, size_t len)
 		      igmp->igmp_code, ipdatalen);
 		timeout = 0;
 	    }
-	    accept_membership_query(ifindex, src, dst, group, interval, timeout, igmp_version);
+	    accept_membership_query(ifindex, vid, src, dst, group, interval, timeout, igmp_version);
 	    return;
 
 	case IGMP_V1_MEMBERSHIP_REPORT:
 	case IGMP_V2_MEMBERSHIP_REPORT:
-	    accept_group_report(ifindex, src, dst, group, igmp->igmp_type);
+	    accept_group_report(ifindex, vid, src, dst, group, igmp->igmp_type);
 	    return;
 
 	case IGMP_V2_LEAVE_GROUP:
-	    accept_leave_message(ifindex, src, dst, group);
+	    accept_leave_message(ifindex, vid, src, dst, group);
 	    return;
 
 	case IGMP_V3_MEMBERSHIP_REPORT:
@@ -288,7 +288,7 @@ void accept_igmp(int ifindex, uint8_t *buf, size_t len)
 		      igmpdatalen, IGMP_V3_GROUP_RECORD_MIN_SIZE);
 		return;
 	    }
-	    accept_membership_report(ifindex, src, dst, (struct igmpv3_report *)(buf + iphdrlen), len - iphdrlen);
+	    accept_membership_report(ifindex, vid, src, dst, (struct igmpv3_report *)(buf + iphdrlen), len - iphdrlen);
 	    return;
 
 	default:
