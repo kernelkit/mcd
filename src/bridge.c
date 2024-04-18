@@ -374,16 +374,14 @@ err:
  */
 void bridge_router_ports(FILE *fp, const char *brname)
 {
-	const char *fmt = "bridge -d -j mdb show | jq -r '[.[] .router%s | .[] .port] | sort_by(.) | join(\" \")'";
-	char cmd[128], buf[128 * (IFNAMSIZ + 2)]; /* 128 ports should be enough for everyone. */
-	char bridge[IFNAMSIZ];
+	const char *fmt = "(bridge -d -j mdb show | jq -r '.[] .router%s%s | .[] .port';"
+		"bridge -j -d vlan global show %s%s | jq -r '.[].vlans[].router_ports[].port')"
+		"| sort -uV | tr '\n' ' '";
+	char cmd[strlen(fmt) + 64], buf[128 * (IFNAMSIZ + 2)]; /* 128 ports should be enough */
 	FILE *pp;
 
-	if (brname)
-		strlcpy(bridge, brname, sizeof(bridge));
-
 	/* Read mrouter ports from brname, or all bridges. */
-	snprintf(cmd, sizeof(cmd), fmt, brname ? bridge : "[]");
+	snprintf(cmd, sizeof(cmd), fmt, brname ? "." : "", brname ?: "[]", brname ? "dev " : "", brname ?: "");
 	pp = popen(cmd, "r");
 	if (!pp) {
 		logit(LOG_ERR, errno, "popen");
@@ -395,17 +393,12 @@ void bridge_router_ports(FILE *fp, const char *brname)
 		int first = 1;
 
 		chomp(buf);
-//		logit(LOG_DEBUG, 0, "Got data, parsing: %s", buf);
 
 		port = strtok(buf, " ");
-		if (!port) {
-//			logit(LOG_DEBUG, 0, "No mrouter ports");
+		if (!port)
 			goto err;
-		}
 
 		while (port) {
-//			logit(LOG_DEBUG, 0, "Got mrouter port: %s", port);
-
 			if (json)
 				fprintf(fp, "%s\"%s\"", first ? " " : ", ", port);
 			else
