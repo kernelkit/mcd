@@ -416,6 +416,8 @@ void bridge_router_ports(FILE *fp, const char *brname)
 		}
 	}
 err:
+	if (pp)
+		pclose(pp);
 	if (!json)
 		fprintf(fp, "\n");
 }
