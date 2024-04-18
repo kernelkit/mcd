@@ -94,7 +94,7 @@ static int populate(void)
 		return -1;
 
 	while (fgets(buf, sizeof(buf), fp)) {
-		char br[IFNAMSIZ + 1], port[IFNAMSIZ + 3], group[64];
+		char br[IFNAMSIZ + 1] = { 0 }, port[IFNAMSIZ + 3] = { 0 }, group[64] = { 0 };
 		char *tok, *dst;
 		int vid = 0;
 		size_t len;
