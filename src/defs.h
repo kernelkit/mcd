@@ -10,9 +10,9 @@
 #include <unistd.h>
 #include <ctype.h>
 #include <errno.h>
-#include <syslog.h>
 #include <signal.h>
 #include <string.h>
+#include <sysexits.h>
 #include <sys/param.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -44,6 +44,7 @@ typedef void (*cfunc_t) (void*);
 typedef void (*ihfunc_t) (int);
 
 #include "iface.h"
+#include "log.h"
 #include "igmp.h"
 #include "pathnames.h"
 #include "pev.h"
@@ -117,14 +118,6 @@ extern int		cache_lifetime;
 extern int		prune_lifetime;
 extern int		mrt_table_id;
 extern void             restart(void);
-
-/* log.c */
-extern void             log_init(char *);
-extern int		log_str2lvl(char *);
-extern const char *	log_lvl2str(int);
-extern int		log_list(char *, size_t);
-extern void		logit(int, int, const char *, ...);
-extern void             resetlogging(void *);
 
 /* igmp.c */
 extern void		igmp_init(void);

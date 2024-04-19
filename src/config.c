@@ -114,8 +114,8 @@ struct ifi *config_iface_add(char *ifname)
 
     ifi = calloc(1, sizeof(struct ifi));
     if (!ifi) {
-	logit(LOG_ERR, errno, "failed allocating memory for iflist");
-	return NULL;
+	err("failed allocating memory for iflist");
+	exit(EX_OSERR);
     }
 
     iface_zero(ifi);
@@ -131,7 +131,7 @@ struct ifi *config_iface_add(char *ifname)
 	ifi->ifi_flags |= IFIF_DOWN;
 
     if (getmac(ifname, ifi->ifi_hwaddr, sizeof(ifi->ifi_hwaddr)))
-	logit(LOG_WARNING, errno, "failed finding hw address for iface %s", ifname);
+	warn("failed finding hw address for iface %s", ifname);
 
     TAILQ_INSERT_TAIL(&ifaces, ifi, ifi_link);
 
@@ -152,8 +152,10 @@ struct ifi *config_iface_vlan(struct ifi *ifi, int vid)
     }
 
     clone = malloc(sizeof(*clone));
-    if (!clone)
-	logit(LOG_ERR, errno, "failed cloning %s for new VLAN %d", ifi->ifi_name, vid);
+    if (!clone) {
+	err("failed cloning %s for new VLAN %d", ifi->ifi_name, vid);
+	exit(EX_OSERR);
+    }
 
     memcpy(clone, ifi, sizeof(*clone));
     TAILQ_INSERT_TAIL(&ifaces, clone, ifi_link);
@@ -194,8 +196,8 @@ static struct ifi *addr_add(int ifindex, struct sockaddr *sa, unsigned int flags
 
     pa = calloc(1, sizeof(*pa));
     if (!pa) {
-	logit(LOG_ERR, errno, "Failed allocating address for %s", ifi->ifi_name);
-	return NULL;
+	err("failed allocating address for %s", ifi->ifi_name);
+	exit(EX_OSERR);
     }
 
     pa->pa_addr  = sin->sin_addr.s_addr;
@@ -204,7 +206,7 @@ static struct ifi *addr_add(int ifindex, struct sockaddr *sa, unsigned int flags
     if (!(flags & IFF_UP))
 	ifi->ifi_flags |= IFIF_DOWN;
 
-    logit(LOG_DEBUG, 0, "New address %s for %s flags 0x%x",
+    dbg("New address %s for %s flags 0x%x",
 	  inet_fmt(pa->pa_addr, s1, sizeof(s1)), ifi->ifi_name, flags);
 
     return ifi;
@@ -231,7 +233,7 @@ static struct ifi *addr_del(int ifindex, struct sockaddr *sa)
 	    continue;
 
 	TAILQ_REMOVE(&ifi->ifi_addrs, pa, pa_link);
-	logit(LOG_DEBUG, 0, "Drop address %s for %s", inet_fmt(pa->pa_addr, s1, sizeof(s1)),
+	dbg("Drop address %s for %s", inet_fmt(pa->pa_addr, s1, sizeof(s1)),
 	      ifi->ifi_name);
 	free(pa);
 	return ifi;
@@ -247,11 +249,11 @@ void config_iface_addr_add(int ifindex, struct sockaddr *sa, unsigned int flags)
     ifi = addr_add(ifindex, sa, flags);
     if (ifi) {
 	if (ifi->ifi_flags & IFIF_DISABLED) {
-	    logit(LOG_DEBUG, 0, "    %s disabled, no election", ifi->ifi_name);
+	    dbg("    %s disabled, no election", ifi->ifi_name);
 	    return;
 	}
 	if (ifi->ifi_flags & IFIF_DOWN) {
-	    logit(LOG_DEBUG, 0, "    %s down, no election", ifi->ifi_name);
+	    dbg("    %s down, no election", ifi->ifi_name);
 	    return;
 	}
 
@@ -266,11 +268,11 @@ void config_iface_addr_del(int ifindex, struct sockaddr *sa)
     ifi = addr_del(ifindex, sa);
     if (ifi) {
 	if (ifi->ifi_flags & IFIF_DISABLED) {
-	    logit(LOG_DEBUG, 0, "    %s disabled, no election", ifi->ifi_name);
+	    dbg("    %s disabled, no election", ifi->ifi_name);
 	    return;
 	}
 	if (ifi->ifi_flags & IFIF_DOWN) {
-	    logit(LOG_DEBUG, 0, "    %s down, no election", ifi->ifi_name);
+	    dbg("    %s down, no election", ifi->ifi_name);
 	    return;
 	}
 
@@ -285,8 +287,10 @@ void config_iface_init(void)
 {
     struct ifaddrs *ifa, *ifap;
 
-    if (getifaddrs(&ifap) < 0)
-	logit(LOG_ERR, errno, "getifaddrs");
+    if (getifaddrs(&ifap) < 0) {
+	err("getifaddrs");
+	exit(EX_OSERR);
+    }
 
     for (ifa = ifap; ifa; ifa = ifa->ifa_next) {
 	int ifindex;

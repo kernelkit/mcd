@@ -79,8 +79,8 @@ void igmp_init(void)
     send_buf = calloc(1, RECV_BUF_SIZE);
 
     if (!recv_buf || !send_buf) {
-	logit(LOG_ERR, errno, "Failed allocating Rx/Tx buffers");
-	exit(1);
+	err("failed allocating Rx/Tx buffers");
+	exit(EX_OSERR);
     }
 
     allhosts_group   = htonl(INADDR_ALLHOSTS_GROUP);
@@ -111,21 +111,31 @@ void igmp_iface_init(struct ifi *ifi)
     int ena = 1;
 
     ifi->ifi_sock = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
-    if (ifi->ifi_sock < 0)
-	logit(LOG_ERR, errno, "Failed creating IGMP raw packet socket");
+    if (ifi->ifi_sock < 0) {
+	err("failed creating raw IGMP packet socket");
+	exit(EX_OSERR);
+    }
 
-    if (setsockopt(ifi->ifi_sock, SOL_PACKET, PACKET_AUXDATA, &ena, sizeof(ena)) < 0)
-	logit(LOG_ERR, errno, "Failed enabling PACKET_AUXDATA on IGMP socket");
+    if (setsockopt(ifi->ifi_sock, SOL_PACKET, PACKET_AUXDATA, &ena, sizeof(ena)) < 0) {
+	err("failed enabling PACKET_AUXDATA on IGMP socket");
+	exit(EX_OSERR);
+    }
 
-    if (set_filter(ifi->ifi_sock))
-	logit(LOG_ERR, errno, "Failed setting socket filter");
+    if (set_filter(ifi->ifi_sock)) {
+	err("failed setting socket filter");
+	exit(EX_OSERR);
+    }
 
-    if (bind(ifi->ifi_sock, (struct sockaddr *)&sll, sizeof(sll)))
-	logit(LOG_ERR, errno, "Failed binding socket to interface %s", ifi->ifi_name);
+    if (bind(ifi->ifi_sock, (struct sockaddr *)&sll, sizeof(sll))) {
+	err("failed binding socket to interface %s", ifi->ifi_name);
+	exit(EX_OSERR);
+    }
 
     ifi->ifi_sockid = pev_sock_add(ifi->ifi_sock, igmp_read, ifi);
-    if (ifi->ifi_sockid == -1)
-	logit(LOG_ERR, errno, "Failed registering IGMP handler");
+    if (ifi->ifi_sockid == -1) {
+	err("failed registering IGMP handler");
+	exit(EX_OSERR);
+    }
 }
 
 void igmp_iface_exit(struct ifi *ifi)
@@ -180,7 +190,7 @@ static void igmp_read(int sd, void *arg)
 	if (errno == EINTR)
 	    continue;		/* Received signal, retry syscall. */
 
-	logit(LOG_ERR, errno, "Failed recvfrom() in igmp_read()");
+	warn("failed recvfrom() in igmp_read()");
 	return;
     }
 
@@ -208,7 +218,7 @@ void accept_igmp(int ifindex, int vid, uint8_t *buf, size_t len)
     struct ip *ip;
 
     if (len < sizeof(struct ip)) {
-	logit(LOG_INFO, 0, "received packet too short (%zu bytes) for IP header", len);
+	info("received packet too short (%zu bytes) for IP header", len);
 	return;
     }
 
@@ -231,9 +241,8 @@ void accept_igmp(int ifindex, int vid, uint8_t *buf, size_t len)
     ipdatalen = ntohs(ip->ip_len) - iphdrlen;
 
     if ((size_t)(iphdrlen + ipdatalen) != len) {
-	logit(LOG_INFO, 0,
-	      "received packet from %s shorter (%zu bytes) than hdr+data length (%d+%d)",
-	      inet_fmt(src, s1, sizeof(s1)), len, iphdrlen, ipdatalen);
+	info("received packet from %s shorter (%zu bytes) than hdr+data length (%d+%d)",
+	     inet_fmt(src, s1, sizeof(s1)), len, iphdrlen, ipdatalen);
 	return;
     }
 
@@ -241,12 +250,12 @@ void accept_igmp(int ifindex, int vid, uint8_t *buf, size_t len)
     group       = igmp->igmp_group.s_addr;
     igmpdatalen = ipdatalen - IGMP_MINLEN;
     if (igmpdatalen < 0) {
-	logit(LOG_INFO, 0,  "received IP data field too short (%u bytes) for IGMP, from %s",
-	      ipdatalen, inet_fmt(src, s1, sizeof(s1)));
+	info("received IP data field too short (%u bytes) for IGMP, from %s",
+	     ipdatalen, inet_fmt(src, s1, sizeof(s1)));
 	return;
     }
 
-    logit(LOG_DEBUG, 0, "RECV %s from %-15s ifi %-2d.%d to %s",
+    dbg("RECV %s from %-15s ifi %-2d.%d to %s",
 	  igmp_packet_kind(igmp->igmp_type, igmp->igmp_code),
 	  inet_fmt(src, s1, sizeof(s1)), ifindex, vid, inet_fmt(dst, s2, sizeof(s2)));
 
@@ -266,7 +275,7 @@ void accept_igmp(int ifindex, int vid, uint8_t *buf, size_t len)
 		timeout = igmp_code_time(query->code) / IGMP_TIMER_SCALE;
 		interval = igmp_code_time(query->qqic);
 	    } else {
-		logit(LOG_INFO, 0, "Received invalid IGMP query: Max Resp Code = %d, length = %d",
+		info("Received invalid IGMP query: Max Resp Code = %d, length = %d",
 		      igmp->igmp_code, ipdatalen);
 		timeout = 0;
 	    }
@@ -284,7 +293,7 @@ void accept_igmp(int ifindex, int vid, uint8_t *buf, size_t len)
 
 	case IGMP_V3_MEMBERSHIP_REPORT:
 	    if (igmpdatalen < IGMP_V3_GROUP_RECORD_MIN_SIZE) {
-		logit(LOG_INFO, 0, "Too short IGMP v3 Membership report: igmpdatalen(%d) < MIN(%d)",
+		info("Too short IGMP v3 Membership report: igmpdatalen(%d) < MIN(%d)",
 		      igmpdatalen, IGMP_V3_GROUP_RECORD_MIN_SIZE);
 		return;
 	    }
@@ -454,12 +463,12 @@ void send_igmp(const struct ifi *ifi, uint32_t dst, int type, int code, uint32_t
 	if (errno == ENETDOWN)
 	    iface_check_state();
 	else
-	    logit(LOG_WARNING, errno, "sendto to %s on %s",
+	    warn("sendto to %s on %s",
 		  inet_fmt(dst, s1, sizeof(s1)), inet_fmt(src, s2, sizeof(s2)));
 	return;
     }
 
-    logit(LOG_DEBUG, 0, "SENT %s from %-15s to %s", igmp_packet_kind(type, code),
+    dbg("SENT %s from %-15s to %s", igmp_packet_kind(type, code),
 	  src == INADDR_ANY ? "INADDR_ANY" : inet_fmt(src, s1, sizeof(s1)),
 	  inet_fmt(dst, s2, sizeof(s2)));
 }

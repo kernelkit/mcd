@@ -2,7 +2,6 @@
 
 #include "config.h"
 
-#include <err.h>
 #include <errno.h>
 #ifdef HAVE_FCNTL_H
 # include <fcntl.h>
@@ -24,7 +23,9 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <sysexits.h>
 
+#include "log.h"
 #include "queue.h"
 #define MAXARGS	32
 
@@ -79,8 +80,10 @@ static void add_cmd(char *cmd, char *opt, char *desc)
 	char *token;
 
 	c = calloc(1, sizeof(struct cmd));
-	if (!c)
-		err(1, "Cannot get memory for arg node");
+	if (!c) {
+		err("failed allocating memory for arg node");
+		exit(EX_OSERR);
+	}
 
 	while ((token = strsep(&cmd, " "))) {
 		if (strlen(token) < 1)
@@ -405,12 +408,13 @@ static int get(char *cmd, FILE *fp)
 	sd = ipc_connect();
 	if (-1 == sd) {
 		if (errno == ENOENT)
-			errx(1, "no mcd running.");
+			errx("no mcd running.");
 		else if (errno == EACCES)
-			errx(1, "not enough permissions.");
-		err(1, "failed connecting to mcd");
+			errx("not enough permissions.");
+		else
+			err("failed connecting to mcd");
 
-		return 1; /* we never get here, make gcc happy */
+		exit(EX_UNAVAILABLE);
 	}
 
 	len = snprintf(buf, sizeof(buf), "%s", chomp(cmd));
@@ -480,12 +484,15 @@ static int ipc_fetch(void)
 		return 1;
 
 	fp = tempfile();
-	if (!fp)
-		err(4, "Failed opening tempfile");
+	if (!fp) {
+		err("failed opening tempfile");
+		exit(EX_CANTCREAT);
+	}
 
 	if (get("help", fp)) {
 		fclose(fp);
-		err(5, "Failed fetching commands");
+		err("Failed fetching commands");
+		exit(EX_IOERR);
 	}
 
 	while ((cmd = fgets(buf, sizeof(buf), fp))) {
@@ -495,8 +502,10 @@ static int ipc_fetch(void)
 			continue;
 
 		cmd = strdup(cmd);
-		if (!cmd)
-			err(1, "Failed strdup(cmd)");
+		if (!cmd) {
+			err("failed strdup(cmd)");
+			exit(EX_OSERR);
+		}
 
 		desc = strchr(cmd, '\t');
 		if (desc)

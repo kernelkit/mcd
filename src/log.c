@@ -26,7 +26,7 @@ CODE prionm[] =
 };
 
 int loglevel = LOG_NOTICE;
-
+int logging  = 0;
 static char *log_name = PACKAGE_NAME;
 
 
@@ -73,23 +73,40 @@ int log_list(char *buf, size_t len)
 /*
  * Open connection to syslog daemon and set initial log level
  */
-void log_init(char *ident)
+void log_init(char *ident, int use_syslog)
 {
     log_name = ident;
     if (!use_syslog)
 	return;
 
+    logging  = 1;
     openlog(ident, LOG_PID, LOG_DAEMON);
     setlogmask(LOG_UPTO(loglevel));
 }
 
+
+void prinl(int syserr, const char *fmt, ...)
+{
+    va_list ap;
+
+    fprintf(stderr, "%s: ", log_name);
+
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+
+    if (syserr)
+	fprintf(stderr, ": %s\n", strerror(syserr));
+    else
+	fprintf(stderr, "\n");
+}
 
 /*
  * Log errors and other messages to the system log daemon and to stderr,
  * according to the severity of the message and the current debug level.
  * For errors of severity LOG_ERR or worse, terminate the program.
  */
-void logit(int severity, int syserr, const char *format, ...)
+void logger(int severity, int syserr, const char *format, ...)
 {
     va_list ap;
     static char fmt[211] = "warning - ";
@@ -103,7 +120,7 @@ void logit(int severity, int syserr, const char *format, ...)
     va_end(ap);
     msg = (severity == LOG_WARNING) ? fmt : &fmt[10];
 
-    if (!use_syslog) {
+    if (!logging) {
 	if (severity > loglevel)
 	    return;
 
@@ -120,17 +137,13 @@ void logit(int severity, int syserr, const char *format, ...)
 	else
 	    fprintf(stderr, ": %s\n", strerror(syserr));
 
-	goto end;
+	return;
     }
 
     if (syserr != 0)
 	syslog(severity, "%s: %s", msg, strerror(syserr));
     else
 	syslog(severity, "%s", msg);
-
-  end:
-    if (severity <= LOG_ERR)
-	exit(1);
 }
 
 /**

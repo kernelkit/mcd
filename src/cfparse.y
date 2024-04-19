@@ -22,7 +22,7 @@
  * Local function declarations
  */
 static void        fatal(const char *fmt, ...);
-static void        warn(const char *fmt, ...);
+static void        warning(const char *fmt, ...);
 static void        yyerror(char *s);
 static char       *yytoken(void);
 static int         yylex(void);
@@ -72,9 +72,9 @@ stmt	: error
 
 	    glob($2, 0, NULL, &gl);
 	    for (size_t i = 0; i < gl.gl_pathc; i++) {
-		logit(LOG_DEBUG, 0, "Including file %s ...", gl.gl_pathv[i]);
+		dbg("Including file %s ...", gl.gl_pathv[i]);
 		if (config_parse(gl.gl_pathv[i]))
-		    warn("Failed including %s: %s", gl.gl_pathv[i], strerror(errno));
+		    warning("failed including %s", gl.gl_pathv[i]);
 	    }
 	    globfree(&gl);
 	}
@@ -171,31 +171,33 @@ ifmod	: DISABLE		{ ifi->ifi_flags |= IFIF_DISABLED; }
 
 static void fatal(const char *fmt, ...)
 {
-    va_list ap;
     char buf[MAXHOSTNAMELEN + 100];
+    va_list ap;
 
     va_start(ap, fmt);
     vsnprintf(buf, sizeof(buf), fmt, ap);
     va_end(ap);
 
-    logit(LOG_ERR, 0, "%s:%d: %s", config_file, lineno, buf);
+    errx("%s:%d: %s", config_file, lineno, buf);
+    exit(EX_DATAERR);
 }
 
-static void warn(const char *fmt, ...)
+static void warning(const char *fmt, ...)
 {
-    va_list ap;
     char buf[200];
+    va_list ap;
 
     va_start(ap, fmt);
     vsnprintf(buf, sizeof(buf), fmt, ap);
     va_end(ap);
 
-    logit(LOG_WARNING, 0, "%s:%d: %s", config_file, lineno, buf);
+    warnx("%s:%d: %s", config_file, lineno, buf);
 }
 
 static void yyerror(char *msg)
 {
-    logit(LOG_ERR, 0, "%s:%d: %s", config_file, lineno, msg);
+    errx("%s:%d: %s", config_file, lineno, msg);
+    exit(EX_DATAERR);
 }
 
 static char *yytoken(void)
@@ -333,9 +335,11 @@ void config_init(void)
 
     lineno = 0;
 
-    logit(LOG_DEBUG, 0, "Parsing file %s ...", config_file);
-    if (config_parse(config_file) && errno != ENOENT)
-	logit(LOG_ERR, errno, "Cannot open %s", config_file);
+    dbg("Parsing file %s ...", config_file);
+    if (config_parse(config_file) && errno != ENOENT) {
+	err("cannot open %s", config_file);
+	exit(EX_DATAERR);
+    }
 }
 
 int config_parse(const char *file)

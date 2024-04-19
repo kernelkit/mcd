@@ -68,21 +68,23 @@ void netlink_init(void)
 
     sd = socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
     if (sd == -1) {
-	logit(LOG_ERR, errno, "Failed opening NETLINK socket");
-	return;
+	err("failed opening NETLINK socket");
+	exit(EX_OSERR);
     }
 
     addr.nl_family = AF_NETLINK;
     addr.nl_groups = RTMGRP_IPV4_IFADDR | RTMGRP_LINK;
     if (bind(sd, (struct sockaddr *)&addr, sizeof(addr)) == -1) {
-	logit(LOG_ERR, errno, "Failed binding NETLINK socket");
+	err("failed binding NETLINK socket");
 	close(sd);
-        return;
+	exit(EX_OSERR);
     }
 
     id = pev_sock_add(sd, netlink_read, NULL);
-    if (id == -1)
-	logit(LOG_ERR, errno, "Failed registering NETLINK handler");
+    if (id == -1) {
+	err("failed registering NETLINK handler");
+	exit(EX_OSERR);
+    }
 }
 
 void netlink_exit(void)

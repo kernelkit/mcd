@@ -15,13 +15,13 @@ mcd_SOURCES      = main.c cfparse.y config.c defs.h	\
 		   igmp.c igmp.h			\
 		   inet.c inet.h			\
 		   ipc.c  ipc.h				\
-		   jsmn.h log.c				\
-		   bridge.c bridge.h			\
+		   log.c  log.h				\
+		   bridge.c bridge.h jsmn.h		\
 		   pev.c pev.h				\
 		   pathnames.h queue.h
 mcd_CPPFLAGS     = $(AM_CPPFLAGS)
 mcd_LDADD        = $(LIBS) $(LIBOBJS)
 
-mctl_SOURCES     = mctl.c queue.h
+mctl_SOURCES     = mctl.c defs.h log.c log.h queue.h
 mctl_CPPFLAGS    = $(AM_CPPFLAGS)
 mctl_LDADD       = $(LIBS) $(LIBOBJS)

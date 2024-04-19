@@ -114,7 +114,7 @@ static int ipc_read(int sd, char *cmd, ssize_t len)
 
 	cmd[num] = 0;
 	chomp(cmd);
-//	logit(LOG_DEBUG, 0, "IPC cmd: '%s'", cmd);
+//	dbg("IPC cmd: '%s'", cmd);
 
 	for (size_t i = 0; i < NELEMS(cmds); i++) {
 		struct ipcmd *c = &cmds[i];
@@ -134,7 +134,7 @@ static int ipc_write(int sd, char *msg, size_t sz)
 {
 	ssize_t len;
 
-//	logit(LOG_DEBUG, 0, "IPC rpl: '%s'", msg);
+//	dbg("IPC rpl: '%s'", msg);
 
 	while ((len = write(sd, msg, sz))) {
 		if (-1 == len) {
@@ -167,7 +167,7 @@ static int ipc_send(int sd, char *buf, size_t len, FILE *fp)
 		if (!ipc_write(sd, buf, strlen(buf)))
 			continue;
 
-		logit(LOG_WARNING, errno, "Failed communicating with client");
+		warn("Failed communicating with client");
 		return IPC_ERR;
 	}
 
@@ -180,7 +180,7 @@ static void ipc_show(int sd, int (*cb)(FILE *), char *buf, size_t len)
 
 	fp = tempfile();
 	if (!fp) {
-		logit(LOG_WARNING, errno, "Failed opening temporary file");
+		warn("Failed opening temporary file");
 		return;
 	}
 
@@ -452,7 +452,7 @@ static void ipc_help(int sd, char *buf, size_t len)
 
 		sz = snprintf(buf, len, "Cannot create tempfile: %s", strerror(errno));
 		if (write(sd, buf, sz) != sz)
-			logit(LOG_INFO, errno, "Client closed connection");
+			warn("Client closed connection");
 		return;
 	}
 
@@ -469,7 +469,7 @@ static void ipc_help(int sd, char *buf, size_t len)
 		if (!ipc_write(sd, buf, strlen(buf)))
 			continue;
 
-		logit(LOG_WARNING, errno, "Failed communicating with client");
+		warn("Failed communicating with client");
 	}
 
 	fclose(fp);
@@ -523,12 +523,12 @@ static void ipc_handle(int sd, void *arg)
 		break;
 
 	case IPC_ERR:
-		logit(LOG_WARNING, errno, "Failed reading command from client");
+		warn("Failed reading command from client");
 		rc = IPC_ERR;
 		break;
 
 	default:
-		logit(LOG_WARNING, 0, "Invalid IPC command: %s", cmd);
+		warnx("Invalid IPC command: %s", cmd);
 		break;
 	}
 
@@ -546,8 +546,8 @@ void ipc_init(char *sockfile)
 
 	sd = socket(AF_UNIX, SOCK_STREAM, 0);
 	if (sd < 0) {
-		logit(LOG_ERR, errno, "Failed creating IPC socket");
-		return;
+		err("failed creating IPC socket");
+		exit(EX_OSERR);
 	}
 
 	/* Portable SOCK_NONBLOCK replacement, ignore any error. */
@@ -563,18 +563,18 @@ void ipc_init(char *sockfile)
 		snprintf(sun.sun_path, sizeof(sun.sun_path), _PATH_MCD_SOCK, ident);
 
 	unlink(sun.sun_path);
-	logit(LOG_DEBUG, 0, "Binding IPC socket to %s", sun.sun_path);
+	dbg("Binding IPC socket to %s", sun.sun_path);
 
 	len = offsetof(struct sockaddr_un, sun_path) + strlen(sun.sun_path);
 	if (bind(sd, (struct sockaddr *)&sun, len) < 0 || listen(sd, 1)) {
-		logit(LOG_WARNING, errno, "Failed binding IPC socket, client disabled");
+		warn("Failed binding IPC socket, client disabled");
 		close(sd);
 		return;
 	}
 
 	ipc_sockid = pev_sock_add(sd, ipc_handle, NULL);
 	if (ipc_sockid == -1)
-		logit(LOG_ERR, 0, "Failed registering IPC handler");
+		errx("Failed registering IPC handler");
 
 	ipc_socket = sd;
 }

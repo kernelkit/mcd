@@ -125,8 +125,8 @@ static int populate(void)
 		if (!e) {
 			e = alloc();
 			if (!e) {
-				logit(LOG_ERR, errno, "Failed allocating mdb entry");
-				break;
+				err("failed allocating mdb entry");
+				exit(EX_OSERR);
 			}
 		}
 
@@ -169,10 +169,10 @@ static int has(char *path, char *setting)
 	char  file[512];
 
 	if (snprintf(file, sizeof(file), "%s/%s", path, setting) >= (int)sizeof(file)) {
-		logit(LOG_WARNING, 0, "Internal buffer overflow, cannot read value of %s/%s", path, setting);
+		warnx("Internal buffer overflow, cannot read value of %s/%s", path, setting);
 		return 0;
 	}
-	logit(LOG_DEBUG, 0, "Has %s", file);
+	dbg("Has %s", file);
 
 	return value(file);
 }
@@ -183,16 +183,16 @@ static char *got(const char *brname, char *prop, int setval, int first)
 	static char path[256];
 	static DIR *dir = NULL;
 
-	logit(LOG_DEBUG, 0, "Checking %s for property %s ...", brname, prop);
+	dbg("Checking %s for property %s ...", brname, prop);
 	if (first) {
 		if (dir)
 			closedir(dir);
 
 		snprintf(path, sizeof(path), SYSFS_PATH_"%s/brif", brname);
-		logit(LOG_DEBUG, 0, "Opening %s to figure out %s ports ...", path, brname);
+		dbg("Opening %s to figure out %s ports ...", path, brname);
 		dir = opendir(path);
 		if (!dir) {
-			logit(LOG_WARNING, errno, "Failed listing %s ports", brname);
+			warn("Failed listing %s ports", brname);
 			return NULL;
 		}
 	}
@@ -284,7 +284,7 @@ static void jsmnpr(const char *data, const char *dscr, jsmntok_t *tok)
 	char buf[tok->end - tok->start + 1];
 
 	strlcpy(buf, data + tok->start, sizeof(buf));
-	logit(LOG_DEBUG, 0, "%s type:%d: %s", dscr, tok->type, buf);
+	dbg("%s type:%d: %s", dscr, tok->type, buf);
 }
 #endif
 
@@ -311,13 +311,13 @@ void bridge_prop(FILE *fp, const char *brname, const char *prop)
 
 	data = malloc(BUFSIZ);
 	if (!data) {
-		logit(LOG_ERR, errno, "malloc");
-		return;
+		err("failed allocating json data buffer");
+		exit(EX_OSERR);
 	}
 
 	pp = popen(cmd, "r");
 	if (!pp) {
-		logit(LOG_ERR, errno, "popen");
+		warn("popen to query bridge properties | jq");
 		goto err;
 	}
 
@@ -327,7 +327,7 @@ void bridge_prop(FILE *fp, const char *brname, const char *prop)
 
 	rc = jsmn_parse(&parser, data, strlen(data), tokens, NELEMS(tokens));
 	if (rc < 0) {
-		logit(LOG_ERR, 0, "Failed parseing JSON: %d", rc);
+		warnx("failed parsing JSON data: %d", rc);
 		goto err;
 	}
 
@@ -384,7 +384,7 @@ void bridge_router_ports(FILE *fp, const char *brname)
 	snprintf(cmd, sizeof(cmd), fmt, brname ? "." : "", brname ?: "[]", brname ? "dev " : "", brname ?: "");
 	pp = popen(cmd, "r");
 	if (!pp) {
-		logit(LOG_ERR, errno, "popen");
+		warn("popen to query bridge router ports | jq");
 		goto err;
 	}
 
@@ -433,7 +433,7 @@ void compat_prop(FILE *fp, const char *brname, char *prop, int setval)
 			goto out;
 
 		strlcpy(name->ifname, ifname, sizeof(name->ifname));
-		logit(LOG_DEBUG, 0, "Loop, name %s", name->ifname);
+		dbg("Loop, name %s", name->ifname);
 
 		TAILQ_INSERT_TAIL(&pnl, name, link);	
 		num++;
@@ -451,7 +451,7 @@ void compat_prop(FILE *fp, const char *brname, char *prop, int setval)
 	}
 	
 	TAILQ_FOREACH(name, &pnl, link) {
-		logit(LOG_DEBUG, 0, "Foreach, port name: %s", name->ifname);
+		dbg("Foreach, port name: %s", name->ifname);
 		if (json)
 			snprintf(array[x], len, "\"%s\"", name->ifname);
 		else
@@ -462,7 +462,7 @@ void compat_prop(FILE *fp, const char *brname, char *prop, int setval)
 	qsort(array, num, sizeof(char *), cmpstringp);
 
 	for (int i = 0; i < num; i++) {
-		logit(LOG_DEBUG, 0, "Array val: %s, index: %d", array[i], i);
+		dbg("Array val: %s, index: %d", array[i], i);
 		fprintf(fp, "%s%s", i ? ", " : " ", array[i]);
 	}
 
@@ -557,7 +557,7 @@ static void compat_router_ports(FILE *fp, const char *brname)
 
 		seen = prev_ifname[0] && !strncmp(ifname, prev_ifname, sizeof(ifname));
 
-		logit(LOG_DEBUG, 0, "Found router port %s with %.2f s timeout\n", ifname, timer);
+		dbg("Found router port %s with %.2f s timeout\n", ifname, timer);
 		if (timer > 0.0 && !seen) {
 			if (json)
 				fprintf(fp, "%s\"%s\"", num ? ", " : " ", ifname);
@@ -602,17 +602,17 @@ static void dumpster(char *addr, char *mac, size_t mlen, char *port, size_t plen
 	pp = popen("ip neigh", "r");
 	if (pp) {
 		while (fgets(buf, sizeof(buf), pp)) {
-			logit(LOG_DEBUG, 0, "line: %s", buf);
+			dbg("line: %s", buf);
 			ptr = strpbrk(buf, " \t\n");
 			if (!ptr)
 				continue;
 
 			*ptr++ = 0;
-			logit(LOG_DEBUG, 0, "line ip '%s' vs addr '%s'", buf, addr);
+			dbg("line ip '%s' vs addr '%s'", buf, addr);
 			if (strcmp(buf, addr))
 				continue;
 
-			logit(LOG_DEBUG, 0, "Searching line %s for lladdr", ptr);
+			dbg("Searching line %s for lladdr", ptr);
 			ptr = strstr(ptr, "lladdr");
 			if (!ptr)
 				continue;
@@ -635,7 +635,7 @@ static void dumpster(char *addr, char *mac, size_t mlen, char *port, size_t plen
 	pp = popen("bridge fdb", "r");
 	if (pp) {
 		while (fgets(buf, sizeof(buf), pp)) {
-			logit(LOG_DEBUG, 0, "line: %s", buf);
+			dbg("line: %s", buf);
 			if (strncmp(buf, lladdr, 17))
 				continue;
 
@@ -763,7 +763,7 @@ int show_bridge_compat(FILE *fp)
 	 *    1  224.0.0.251      01:00:5E:00:00:FB  Eth 5
 	 */
 	if (populate()) {
-		logit(LOG_ERR, 0, "Failed reading MDB");
+		warnx("failed reading MDB");
 		compat = 0;
 		return 1;
 	}
@@ -805,7 +805,7 @@ int show_bridge_groups(FILE *fp)
 	int first = 1;
 
 	if (populate()) {
-		logit(LOG_ERR, 0, "Failed reading MDB");
+		warnx("failed reading MDB");
 		return 1;
 	}
 

@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: ISC */
 
 #include "defs.h"
-#include <err.h>
+
 #include <getopt.h>
 #include <paths.h>
 #include <fcntl.h>
@@ -33,7 +33,7 @@ static int compose_paths(void)
 
 	config_file = malloc(len);
 	if (!config_file) {
-	    logit(LOG_ERR, errno, "Failed allocating memory, exiting.");
+	    err("Failed allocating memory, exiting");
 	    exit(1);
 	}
 
@@ -169,7 +169,7 @@ int main(int argc, char *argv[])
     }
 
     if (geteuid() != 0) {
-	fprintf(stderr, "%s: must be root\n", ident);
+	errx("must be root");
 	exit(1);
     }
 
@@ -197,7 +197,7 @@ int main(int argc, char *argv[])
 	}
 #else
 	if (setsid() < 0)
-	    perror("setsid");
+	    warn("setsid");
 #endif
     } else
 	setlinebuf(stderr);
@@ -205,8 +205,8 @@ int main(int argc, char *argv[])
     /*
      * Setup logging
      */
-    log_init(ident);
-    logit(LOG_DEBUG, 0, "%s starting", versionstring);
+    log_init(ident, use_syslog);
+    dbg("%s starting", versionstring);
 
     compose_paths();
 
@@ -227,7 +227,7 @@ int main(int argc, char *argv[])
 
     /* Signal world we are now ready to start taking calls */
     if (pidfile(pid_file))
-	logit(LOG_WARNING, errno, "Cannot create pidfile");
+	warn("Cannot create pidfile");
 
     return pev_run();
 }
@@ -255,7 +255,7 @@ static void handle_signals(int signo, void *arg)
     switch (signo) {
 	case SIGINT:
 	case SIGTERM:
-	    logit(LOG_NOTICE, 0, "%s exiting", versionstring);
+	    note("%s exiting", versionstring);
 	    cleanup();
 	    free(pid_file);
 	    free(config_file);
