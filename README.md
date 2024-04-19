@@ -1,6 +1,6 @@
-Bridge Querier Helper
-=====================
-[![License Badge][]][License] [![GitHub Status][]][GitHub] [![Coverity Status][]][Coverity Scan]
+Bridge Multicast Querier Helper
+===================================
+[![1][]][2] [![3][]][4] [![5][]][6]
 
 This daemon is a querier helper for the Linux bridge.  Currently IGMP
 (IPv4) is supported, MLD (IPv6) querier support is planned.
@@ -94,9 +94,9 @@ always be in `proxy-mode`.  To activate:
     iface br0 vlan 42 enable
 
 
-[GitHub]:          https://github.com/kernelkit/mcd/actions/workflows/build.yml/
-[GitHub Status]:   https://github.com/kernelkit/mcd/actions/workflows/build.yml/badge.svg
-[License]:         https://en.wikipedia.org/wiki/ISC_license
-[License Badge]:   https://img.shields.io/badge/License-ISC-blue.svg
-[Coverity Scan]:   https://scan.coverity.com/projects/24475
-[Coverity Status]: https://scan.coverity.com/projects/24475/badge.svg
+[1]: https://img.shields.io/badge/License-ISC-blue.svg
+[2]: https://en.wikipedia.org/wiki/ISC_license
+[3]: https://github.com/kernelkit/mcd/actions/workflows/build.yml/badge.svg
+[4]: https://github.com/kernelkit/mcd/actions/workflows/build.yml/
+[5]: https://scan.coverity.com/projects/30099/badge.svg
+[6]: https://scan.coverity.com/projects/30099
