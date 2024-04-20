@@ -19,7 +19,9 @@
 
 #include <ctype.h>
 #include <fcntl.h>
+#include <grp.h>
 #include <stddef.h>
+#include <sys/stat.h>
 
 #include "bridge.h"
 #include "defs.h"
@@ -541,6 +543,9 @@ static void ipc_handle(int sd, void *arg)
 
 void ipc_init(char *sockfile)
 {
+	struct group *grp;
+	int uid, gid = 0;
+	mode_t oldmask;
 	socklen_t len;
 	int sd;
 
@@ -562,19 +567,31 @@ void ipc_init(char *sockfile)
 	else
 		snprintf(sun.sun_path, sizeof(sun.sun_path), _PATH_MCD_SOCK, ident);
 
-	unlink(sun.sun_path);
-	dbg("Binding IPC socket to %s", sun.sun_path);
+	uid = geteuid();
+	if ((grp = getgrnam(DEFGROUP)) == NULL)
+		warn("failed getting group %s gid", DEFGROUP);
+	else
+		gid = grp->gr_gid;
 
+	unlink(sun.sun_path);
+	oldmask = umask(0117);
+
+	dbg("binding IPC socket to %s", sun.sun_path);
 	len = offsetof(struct sockaddr_un, sun_path) + strlen(sun.sun_path);
 	if (bind(sd, (struct sockaddr *)&sun, len) < 0 || listen(sd, 1)) {
-		warn("Failed binding IPC socket, client disabled");
+		warn("failed binding IPC socket, client disabled");
 		close(sd);
 		return;
 	}
 
+	if (chown(sun.sun_path, uid, gid))
+		warn("failed setting group %s on %s", DEFGROUP, sun.sun_path);
+
+	umask(oldmask);
+
 	ipc_sockid = pev_sock_add(sd, ipc_handle, NULL);
 	if (ipc_sockid == -1)
-		errx("Failed registering IPC handler");
+		errx("failed registering IPC handler");
 
 	ipc_socket = sd;
 }

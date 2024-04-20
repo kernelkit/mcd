@@ -48,11 +48,19 @@ AC_ARG_ENABLE(test,
         AS_HELP_STRING([--enable-test], [enable tests, requries unshare, tshark, etc.]),
         enable_test="$enableval", enable_test="no")
 
+AC_ARG_WITH(group,
+	AS_HELP_STRING([--with-group=NAME], [Group for /run/mcd.sock (mctl), default: root]),
+	[group=$withval], [group=root])
+
 AC_ARG_WITH([systemd],
      [AS_HELP_STRING([--with-systemd=DIR], [Directory for systemd service files])],,
      [with_systemd=auto])
 
 # Create config.h from selected features and fallback defautls
+AS_IF([test "x$with_group" != "xno"], [
+	AS_IF([test "x$group" = "xyes"], [
+		group=root])])
+AC_DEFINE_UNQUOTED(DEFGROUP, "$group", [For /run/finit/socket])
 AS_IF([test "x$with_systemd" = "xyes" -o "x$with_systemd" = "xauto"], [
      def_systemd=$($PKG_CONFIG --variable=systemdsystemunitdir systemd)
      AS_IF([test "x$def_systemd" = "x"],
@@ -100,6 +108,7 @@ cat <<EOF
   C Compiler............: $CC $CFLAGS $CPPFLAGS $LDFLAGS $LIBS
 
 Optional features:
+  IPC group.............: $group
   systemd...............: $with_systemd
   Unit tests............: $enable_test
 
