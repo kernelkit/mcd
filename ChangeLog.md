@@ -4,7 +4,32 @@ Change Log
 All relevant, user visible, changes are documented in this file.
 
 
-[v2.2][] - 2024-04-08
+[v2.3][] - 2024-04-21
+---------------------
+
+### Changes
+ - Add IGMP proto support for raw VLAN interfaces
+ - New `mctl show mdb` command
+ - New `mctl check` command to probe for required tools
+ - All `mctl` commands now run `mctl check` internally to ensure
+   required tools are available
+ - Refactored logging, all log messages affected and may have been
+   altered in their output, and severity
+ - Add `configure` support for setting IPC socket group ID when `mcd`
+   creates its IPC socket, useful to provide `wheel` group access
+
+### Fixes
+ - Fix router port detection for VLAN filtering bridges
+ - Fix duplicate log message on `send_igmp()` failure
+ - Fix `time_t -> int` misuse, found by Coverity Scan
+ - Fix uninitialized scalars, found by Coverity Scan
+ - Fix resource leak, found by Coverity Scan
+ - Fix possible out-of-bounds write, found by Coverity Scan
+ - Fix possible out-of-bounds access, found by Coverity Scan
+ - Fix build warnings, removing unused functions and adjusting levels
+
+
+[v2.2][] - 2024-04-17
 ---------------------
 
 ### Changes

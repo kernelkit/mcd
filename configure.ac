@@ -1,5 +1,5 @@
 AC_PREREQ([2.69])
-AC_INIT([mcd], [2.2], [https://github.com/kernelkit/mcd/issues])
+AC_INIT([mcd], [2.3], [https://github.com/kernelkit/mcd/issues])
 AC_CONFIG_AUX_DIR(.aux)
 AM_INIT_AUTOMAKE([1.11 foreign])
 AM_SILENT_RULES([yes])
