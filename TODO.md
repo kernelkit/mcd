@@ -4,8 +4,6 @@ Rough Plan for mcd
 General
 -------
 
- - Probe for tools (ip, bridge, jq) in IPC code and return error if
-   any is missing.  mcd depends on them
  - Look for better IP than 169 for each interface
  - Add basic bridge per-VLAN setup instead of setupd
  - Handle creating and removal of bridge interfaces where mcd is

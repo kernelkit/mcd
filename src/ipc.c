@@ -39,6 +39,7 @@ int nested = 0;
 enum {
 	IPC_ERR = -1,
 	IPC_OK  = 0,
+	IPC_CHECK,
 	IPC_HELP,
 	IPC_VERSION,
 	IPC_IGMP,
@@ -56,6 +57,7 @@ struct ipcmd {
 	char *help;
 } cmds[] = {
 	{ IPC_HELP,       "help", NULL, "This help text" },
+	{ IPC_CHECK,      "check", NULL, "Check tooling availability" },
 	{ IPC_VERSION,    "version", NULL, "Show daemon version" },
 	{ IPC_IGMP_GRP,   "show groups", "[json]", "Show IGMP/MLD group memberships" },
 	{ IPC_IGMP_IFACE, "show interfaces", "[json]", "Show IGMP/MLD interface status" },
@@ -66,6 +68,55 @@ struct ipcmd {
 	{ IPC_IGMP,       "show", "[json]", NULL }, /* hidden default */
 };
 
+static int tool_exists(FILE *fp, const char *tool, int verbose)
+{
+	int exists = 0;
+	char cmd[256];
+	FILE *pp;
+
+	snprintf(cmd, sizeof(cmd), "command -v %s", tool);
+	pp = popen(cmd, "r");
+	if (pp) {
+		int ch = fgetc(pp);
+
+		if (ch != EOF) {
+			ungetc(ch, pp);
+			if (verbose && fgets(cmd, sizeof(cmd), pp))
+				fprintf(fp, "%s", cmd);
+			exists = 1;
+		}
+		pclose(pp);
+	}
+
+	return exists;
+}
+
+static int check_deps(FILE *fp, int verbose)
+{
+	const char *tools[] = { "ip", "bridge", "jq" };
+	int not_found = 0;
+
+	for (size_t i = 0; i < NELEMS(tools); i++) {
+		if (verbose)
+			fprintf(fp, "Checking for %6s: ", tools[i]);
+		if (tool_exists(fp, tools[i], verbose))
+			continue;
+
+		if (verbose)
+			fprintf(fp, "FAIL!\n");
+		not_found++;
+	}
+
+	if (verbose)
+		fprintf(fp, "\nResult: ");
+
+	if (not_found)
+		fprintf(fp, "FAIL!  Not all tools found in $PATH: %s\n", getenv("PATH") ?: "");
+	else if (verbose)
+		fprintf(fp, "OK.\n");
+
+	return not_found;
+}
 
 static size_t strip(char *cmd, size_t len)
 {
@@ -186,9 +237,13 @@ static void ipc_show(int sd, int (*cb)(FILE *), char *buf, size_t len)
 		return;
 	}
 
+	if (check_deps(fp, 0))
+		goto fail;
+
 	if (cb(fp))
 		return;
 
+fail:
 	rewind(fp);
 	ipc_send(sd, buf, len, fp);
 	fclose(fp);
@@ -438,9 +493,34 @@ static int show_mdb(FILE *fp)
 	return pclose(pp);
 }
 
-static int show_version(FILE *fp)
+static int show_version(char *buf, size_t len)
 {
-	fputs(versionstring, fp);
+	snprintf(buf, len, "%s\n", versionstring);
+	return 0;
+}
+
+static int ipc_deps(int sd, char *buf, size_t len)
+{
+	FILE *fp;
+
+	fp = tempfile();
+	if (!fp) {
+		snprintf(buf, len, "Failed opening temporary file\n");
+		return 0;
+	}
+
+	check_deps(fp, 1);	/* ignore return value here */
+
+	rewind(fp);
+	while (fgets(buf, len, fp)) {
+		if (!ipc_write(sd, buf, strlen(buf)))
+			continue;
+
+		warn("Failed communicating with client");
+	}
+
+	fclose(fp);
+
 	return 0;
 }
 
@@ -492,8 +572,12 @@ static void ipc_handle(int sd, void *arg)
 		ipc_help(client, cmd, sizeof(cmd));
 		break;
 
+	case IPC_CHECK:
+		ipc_deps(client, cmd, sizeof(cmd));
+		break;
+
 	case IPC_VERSION:
-		ipc_show(client, show_version, cmd, sizeof(cmd));
+		ipc_wrap(client, show_version, cmd, sizeof(cmd));
 		break;
 
 	case IPC_IGMP_GRP:
