@@ -241,33 +241,25 @@ static int ipc_ping(void)
 
 static int get_width(void)
 {
-	/* Max width for highlighted lines. */
-	int max_width = 78;
-	int ret = max_width;
+	int cols = 79;
 #ifdef HAVE_TERMIOS_H
 	struct pollfd fd = { STDIN_FILENO, POLLIN, 0 };
+	struct winsize ws = { 0 };
 	struct termios tc, saved;
-	struct winsize ws;
 	char buf[42];
 
 	if (!ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws)) {
-		if (ws.ws_col > 0 && ws.ws_col <= max_width)
+		if (ws.ws_col > 0)
 			return ws.ws_col;
-		else if (ws.ws_col > max_width)
-			return max_width;
-
 	} else if (!isatty(STDOUT_FILENO)) {
 		char *columns;
 
 		/* we may be running under watch(1) */
 		columns = getenv("COLUMNS");
-		if (columns)
-			ret = atoi(columns);
-
-		if (ret > max_width)
-			ret = max_width;
-
-		return ret;
+		if (columns) {
+			cols = atoi(columns);
+			return cols;
+		}
 	}
 
 	memset(buf, 0, sizeof(buf));
@@ -282,17 +274,14 @@ static int get_width(void)
 		int row, col;
 
 		if (scanf("\e[%d;%dR", &row, &col) == 2)
-			ret = col;
+			cols = col;
 	}
 
 	fprintf(stderr, "\e8");
 	tcsetattr(STDERR_FILENO, TCSANOW, &saved);
 #endif
 
-	if (ret > max_width)
-		ret = max_width;
-
-	return ret;
+	return cols;
 }
 
 static char *chomp(char *str)
@@ -311,12 +300,10 @@ static char *chomp(char *str)
 	return str;
 }
 
-static void print(char *line, int indent)
+static void print(char *line, int indent, int cols)
 {
 	int type = 0;
 	int i, len;
-	int index = 0;
-	int str_len;
 
 	chomp(line);
 
@@ -340,12 +327,12 @@ static void print(char *line, int indent)
 		if (!plain) {
 			if (len == 0) /* skip empty lines in fancy output */
 				return;
-			fprintf(stdout, "\e[4m%*s\e[0m\n%s\n", get_width(), "", line);
+			fprintf(stdout, "\e[4m%*s\e[0m\n%s\n", cols, "", line);
 			return;
 
 		}
 
-		len = len < 79 ? 79 : len;
+		len = len < cols ? cols : len;
 		for (i = 0; i < len; i++)
 			fputc('_', stdout);
 		fputs("\n", stdout);
@@ -357,12 +344,12 @@ static void print(char *line, int indent)
 		if (!plain) {
 			if (len == 0) /* skip empty lines in fancy output */
 				return;
-			len = get_width() - len;
+			len = cols - len;
 			fprintf(stdout, "\e[7m%s%*s\e[0m\n", line, len, "");
 			return;
 		}
 
-		len = len < 79 ? 79 : len;
+		len = len < cols ? cols : len;
 		if (line[0])
 			fprintf(stdout, "%*s%s\n", indent, "", line);
 		for (i = 0; i < len; i++)
@@ -371,24 +358,7 @@ static void print(char *line, int indent)
 		break;
 
 	default:
-		str_len = strlen(line);
-		len = 79;
-
-		if (!plain && str_len > len) {
-			for (int x = 0; x <= str_len; x++) {
-				fputc(line[0], stdout);
-				
-				if (index >= len && line[0] == ' ') {
-					index = 0;
-					fprintf(stdout, "\n\t\t\t");
-					index = 24;
-				}
-				line++;
-				index++;
-			}
-		}
-		else
-			puts(line);
+		puts(line);	/* let line wrapping be handled by terminal */
 		break;
 	}
 }
@@ -399,8 +369,8 @@ static int get(char *cmd, FILE *fp)
 	FILE *lfp = NULL;
 	int indent = 0;
 	char buf[768];
+	int sd, cols;
 	ssize_t len;
-	int sd;
 
 	if (debug)
 		warn("Sending cmd %s", cmd);
@@ -463,8 +433,9 @@ static int get(char *cmd, FILE *fp)
 	if (!lfp)
 		return 0;
 
+	cols = get_width();
 	while (fgets(buf, sizeof(buf), fp))
-		print(buf, indent);
+		print(buf, indent, cols);
 
 	fclose(lfp);
 
