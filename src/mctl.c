@@ -641,8 +641,11 @@ int main(int argc, char *argv[])
 			break;
 
 		case 'h':
-		case '?':
 			return usage(0);
+
+		case '?':
+			/* optopt is set for unrecognized options, clear for -? */
+			return usage(optopt ? 1 : 0);
 
 		case 'i':	/* --ident=NAME */
 			ident = optarg;
@@ -666,6 +669,9 @@ int main(int argc, char *argv[])
 
 		case 'v':
 			return version();
+
+		default:
+			return usage(1);
 		}
 	}
 

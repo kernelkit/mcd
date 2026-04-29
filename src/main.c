@@ -49,11 +49,13 @@ static int compose_paths(void)
 
 static int usage(int code)
 {
-    char pidbuf[strlen(pid_file) + 10];
-    char ipcbuf[strlen(_PATH_MCD_SOCK) + 42];
+    char pidbuf[PATH_MAX];
+    char ipcbuf[PATH_MAX];
     char *nm = PACKAGE_NAME;
     char *sockfn = ipcbuf;
     char *pidfn = pidbuf;
+
+    compose_paths();
 
     if (pid_file[0] == '/')
 	pidfn = pid_file;
@@ -122,7 +124,6 @@ int main(int argc, char *argv[])
 	    break;
 
 	case 'h':
-	    compose_paths();
 	    return usage(0);
 
 	case 'i':	/* --ident=NAME */
