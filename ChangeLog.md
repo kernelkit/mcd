@@ -4,6 +4,27 @@ Change Log
 All relevant, user visible, changes are documented in this file.
 
 
+[v2.4][] - 2026-04-29
+---------------------
+
+### Changes
+ - New `mctl show router-ports` command to list multicast router ports grouped
+   per bridge, also available as JSON, issue kernelkit/infix#395
+ - Improve `mctl show igmp json` multicast-router-ports output; entries are
+   now per-bridge objects with `bridge` and `ports` keys
+ - RFC3376 §8.6/§8.7: send a startup query burst when assuming the querier
+   role.  The querier now sends `Robustness Variable` General Queries at
+   `Query Interval / 4` before switching to the normal query cadence, giving
+   hosts a much faster initial response, issue #5
+ - `mctl` output width now follows the actual terminal width instead of being
+   capped at 78 columns; line wrapping is left to the terminal
+
+### Fixes
+ - Fix #4: IGMP queries sent with all-zeroes source MAC when an interface
+   appears via netlink after the configuration file has already been parsed.
+   The hardware address is now re-fetched on every netlink `RTM_NEWLINK` event
+
+
 [v2.3][] - 2024-04-21
 ---------------------
 
