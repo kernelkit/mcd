@@ -101,6 +101,17 @@ done:
 }
 
 /*
+ * Fetch (or re-fetch) the hardware address for an interface.  Called when
+ * an interface appears via netlink to handle the case where the interface
+ * did not exist when the config was first parsed.
+ */
+void config_iface_update(struct ifi *ifi)
+{
+    if (getmac(ifi->ifi_name, ifi->ifi_hwaddr, sizeof(ifi->ifi_hwaddr)))
+	warn("failed finding hw address for iface %s", ifi->ifi_name);
+}
+
+/*
  * Called by parser to add an interface to start or watch for in the future
  */
 struct ifi *config_iface_add(char *ifname)

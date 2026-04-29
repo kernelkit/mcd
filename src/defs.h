@@ -159,6 +159,7 @@ extern struct ifi      *config_find_ifname(char *);
 extern struct ifi      *config_find_ifaddr(in_addr_t);
 extern struct ifi      *config_find_iface(int, int);
 extern struct ifi      *config_init_tunnel(in_addr_t, in_addr_t, uint32_t);
+extern void             config_iface_update(struct ifi *);
 extern void             config_iface_addr_add(int, struct sockaddr *, unsigned int);
 extern void		config_iface_init(void);
 

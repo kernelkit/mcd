@@ -193,6 +193,7 @@ void iface_add(int ifindex, int flags)
 
     dbg("Marking %s as now available in system", ifi->ifi_name);
     ifi->ifi_index = ifindex;
+    config_iface_update(ifi);
 
     iface_check(ifindex, flags);
 }
