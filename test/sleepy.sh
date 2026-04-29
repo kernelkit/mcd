@@ -11,7 +11,7 @@
 # 2nd interface has a later arrival of an IP address, we expect two Q,
 # but might get three due to global query timer currently.
 #
-# 3rd interfae is down at start, comes up with one Q for last interval
+# 3rd interface is down at start, comes up with at least one Q for last interval
 #
 
 # shellcheck source=/dev/null
@@ -87,8 +87,8 @@ cat "/tmp/$NM/result"
 
 echo " => $lines1 IGMP Query on eth0, expected 3"
 echo " => $lines2 IGMP Query on eth1, expected 2"
-echo " => $lines3 IGMP Query on eth2, expected 1"
+echo " => $lines3 IGMP Query on eth2, expected >=1"
 # shellcheck disable=SC2086 disable=SC2166
-[ $lines1 -ge 3 -a $lines2 -ge 2 -a $lines3 -eq 1 ] || FAIL
+[ $lines1 -ge 3 -a $lines2 -ge 2 -a $lines3 -ge 1 ] || FAIL
 
 OK

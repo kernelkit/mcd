@@ -1,6 +1,7 @@
 #!/bin/sh
-# Verifies proper parsing of .conf file, and operation wrt two queries
-# in the given time frame.  TODO: check delta between queries.
+# Verifies proper parsing of .conf file, and operation wrt queries in the
+# given time frame: initial query + startup burst (RFC3376 §8.6/§8.7) + one
+# periodic.  TODO: check delta between queries.
 
 # shellcheck source=/dev/null
 . "$(dirname "$0")/lib.sh"
@@ -50,9 +51,9 @@ lines1=$(tshark -n -r "/tmp/$NM/eth0.pcap" 2>/dev/null | grep "IGMPv3 50 Members
 lines2=$(tshark -n -r "/tmp/$NM/eth1.pcap" 2>/dev/null | grep "IGMPv3 50 Membership Query" | tee -a "/tmp/$NM/result" | wc -l)
 cat "/tmp/$NM/result"
 
-echo " => $lines1 IGMP Query on eth0, expected 2"
-echo " => $lines2 IGMP Query on eth1, expected 2"
+echo " => $lines1 IGMP Query on eth0, expected 3"
+echo " => $lines2 IGMP Query on eth1, expected 3"
 # shellcheck disable=SC2086 disable=SC2166
-[ $lines1 -eq 2 -a $lines2 -eq 2 ] || FAIL
+[ $lines1 -ge 3 -a $lines2 -ge 3 ] || FAIL
 
 OK

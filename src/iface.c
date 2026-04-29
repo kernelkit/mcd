@@ -25,6 +25,9 @@ static void stop_iface         (struct ifi *ifi);
 static void send_query         (struct ifi *v, uint32_t dst, int code, uint32_t group);
 static void query_groups       (int timeout, void *arg);
 
+static void startup_query_cb   (int timeout, void *arg);
+static void startup_query_timer(struct ifi *ifi);
+
 static void router_timeout_cb  (int timeout, void *arg);
 
 static void delete_group_cb    (int timeout, void *arg);
@@ -87,6 +90,7 @@ void iface_zero(struct ifi *ifi)
     ifi->ifi_querier	= NULL;
     ifi->ifi_query_interval = igmp_query_interval;
     ifi->ifi_timerid	= 0;
+    ifi->ifi_startup_timerid = 0;
     ifi->ifi_igmpv1_warn = 0;
 }
 
@@ -173,6 +177,7 @@ void iface_check_election(struct ifi *ifi)
     dbg("Assuming %squerier duties on interface %s",
           is_igmp_proxy(ifi) ? "proxy " : "", ifi->ifi_name);
     send_query(ifi, allhosts_group, igmp_response_interval, 0);
+    startup_query_timer(ifi);	/* RFC3376 §8.6, §8.7 startup query burst */
 }
 
 /*
@@ -361,8 +366,12 @@ static void stop_iface(struct ifi *ifi)
     struct listaddr *a, *tmp;
 
     /*
-     * Stop query timer
+     * Stop query timers (periodic and startup burst)
      */
+    if (ifi->ifi_startup_timerid > 0) {
+	pev_timer_del(ifi->ifi_startup_timerid);
+	ifi->ifi_startup_timerid = 0;
+    }
     if (ifi->ifi_timerid > 0)
         pev_timer_del(ifi->ifi_timerid);
     ifi->ifi_timerid = 0;
@@ -900,6 +909,61 @@ void accept_membership_report(int ifindex, int vid, uint32_t src, uint32_t dst, 
 }
 
 /*
+ * RFC3376 §8.6/§8.7: Send remaining startup queries at Startup Query Interval.
+ * Called once per fire; re-arms itself until the count reaches zero.
+ */
+static void startup_query_cb(int timeout, void *arg)
+{
+    cbk_t *cbk = (cbk_t *)arg;
+    struct ifi *ifi;
+
+    ifi = config_find_iface(cbk->ifindex, cbk->vid);
+    if (!ifi || !(ifi->ifi_flags & IFIF_IGMP_QUERIER))
+	goto end;
+
+    send_query(ifi, allhosts_group, igmp_response_interval, 0);
+    if (--cbk->num > 0) {
+	pev_timer_set(ifi->ifi_startup_timerid, cbk->delay * 1000000);
+	return;
+    }
+
+end:
+    if (ifi)
+	ifi->ifi_startup_timerid = pev_timer_del(ifi->ifi_startup_timerid);
+}
+
+/*
+ * Schedule the startup query burst: igmp_robustness - 1 additional queries
+ * (the first was already sent) at Startup Query Interval (Query Interval / 4).
+ */
+static void startup_query_timer(struct ifi *ifi)
+{
+    uint32_t qi = ifi->ifi_query_interval ? ifi->ifi_query_interval : igmp_query_interval;
+    uint32_t sqi = qi / 4 > 0 ? qi / 4 : 1;
+    cbk_t *cbk;
+
+    if (igmp_robustness <= 1)
+	return;
+
+    cbk = calloc(1, sizeof(cbk_t));
+    if (!cbk) {
+	err("failed allocating startup query timer");
+	exit(EX_OSERR);
+    }
+
+    cbk->ifindex = ifi->ifi_index;
+    cbk->vid     = ifi->ifi_vlan;
+    cbk->num     = igmp_robustness - 1;
+    cbk->delay   = sqi;
+
+    if (ifi->ifi_startup_timerid > 0)
+	pev_timer_del(ifi->ifi_startup_timerid);
+
+    ifi->ifi_startup_timerid = pev_timer_add(sqi * 1000000, 0, startup_query_cb, cbk);
+    pev_timer_set_cb_del(ifi->ifi_startup_timerid, free);
+}
+
+/*
  * When an active querier times out we assume the role here.
  */
 static void router_timeout_cb(int timeout, void *arg)
@@ -913,6 +977,7 @@ static void router_timeout_cb(int timeout, void *arg)
 
     ifi->ifi_flags |= IFIF_IGMP_QUERIER;
     send_query(ifi, allhosts_group, igmp_response_interval, 0);
+    startup_query_timer(ifi);	/* RFC3376 §8.6, §8.7 startup query burst */
 }
 
 /*
