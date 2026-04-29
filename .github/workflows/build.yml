@@ -28,7 +28,7 @@ jobs:
         run: |
           sudo apt-get -y update
           sudo apt-get -y install pkg-config libsystemd-dev ethtool socat tshark tree
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Configure
         # Build in a sub-directory so we can safely set a+w on all
         # directories.  Needed for `make check` since it runs with
@@ -54,7 +54,7 @@ jobs:
         run: |
           make check || (cat test/test-suite.log; false)
       - name: Upload Test Results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mcd-test-${{ matrix.compiler }}
           path: test/*

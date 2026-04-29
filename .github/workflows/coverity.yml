@@ -19,8 +19,8 @@ jobs:
         run: |
           sudo apt-get -y update
           sudo apt-get -y install pkg-config
-      - uses: actions/checkout@v4
-      - uses: actions/cache@v4
+      - uses: actions/checkout@v6
+      - uses: actions/cache@v5
         id: coverity-toolchain-cache
         with:
           path: cov-analysis-linux64
@@ -56,7 +56,7 @@ jobs:
             --form description="${PROJECT_NAME} $(git rev-parse HEAD)" \
             https://scan.coverity.com/builds?project=${COVERITY_PROJ}
       - name: Upload build.log
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverity-build.log
           path: cov-int/build-log.txt
