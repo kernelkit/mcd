@@ -2,7 +2,7 @@ EXTRA_DIST         = lib.sh basic.sh sleepy.sh two.sh ipc.sh late.sh router-port
 CLEANFILES         = *~ *.trs *.log
 
 TEST_EXTENSIONS    = .sh
-TESTS_ENVIRONMENT  = unshare -mrun
+TESTS_ENVIRONMENT  = unshare -mrun --map-auto
 
 TESTS              = sleepy.sh
 TESTS             += basic.sh

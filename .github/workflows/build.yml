@@ -47,6 +47,9 @@ jobs:
           size ~/tmp/sbin/mcd
           ~/tmp/sbin/mcd -h
           ~/tmp/sbin/mctl -h
+      - name: Enable unprivileged userns (unshare)
+        run: |
+          sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0
       - name: Test
         run: |
           make check || (cat test/test-suite.log; false)
