@@ -370,6 +370,51 @@ err:
 }
 
 /*
+ * Output per-bridge router ports as a JSON array of objects, or a flat
+ * sorted list in text mode (same as bridge_router_ports(fp, NULL)).
+ *
+ * Uses 'ip link show type bridge' (netlink, namespace-aware) to enumerate
+ * bridges, then queries router ports for each bridge individually.
+ */
+void bridge_router_ports_all(FILE *fp)
+{
+	const char *cmd = "ip -j link show type bridge | jq -r '.[].ifname'";
+	char buf[IFNAMSIZ + 2];
+	int first = 1;
+	FILE *pp;
+
+	if (!json) {
+		bridge_router_ports(fp, NULL);
+		return;
+	}
+
+	pp = popen(cmd, "r");
+	if (!pp)
+		return;
+
+	while (fgets(buf, sizeof(buf), pp)) {
+		char brname[IFNAMSIZ];
+		int once = 1;
+
+		if (!chomp(buf) || !buf[0])
+			continue;
+
+		strlcpy(brname, buf, sizeof(brname));
+
+		fprintf(fp, "%s\n%*s{\n", first ? "" : ",", prefix + 2, "");
+		prefix += 4;
+		jprint(fp, "bridge", brname, &once);
+		fprintf(fp, ",\n%*s\"ports\": [", prefix, "");
+		bridge_router_ports(fp, brname);
+		fprintf(fp, " ]");
+		prefix -= 4;
+		fprintf(fp, "\n%*s}", prefix + 2, "");
+		first = 0;
+	}
+	pclose(pp);
+}
+
+/*
  * Standardized way of reading out routers ports is now 'bridge -d mdb show'
  */
 void bridge_router_ports(FILE *fp, const char *brname)

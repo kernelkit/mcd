@@ -48,6 +48,7 @@ enum {
 	IPC_COMPAT,
 	IPC_STATUS,
 	IPC_MDB,
+	IPC_ROUTER_PORTS,
 };
 
 struct ipcmd {
@@ -56,16 +57,17 @@ struct ipcmd {
 	char *arg;
 	char *help;
 } cmds[] = {
-	{ IPC_HELP,       "help", NULL, "This help text" },
-	{ IPC_CHECK,      "check", NULL, "Check tooling availability" },
-	{ IPC_VERSION,    "version", NULL, "Show daemon version" },
-	{ IPC_IGMP_GRP,   "show groups", "[json]", "Show IGMP/MLD group memberships" },
-	{ IPC_IGMP_IFACE, "show interfaces", "[json]", "Show IGMP/MLD interface status" },
-	{ IPC_STATUS,     "show status", "[json]", "Show daemon status (default)" },
-	{ IPC_IGMP,       "show igmp", "[json]", "Show interfaces and group memberships" },
-	{ IPC_MDB,        "show mdb", NULL, "Show multicast forwarding database" },
-	{ IPC_COMPAT,     "show compat", "[detail]", "Show legacy output (test compat mode)" },
-	{ IPC_IGMP,       "show", "[json]", NULL }, /* hidden default */
+	{ IPC_HELP,         "help", NULL, "This help text" },
+	{ IPC_CHECK,        "check", NULL, "Check tooling availability" },
+	{ IPC_VERSION,      "version", NULL, "Show daemon version" },
+	{ IPC_IGMP_GRP,     "show groups", "[json]", "Show IGMP/MLD group memberships" },
+	{ IPC_IGMP_IFACE,   "show interfaces", "[json]", "Show IGMP/MLD interface status" },
+	{ IPC_ROUTER_PORTS, "show router-ports", "[json]", "Show multicast router ports per bridge" },
+	{ IPC_STATUS,       "show status", "[json]", "Show daemon status (default)" },
+	{ IPC_IGMP,         "show igmp", "[json]", "Show interfaces and group memberships" },
+	{ IPC_MDB,          "show mdb", NULL, "Show multicast forwarding database" },
+	{ IPC_COMPAT,       "show compat", "[detail]", "Show legacy output (test compat mode)" },
+	{ IPC_IGMP,         "show", "[json]", NULL }, /* hidden default */
 };
 
 static int tool_exists(FILE *fp, const char *tool, int verbose)
@@ -427,8 +429,8 @@ static int show_igmp(FILE *fp)
 		fprintf(fp, " ],\n");
 
 		fprintf(fp, "%*s\"multicast-router-ports\": [", prefix, "");
-		bridge_router_ports(fp, NULL);
-		fprintf(fp, " ],\n");
+		bridge_router_ports_all(fp);
+		fprintf(fp, "\n%*s],\n", prefix, "");
 
 		fprintf(fp, "%*s\"multicast-flood-ports\": [", prefix, "");
 		bridge_prop(fp, NULL, "mcast_flood");
@@ -491,6 +493,58 @@ static int show_mdb(FILE *fp)
 	}
 
 	return pclose(pp);
+}
+
+static int show_router_ports(FILE *fp)
+{
+	const char *cmd = "ip -j link show type bridge | jq -r '.[].ifname'";
+	char buf[IFNAMSIZ + 2];
+	int first = 1;
+	FILE *pp;
+
+	if (json) {
+		fprintf(fp, "[\n");
+		prefix += 2;
+	} else
+		fprintf(fp, "%-15s : %s=\n", "Bridge", "Router Port(s)");
+
+	pp = popen(cmd, "r");
+	if (!pp)
+		goto done;
+
+	while (fgets(buf, sizeof(buf), pp)) {
+		char brname[IFNAMSIZ];
+		int once = 1;
+
+		if (!chomp(buf) || !buf[0])
+			continue;
+
+		strlcpy(brname, buf, sizeof(brname));
+
+		if (json) {
+			fprintf(fp, "%s%*s{\n", first ? "" : ",\n", prefix, "");
+			prefix += 2;
+			jprint(fp, "bridge", brname, &once);
+			fprintf(fp, ",\n%*s\"ports\": [", prefix, "");
+			bridge_router_ports(fp, brname);
+			fprintf(fp, " ]");
+			prefix -= 2;
+			fprintf(fp, "\n%*s}", prefix, "");
+		} else {
+			fprintf(fp, "%-15s :", brname);
+			bridge_router_ports(fp, brname);
+		}
+		first = 0;
+	}
+	pclose(pp);
+
+done:
+	if (json) {
+		prefix -= 2;
+		fprintf(fp, "\n%*s]\n", prefix, "");
+	}
+
+	return 0;
 }
 
 static int show_version(char *buf, size_t len)
@@ -594,6 +648,10 @@ static void ipc_handle(int sd, void *arg)
 
 	case IPC_MDB:
 		ipc_show(client, show_mdb, cmd, sizeof(cmd));
+		break;
+
+	case IPC_ROUTER_PORTS:
+		ipc_show(client, show_router_ports, cmd, sizeof(cmd));
 		break;
 
 	case IPC_COMPAT:

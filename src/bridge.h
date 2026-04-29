@@ -5,8 +5,9 @@
 
 #include <stdio.h>
 
-extern void bridge_prop         (FILE *fp, const char *brname, const char *prop);
-extern void bridge_router_ports (FILE *fp, const char *brname);
+extern void bridge_prop             (FILE *fp, const char *brname, const char *prop);
+extern void bridge_router_ports     (FILE *fp, const char *brname);
+extern void bridge_router_ports_all (FILE *fp);
 
 extern int  show_bridge_compat  (FILE *fp);
 extern int  show_bridge_groups  (FILE *fp);
