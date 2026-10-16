@@ -88,12 +88,18 @@ emitter()
     done
 }
 
+# Capture IFACE to FILE, return once tshark is capturing
+capture()
+{
+    tshark -lni "$1" -w "$2" 2>"$2.log" &
+    echo $! >> "/tmp/$NM/PIDs"
+    tenacious 10 grep -q "Capturing on" "$2.log"
+}
+
 collect()
 {
     print "Starting collector on $1 ..."
-    tshark -w "/tmp/$NM/pcap" -lni "$@" 2>/dev/null &
-    echo $! >> "/tmp/$NM/PIDs"
-    sleep 2
+    capture "$1" "/tmp/$NM/pcap"
 }
 
 # Move interface(s) from pid 1 netns to another netns

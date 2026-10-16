@@ -51,11 +51,8 @@ EOF
 cat "/tmp/$NM/config"
 
 print "Starting collector(s) ..."
-tshark -lni eth0 -w "/tmp/$NM/eth0.pcap" 2>/dev/null &
-echo $! >> "/tmp/$NM/PIDs"
-tshark -lni eth1 -w "/tmp/$NM/eth1.pcap" 2>/dev/null &
-echo $! >> "/tmp/$NM/PIDs"
-sleep 1
+capture eth0 "/tmp/$NM/eth0.pcap"
+capture eth1 "/tmp/$NM/eth1.pcap"
 
 print "Starting mcd ..."
 # shellcheck disable=SC2086
@@ -67,8 +64,7 @@ ip addr del 192.168.0.1/24 dev eth0
 ip addr add 192.168.1.1/24 dev eth1
 sleep 4
 ip link set dev eth2 up
-tshark -lni eth2 -w "/tmp/$NM/eth2.pcap" 2>/dev/null &
-echo $! >> "/tmp/$NM/PIDs"
+capture eth2 "/tmp/$NM/eth2.pcap"
 sleep 6
 kill_pids
 

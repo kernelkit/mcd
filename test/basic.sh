@@ -39,11 +39,8 @@ EOF
 cat "/tmp/$NM/config"
 
 print "Starting collector(s) ..."
-tshark -lni eth0 -w "/tmp/$NM/eth0.pcap" 2>/dev/null &
-echo $! >> "/tmp/$NM/PIDs"
-tshark -lni eth1 -w "/tmp/$NM/eth1.pcap" 2>/dev/null &
-echo $! >> "/tmp/$NM/PIDs"
-sleep 1
+capture eth0 "/tmp/$NM/eth0.pcap"
+capture eth1 "/tmp/$NM/eth1.pcap"
 
 print "Starting mcd ..."
 ../src/mcd -f "/tmp/$NM/config" -p "/tmp/$NM/pid" -l debug -n &
