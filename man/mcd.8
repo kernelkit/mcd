@@ -1,0 +1,174 @@
+.\"  -*- nroff -*-
+.Dd October 16, 2026
+.Dt MCD 8 SMM
+.Os
+.Sh NAME
+.Nm mcd
+.Nd IGMP and MLD querier for the Linux bridge
+.Sh SYNOPSIS
+.Nm
+.Op Fl hnsv
+.Op Fl f Ar FILE
+.Op Fl i Ar NAME
+.Op Fl l Ar LEVEL
+.Op Fl p Ar FILE
+.Op Fl u Ar FILE
+.Sh DESCRIPTION
+.Nm
+is a multicast querier for the Linux bridge.  It runs one IGMP and one
+MLD querier on every interface enabled in
+.Xr mcd.conf 5 ,
+either the bridge itself or a VLAN interface on top of it.
+.Pp
+The bridge has a querier of its own, but it can only send proxy
+queries, from 0.0.0.0 or ::, and has no version fallback.  Some end
+devices ignore proxy queries, and without a querier IGMP and MLD
+snooping times out and multicast floods the LAN.
+.Nm
+fills that gap:
+.Bl -bullet -offset indent
+.It
+IGMP queries are sent from the interface address, MLD queries from
+its link-local address, as RFC 2710 and RFC 3810 require.
+.It
+Querier election per RFC 2236, 3376, 2710 and 3810, the lowest address
+wins.  When another querier wins,
+.Nm
+backs off and takes over again if it goes silent for the
+.Cm router-timeout .
+.It
+On assuming the querier role,
+.Nm
+sends a startup burst of
+.Cm robustness
+queries,
+.Cm query-interval
+/ 4 apart, RFC 3376 \(sc8.6 and \(sc8.7.
+.It
+Starts at IGMPv3 and MLDv2 and falls back to IGMPv2, IGMPv1 or MLDv1
+for as long as older hosts are heard.
+.It
+Proxy mode, a backup querier that always loses the election.  An
+interface without an address is always in proxy mode.
+.It
+Raw VLAN mode, a querier on one VLAN of a VLAN filtering bridge with no
+VLAN interface on top.
+.It
+Static groups, joined in the kernel so the bridge always forwards them
+to itself.
+.El
+.Pp
+Interfaces, links and addresses are followed with netlink, so an
+interface that appears late or gets its address from DHCP needs no
+restart.
+.Pp
+Use
+.Xr mctl 8
+to inspect a running
+.Nm .
+.Sh OPTIONS
+.Bl -tag -width Ds
+.It Fl f , -config Ns = Ns Ar FILE
+Configuration file, default derived from the identity, see
+.Fl i
+and
+.Sx FILES .
+.It Fl h , -help
+Show usage, including the default paths, and exit.
+.It Fl i , -ident Ns = Ns Ar NAME
+Identity, default
+.Nm .
+Sets the syslog tag and the default names of the configuration, PID and
+IPC socket files.  Use one identity per instance to run several, and
+the same with
+.Xr mctl 8 .
+.It Fl l , -loglevel Ns = Ns Ar LEVEL
+Log level, one of
+.Cm none , err , notice , info
+or
+.Cm debug .
+Default
+.Cm notice .
+.It Fl n , -foreground
+Run in the foreground, log to stderr.
+.It Fl p , -pidfile Ns = Ns Ar FILE
+PID file, default derived from the identity.  The file is touched when
+a reload completes.
+.It Fl s , -syslog
+Log to syslog, the default unless
+.Fl n
+is given.
+.It Fl u , -ipc Ns = Ns Ar FILE
+IPC socket used by
+.Xr mctl 8 ,
+default derived from the identity.
+.It Fl v , -version
+Show version and exit.
+.El
+.Sh SIGNALS
+.Bl -tag -width TERM
+.It HUP
+Reload the configuration file and probe all interfaces again.  Static
+group memberships and packet sockets that are still configured are
+kept, so a reload causes no traffic on the wire.  The PID file is
+touched when done.
+.It INT , TERM
+Exit.  Static group memberships are dropped, the kernel sends the
+leaves.
+.El
+.Sh ENVIRONMENT
+.Bl -tag -width MCD_SOCK
+.It Ev MCD_SOCK
+IPC socket path, overridden by
+.Fl u .
+.El
+.Sh FILES
+.Bl -tag -width /run/mcd.sock -compact
+.It Pa /etc/mcd.conf
+Configuration file, see
+.Xr mcd.conf 5 .
+.It Pa /run/mcd.pid
+PID file.
+.It Pa /run/mcd.sock
+IPC socket.
+.El
+.Pp
+The names follow the identity, so
+.Fl i Ar foo
+uses
+.Pa /etc/foo.conf
+and so on.  The directories are set at build time.
+.Sh SEE ALSO
+.Xr mcd.conf 5 ,
+.Xr bridge 8 ,
+.Xr mctl 8
+.Sh STANDARDS
+.Rs
+.%R RFC 2236
+.%T Internet Group Management Protocol, Version 2
+.Re
+.Rs
+.%R RFC 3376
+.%T Internet Group Management Protocol, Version 3
+.Re
+.Rs
+.%R RFC 2710
+.%T Multicast Listener Discovery (MLD) for IPv6
+.Re
+.Rs
+.%R RFC 3810
+.%T Multicast Listener Discovery Version 2 (MLDv2) for IPv6
+.Re
+.Rs
+.%R RFC 5790
+.%T Lightweight IGMPv3 and MLDv2 Protocols
+.Re
+.Sh HISTORY
+.Nm
+started as querierd, a stripped down mrouted for Westermo WeOS.  Version
+1.0 is the fork and rename, version 2.0 replaced the last of the
+mrouted code, and version 3.0 added the MLD querier.
+.Sh AUTHORS
+.An Joachim Wiberg
+and the kernelkit team,
+.Lk https://github.com/kernelkit/mcd

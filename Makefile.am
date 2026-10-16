@@ -1,7 +1,7 @@
 doc_DATA         = README.md ChangeLog.md LICENSE mcd.conf
 EXTRA_DIST       = README.md ChangeLog.md LICENSE mcd.conf doc/overview.svg doc/querier-timeline.svg
 DISTCLEANFILES   = *~ DEADJOE semantic.cache *.gdb *.elf core core.* *.d
-SUBDIRS          = src
+SUBDIRS          = man src
 
 if ENABLE_TEST
 SUBDIRS         += test

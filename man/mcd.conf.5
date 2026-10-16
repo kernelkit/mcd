@@ -1,0 +1,148 @@
+.\"  -*- nroff -*-
+.Dd October 16, 2026
+.Dt MCD.CONF 5
+.Os
+.Sh NAME
+.Nm mcd.conf
+.Nd mcd configuration file
+.Sh DESCRIPTION
+.Xr mcd 8
+reads
+.Nm
+at start and on
+.Dv SIGHUP .
+Without it, or without any
+.Cm iface
+line,
+.Nm mcd
+is passive on all interfaces.
+.Pp
+Each line holds global settings or one
+.Cm iface
+directive with its flags.  Comments start with
+.Dq #
+and run to the end of line.
+.Sh GLOBAL SETTINGS
+These apply to both IGMP and MLD, and to all interfaces.
+.Bl -tag -width Ds
+.It Cm global-query-interval Ar SEC
+Seconds between General Queries when elected querier, 1 to 1024,
+default 125.  Values below 10 are not recommended.
+.It Cm global-response-interval Ar SEC
+Maximum response time hosts get for a General Query, 1 to 1024,
+default 10.  A longer time spreads the reports out.
+.It Cm global-last-member-interval Ar SEC
+Seconds between the group specific queries sent after a leave, 1 to
+1024, default 1.  The number of such queries is the
+.Cm robustness .
+.It Cm robustness Ar NUM
+Tolerance to lost packets, 2 to 10, default 2.  Also the number of
+queries in the startup burst.
+.It Cm router-timeout Ar SEC
+Time to wait for a silent querier before taking over, the other
+querier present interval, 1 to 1024.  When unset it is calculated per
+RFC 3376:
+.Bd -literal -offset indent
+robustness * query-interval + response-interval / 2
+.Ed
+.Pp
+Set it only to interoperate with devices that do not follow the RFC.
+.It Cm router-alert on | off , no router-alert
+IP Router Alert option in IGMP queries, on by default for stacks that
+hard-code the IP header length.  MLD queries always carry the IPv6
+Router Alert option.
+.It Cm include Ar PATH
+Read another file, or every file matching a
+.Xr glob 3
+pattern, e.g.\&
+.Pa /etc/mc.d/*.conf .
+.El
+.Sh INTERFACES
+.Bl -tag -width Ds
+.It Cm iface Ar IFNAME Op Ar FLAG ...
+Configure the queriers of an interface, the bridge itself or a VLAN
+interface on top of it.  The interface does not need to exist yet,
+.Nm mcd
+picks it up when it appears.  The keyword
+.Cm phyint
+is an alias.
+.El
+.Pp
+The flags are:
+.Bl -tag -width Ds
+.It Cm enable | disable
+Run the queriers on the interface, or not.  Default
+.Cm disable .
+.It Cm igmp on | off , mld on | off
+Run the IGMP or the MLD querier, both on by default.
+.It Cm igmpv1 | igmpv2 | igmpv3
+IGMP version to start with, default
+.Cm igmpv3 .
+.Nm mcd
+falls back to older versions on its own when such hosts are heard.
+.It Cm mldv1 | mldv2
+MLD version to start with, default
+.Cm mldv2 ,
+with the same fallback.
+.It Cm proxy-mode
+Send proxy queries, from 0.0.0.0 or ::, which never win an election.
+This makes
+.Nm mcd
+a backup querier on LANs that have a multicast router.  An interface
+without an address is always in proxy mode.  The old name
+.Cm proxy-queries
+is accepted too.
+.It Cm query-interval Ar SEC
+Per interface override of
+.Cm global-query-interval .
+.It Cm static-group Ar GROUP
+Join an IPv4 or IPv6 group on the interface, can be given more than
+once.  The kernel then answers queries for the group like any host, so
+a bridge keeps a permanent host membership for it in the MDB and always
+forwards it to itself.  The membership stays until the group is
+removed from the configuration or
+.Nm mcd
+exits, a link flap or a reload does not touch it.  Not supported in
+raw VLAN mode.
+.It Cm vlan Ar VID
+Raw VLAN mode on a VLAN filtering bridge, 1 to 4094.  The querier runs
+on that VLAN of the bridge without a VLAN interface on top, by injecting
+tagged frames.  It is always in proxy mode.  Give
+.Cm vlan
+more than once to run a querier on several VLANs.
+.El
+.Sh FILES
+.Bl -tag -width /etc/mcd.conf -compact
+.It Pa /etc/mcd.conf
+Default location, follows the identity set with
+.Fl i ,
+see
+.Xr mcd 8 .
+.El
+.Sh EXAMPLES
+Queriers on two VLAN interfaces, the second starting out in IGMPv2 and
+MLDv1:
+.Bd -literal -offset indent
+iface vlan1 enable
+iface vlan2 enable igmpv2 mldv1
+.Ed
+.Pp
+IGMP only, with a shorter query interval:
+.Bd -literal -offset indent
+iface br0 enable mld off query-interval 30
+.Ed
+.Pp
+A backup querier, and a querier on VLAN 42 of a filtering bridge:
+.Bd -literal -offset indent
+iface vlan3 enable proxy-mode
+iface br0 vlan 42 enable
+.Ed
+.Pp
+Static groups, and per interface snippets in a directory:
+.Bd -literal -offset indent
+iface vlan1 enable static-group 239.1.1.1 static-group ff05::1
+include /etc/mc.d/*.conf
+.Ed
+.Sh SEE ALSO
+.Xr mcd 8 ,
+.Xr mctl 8

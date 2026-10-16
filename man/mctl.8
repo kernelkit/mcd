@@ -1,0 +1,131 @@
+.\"  -*- nroff -*-
+.Dd October 16, 2026
+.Dt MCTL 8 SMM
+.Os
+.Sh NAME
+.Nm mctl
+.Nd status tool for
+.Xr mcd 8
+.Sh SYNOPSIS
+.Nm
+.Op Fl hmptv
+.Op Fl i Ar NAME
+.Op Fl u Ar FILE
+.Op Ar COMMAND
+.Sh DESCRIPTION
+.Nm
+queries a running
+.Xr mcd 8
+over its IPC socket and shows the queriers, the group memberships and
+the multicast state of the bridge.  Without a command it runs
+.Cm show .
+.Pp
+Most bridge state comes from the iproute2 tools
+.Xr ip 8
+and
+.Xr bridge 8 ,
+and from
+.Xr jq 1 .
+Their BusyBox versions are not enough, use
+.Cm check
+to confirm.
+.Sh OPTIONS
+.Bl -tag -width Ds
+.It Fl h , -help
+Show usage and, when
+.Nm mcd
+is running, the available commands.
+.It Fl i , -ident Ns = Ns Ar NAME
+Talk to an
+.Nm mcd
+started with the same
+.Fl i Ar NAME .
+.It Fl m , -monitor
+Run the command every two seconds, like
+.Xr watch 1 .
+.It Fl p , -plain
+Plain table headings, no terminal control characters.  Implied for
+JSON output.
+.It Fl t , -no-heading
+Skip table headings.
+.It Fl u , -ipc Ns = Ns Ar FILE
+IPC socket, default derived from the identity.  Also settable with the
+.Ev MCD_SOCK
+environment variable.
+.It Fl v , -version
+Show version and exit.
+.El
+.Pp
+Output width follows the terminal.
+.Sh COMMANDS
+Commands can be abbreviated, e.g.\&
+.Cm s i
+for
+.Cm show interfaces .
+Adding
+.Cm json
+to a
+.Cm show
+command gives machine readable output.
+.Bl -tag -width Ds
+.It Cm show Oo Cm igmp Oc Op Cm json
+Overview: global settings, bridge port roles, the queriers and the
+group memberships.  In JSON the queriers are split in
+.Dq multicast-queriers
+for IGMP and
+.Dq mld-queriers
+for MLD.
+.It Cm show status Op Cm json
+Global settings.
+.It Cm show interfaces Op Cm json
+One row per interface and protocol: VLAN, protocol, elected querier,
+state, query interval, querier timeout and protocol version.
+.It Cm show groups Op Cm json
+IGMP and MLD group memberships, as seen by the bridge.
+.It Cm show router-ports Op Cm json
+Multicast router ports, grouped per bridge.
+.It Cm show mdb
+The bridge multicast forwarding database, as
+.Ql bridge mdb show
+but readable.
+.It Cm check
+Verify that the tools listed above are available.
+.It Cm version
+Show the version of the running
+.Nm mcd .
+.It Cm help
+List the commands the running
+.Nm mcd
+supports.
+.El
+.Sh ENVIRONMENT
+.Bl -tag -width MCD_SOCK
+.It Ev MCD_SOCK
+IPC socket path, overridden by
+.Fl u .
+.El
+.Sh FILES
+.Bl -tag -width /run/mcd.sock -compact
+.It Pa /run/mcd.sock
+Default IPC socket, follows the identity.  The group owner is set at
+build time, see
+.Ql configure --with-group .
+.El
+.Sh EXAMPLES
+.Bd -literal -offset indent
+$ mctl show interfaces
+Interface       VID  Proto  Querier                      State  Interval  Timeout  Ver
+vlan1                IGMP   192.168.1.1                     Up       125     None    3
+vlan1                MLD    fe80::7a4c:9bff:fe12:3456       Up       125     None    2
+br0              42  IGMP   0.0.0.0                         Up       125     None    3
+br0              42  MLD    ::                              Up       125     None    2
+.Ed
+.Pp
+The IPC protocol is plain text, one command per connection, so other
+programs can use it directly:
+.Bd -literal -offset indent
+echo "show igmp json" | socat - UNIX-CONNECT:/run/mcd.sock
+.Ed
+.Sh SEE ALSO
+.Xr mcd.conf 5 ,
+.Xr mcd 8
