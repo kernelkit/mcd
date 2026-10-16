@@ -25,7 +25,7 @@ The Linux bridge has IGMP/MLD snooping, with per-VLAN settings and a
 built-in querier.  So why run another one?
 
 Because the bridge querier only sends queries from source address
-0.0.0.0, or :: for IPv6.  The bridge lives below your VLAN interfaces,
+`0.0.0.0`, or `::` for IPv6.  The bridge lives below your VLAN interfaces,
 so it cannot know which address to use, or even what the interfaces are
 called (`br0.1` or `vlan1`?).  Proxy queries like that are allowed by
 the RFCs, but some PLCs and other industrial devices silently drop them.
@@ -65,7 +65,7 @@ Features
   within half a minute instead of waiting a full query interval.
 - Version fallback.  Starts at IGMPv3 and MLDv2, drops to the older
   versions when such hosts appear, and returns when they go quiet.
-- Proxy mode, a backup querier that sends from 0.0.0.0 or :: and can
+- Proxy mode, a backup querier that sends from `0.0.0.0` or `::` and can
   never win an election.  Used automatically when an interface has no
   address.
 - Raw VLAN mode.  Run a querier directly on a VLAN of a filtering
@@ -147,7 +147,7 @@ in the example above start an interface out at the older version.
 
     iface vlan1 enable proxy-mode
 
-In proxy mode `mcd` sends from 0.0.0.0, or :: for MLD, and therefore
+In proxy mode `mcd` sends from `0.0.0.0`, or `::` for MLD, and therefore
 always loses elections.  It only queries when no real querier is
 around, which makes it a safe backup on LANs that normally have a
 multicast router.
