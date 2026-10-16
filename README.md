@@ -6,23 +6,16 @@ Multicast Querier for the Linux Bridge
 and MLD querier.  It sends queries from a real address, takes part in
 querier elections, falls back from IGMPv3 to v2 or v1 and from MLDv2 to
 v1 when old gear shows up, and follows interfaces and addresses as they
-come and go.  It ships with `mctl`, a tool that shows what the querier
-and the bridge are up to, in plain text or JSON.
+come and go, no restart needed.  It ships with `mctl`, a tool that
+shows what the querier and the bridge are up to, in plain text or JSON.
+
+`mcd` is the multicast querier in [Infix OS][Infix].  It is written in
+plain C with no runtime library dependencies, and ISC licensed.
 
 The full reference is in the man pages: [mcd(8)][], [mcd.conf(5)][]
 and [mctl(8)][].
 
 ![Diagram: mcd on a Linux host sends IGMP and MLD queries through the VLAN interfaces into the bridge, hosts on the bridge ports answer with membership reports, and a side panel lists what the bridge alone cannot do](doc/overview.svg)
-
-- [Why?](#why)
-- [Features](#features)
-- [Quick start](#quick-start)
-- [Configuration](#configuration)
-- [Inspecting with mctl](#inspecting-with-mctl)
-- [Running the daemon](#running-the-daemon)
-- [Building](#building)
-- [Testing](#testing)
-- [Origin and license](#origin-and-license)
 
 
 Why?
@@ -32,12 +25,11 @@ The Linux bridge has IGMP/MLD snooping, with per-VLAN settings and a
 built-in querier.  So why run another one?
 
 Because the bridge querier only sends queries from source address
-0.0.0.0, or :: for IPv6.
-The bridge lives below your VLAN interfaces, so it cannot know which
-address to use, or even what the interfaces are called (`br0.1` or
-`vlan1`?).  Proxy queries like that are allowed by the RFCs, but some
-PLCs and other industrial devices silently drop them.  Good luck getting
-the vendor to fix a ten year old firmware.
+0.0.0.0, or :: for IPv6.  The bridge lives below your VLAN interfaces,
+so it cannot know which address to use, or even what the interfaces are
+called (`br0.1` or `vlan1`?).  Proxy queries like that are allowed by
+the RFCs, but some PLCs and other industrial devices silently drop them.
+Good luck getting the vendor to fix a ten year old firmware.
 
 Many of these networks have no multicast router either.  They are just
 switches, doing their best to keep multicast off low-capacity links.
@@ -77,12 +69,11 @@ Features
 - Raw VLAN mode.  Run a querier directly on a VLAN of a filtering
   bridge, no `vlanN` interface required.
 - Static groups, joined in the kernel so they never time out.
-- Netlink aware.  Interfaces that appear late, DHCP addresses and link
-  flaps are all handled without a restart.
 - `mctl` shows interface and querier status, group memberships, router
   ports per bridge, and the bridge MDB in a readable form.  JSON output
   for scripts, a watch mode for humans.
-- Plain C, no runtime library dependencies, ISC licensed.
+
+One querier's life on one interface:
 
 ![Timeline of one querier: a startup burst of queries, then one every query interval, silence while a lower address querier is present, and taking over again when its timer expires](doc/querier-timeline.svg)
 
