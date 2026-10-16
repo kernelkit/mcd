@@ -9,6 +9,9 @@ v1 when old gear shows up, and follows interfaces and addresses as they
 come and go.  It ships with `mctl`, a tool that shows what the querier
 and the bridge are up to, in plain text or JSON.
 
+The full reference is in the man pages: [mcd(8)][], [mcd.conf(5)][]
+and [mctl(8)][].
+
 ![Diagram: mcd on a Linux host sends IGMP and MLD queries through the VLAN interfaces into the bridge, hosts on the bridge ports answer with membership reports, and a side panel lists what the bridge alone cannot do](doc/overview.svg)
 
 - [Why?](#why)
@@ -16,6 +19,7 @@ and the bridge are up to, in plain text or JSON.
 - [Quick start](#quick-start)
 - [Configuration](#configuration)
 - [Inspecting with mctl](#inspecting-with-mctl)
+- [Running the daemon](#running-the-daemon)
 - [Building](#building)
 - [Testing](#testing)
 - [Origin and license](#origin-and-license)
@@ -110,64 +114,18 @@ Every interface in the system is probed at start, and again on
 Configuration
 -------------
 
-Default file is `/etc/mcd.conf`, override with `-f`.  By default `mcd`
-is passive on all interfaces.  The full syntax:
+The configuration file is `/etc/mcd.conf`.  Without it, `mcd` is
+passive on all interfaces.  A typical setup enables the queriers on the
+VLAN interfaces of a bridge and leaves the rest at their defaults:
 
-    global-query-interval [1-1024]            # default: 125 sec
-    global-response-interval [1-1024]         # default: 10 sec
-    global-last-member-interval [1-1024]      # default: 1 sec
-    robustness [2-10]                         # default: 2
-    router-timeout [1-1024]                   # default: calculated
-    no router-alert                           # default: enabled
+    # /etc/mcd.conf
+    iface vlan1 enable
+    iface vlan2 enable igmpv2 mldv1
 
-    iface IFNAME [enable | disable] [vlan [1-4094]] [proxy-mode]
-          [igmp on|off] [igmpv1 | igmpv2 | igmpv3]
-          [mld on|off] [mldv1 | mldv2]
-          [query-interval [1-1024]] [static-group GROUP ...]
+The sections below cover the common cases.  Every keyword, its range
+and default is in [mcd.conf(5)][].
 
-    include /path/to.d/*.conf
-
-### Global settings
-
-| Setting                       | Meaning                                                              |
-|-------------------------------|----------------------------------------------------------------------|
-| `global-query-interval`       | Seconds between General Queries when elected querier                 |
-| `global-response-interval`    | Max response time hosts get, controls how bursty replies are         |
-| `global-last-member-interval` | Seconds between group specific queries, `robustness` sets the count  |
-| `robustness`                  | Tolerance to lost reports and lost queriers, also the startup burst length |
-| `router-timeout`              | Other querier present interval, explained below the table           |
-| `no router-alert`             | Drop the IP Router Alert option from queries                         |
-| `include`                     | Read one file, or every file matching a glob, e.g. `/etc/mc.d/*.conf` |
-
-The `router-timeout` is the time `mcd` waits for a silent querier before
-taking over.  Left unset, the RFC formula applies:
-
-    robustness * query-interval + response-interval / 2
-
-Setting it by hand overrides the formula.  Some non-compliant devices
-need this.  Everyone else should leave it alone.
-
-Router Alert is on by default, for stacks that hard-code the length of
-the IP header.  Turn it off only if you know you have to.
-
-### Interface settings
-
-| Flag                         | Meaning                                                              |
-|------------------------------|----------------------------------------------------------------------|
-| `enable`, `disable`          | Run the queriers on the interface, or not.  Default is `disable`     |
-| `vlan VID`                   | [Raw VLAN mode](#raw-vlan-mode) on a filtering bridge                |
-| `proxy-mode`                 | Backup querier, source 0.0.0.0 or ::, never wins an election         |
-| `igmp on`, `igmp off`        | Run the IGMP querier on the interface, default on                    |
-| `igmpv1`, `igmpv2`, `igmpv3` | Starting IGMP version.  Default `igmpv3`, with automatic fallback    |
-| `mld on`, `mld off`          | Run the MLD querier on the interface, default on                     |
-| `mldv1`, `mldv2`             | Starting MLD version.  Default `mldv2`, with automatic fallback      |
-| `query-interval N`           | Per interface override of `global-query-interval`                    |
-| `static-group GROUP`         | Join GROUP on the interface, as a host would, see [Static groups](#static-groups) |
-
-The keyword `phyint` is accepted as an alias for `iface`, and the old
-`proxy-queries` still works as an alias for `proxy-mode`.
-
-### Enabling the querier
+### Bridge or VLAN interface
 
 The interface can be a VLAN interface on top of the bridge, or the
 bridge itself:
@@ -179,16 +137,18 @@ Use the bridge directly when it has no VLAN filtering, or when the VLAN
 you care about is its untagged default.  For other VLANs of a filtering
 bridge, see [Raw VLAN mode](#raw-vlan-mode).
 
-Either way, both an IGMP and an MLD querier start.  IGMP queries use
-the interface address as source, MLD queries its link-local address,
-and `mcd` competes in both elections.  To run only one of them:
+### IGMP and MLD
+
+Each enabled interface runs both an IGMP and an MLD querier.  IGMP
+queries use the interface address as source, MLD queries its
+link-local address, and `mcd` competes in both elections.  To run only
+one of them:
 
     iface vlan1 enable mld off
 
-`mcd` starts as IGMPv3 and MLDv2 and drops to the older version on its
-own if a legacy host appears.  To start out there instead:
-
-    iface vlan1 enable igmpv2 mldv1
+Both start at the newest version, IGMPv3 and MLDv2, and fall back on
+their own when an older host shows up.  The `igmpv2` and `mldv1` flags
+in the example above start an interface out at the older version.
 
 ### Proxy mode
 
@@ -200,8 +160,8 @@ around, which makes it a safe backup on LANs that normally have a
 multicast router.
 
 > **Note:** an interface without an address runs in proxy mode
-> whether you asked for it or not.  When an address shows up, via
-> netlink, `mcd` switches to standard mode by itself.
+> whether you asked for it or not.  When an address shows up, `mcd`
+> switches to standard mode by itself.
 
 ### Raw VLAN mode
 
@@ -210,14 +170,6 @@ a querier.  `mcd` injects tagged frames straight into the bridge, and
 is always in proxy mode here:
 
     iface br0 vlan 42 enable
-
-### Per interface query interval
-
-    global-query-interval 125
-    iface vlan1 enable query-interval 30
-
-There is no per interface setting for the other intervals, only
-protocol version and query interval.
 
 ### Static groups
 
@@ -229,8 +181,15 @@ membership in the MDB, so it is always forwarded to the bridge itself.
 The membership stays until the group is removed from the configuration
 or `mcd` exits.  A link flap or a reload does not touch it.
 
-This does not work in raw VLAN mode, since the kernel cannot join on a
-specific VLAN of a bridge.
+### Timers
+
+The query interval, response time and robustness are global settings,
+and the query interval can also be set per interface:
+
+    global-query-interval 125
+    iface vlan1 enable query-interval 30
+
+The defaults follow the RFCs and suit most networks.
 
 
 Inspecting with mctl
@@ -258,68 +217,35 @@ arguments for an overview:
     Bridge          VID  Multicast Group       Ports
     br0               2  239.1.1.1             eth3
 
-Commands:
-
-| Command                     | Shows                                              |
-|-----------------------------|----------------------------------------------------|
-| `show` / `show igmp [json]` | Interfaces and group memberships, the default      |
-| `show status [json]`        | Daemon settings and bridge port roles              |
-| `show interfaces [json]`    | Querier state per interface and protocol           |
-| `show groups [json]`        | IGMP and MLD group memberships from the bridge     |
-| `show router-ports [json]`  | Multicast router ports, grouped per bridge         |
-| `show mdb`                  | The bridge MDB, as `bridge mdb show` but readable  |
-| `check`                     | Verify that `ip`, `bridge` and `jq` are available  |
-| `version`                   | Daemon version                                     |
-
-Useful options:
-
-| Option           | Effect                                                      |
-|------------------|-------------------------------------------------------------|
-| `-m, --monitor`  | Re-run the command every two seconds, like `watch(1)`       |
-| `-p, --plain`    | Plain headings, no terminal control characters              |
-| `-t, --no-heading` | Skip table headings, handy for scripts                    |
-| `-i, --ident`    | Talk to a daemon started with `-i NAME`                     |
-| `-u, --ipc`      | Socket path, also settable with the `MCD_SOCK` variable     |
-
-Output width follows your terminal.  Add `json` to any `show` command
-for machine readable output.  Queriers are listed under
-`multicast-queriers` for IGMP and `mld-queriers` for MLD:
-
-    mctl show router-ports json
-    [
-      {
-        "bridge": "br0",
-        "ports": [ "eth3" ]
-      }
-    ]
+The parts are also available on their own, as `show interfaces`,
+`show groups`, `show router-ports` and `show mdb`.  Add `json` to any
+`show` command for machine readable output, and `-m` to keep it
+updating like `watch(1)`.  All commands and options are in
+[mctl(8)][].
 
 > **Note:** collecting bridge status needs `jq` and the iproute2 tools
 > `ip` and `bridge`.  The BusyBox versions are not enough.  Run
 > `mctl check` to confirm.
 
-### Talking to mcd without mctl
+The IPC protocol is plain text, one command per connection, so other
+programs can use it without `mctl`:
 
-The IPC protocol is plain text, one command per connection:
-
-    echo "help" | socat - UNIX-CONNECT:/run/mcd.sock
     echo "show igmp json" | socat - UNIX-CONNECT:/run/mcd.sock
 
-### Daemon options
 
-    mcd [-himnpsv] [-f FILE] [-i NAME] [-l LEVEL] [-p FILE] [-u FILE]
+Running the daemon
+------------------
 
-| Option               | Effect                                                     |
-|----------------------|------------------------------------------------------------|
-| `-f, --config=FILE`  | Configuration file, default `/etc/mcd.conf`                |
-| `-i, --ident=NAME`   | Identity, sets the default `.conf`, `.pid` and `.sock` names and the syslog tag |
-| `-l, --loglevel=LEVEL` | `none`, `err`, `notice` (default), `info`, `debug`       |
-| `-n, --foreground`   | Stay in the foreground, log to stderr                      |
-| `-s, --syslog`       | Log to syslog, the default when not in the foreground      |
-| `-p, --pidfile=FILE` | PID file, default `/run/mcd.pid`                           |
-| `-u, --ipc=FILE`     | IPC socket, default `/run/mcd.sock`                        |
+`mcd` detaches and logs to syslog by default.  For a first look, run
+it in the foreground with more logging:
 
-To run several instances, give each one its own `-i NAME` and point
-`mctl -i NAME` at the one you want.
+    sudo mcd -n -l info
+
+`SIGHUP` reloads the configuration and probes the interfaces again.
+To run several instances, give each its own identity with `-i NAME`,
+which also names its configuration file, PID file and IPC socket, and
+point `mctl -i NAME` at the one you want.  The options, signals and
+files are in [mcd(8)][].
 
 
 Building
@@ -368,6 +294,9 @@ replaced the last of the `mrouted` code.  The project is maintained by
 the [kernelkit][] team and licensed under the [ISC license][license].
 
 
+[mcd(8)]:      https://man.troglobit.com/man8/mcd.8.html
+[mcd.conf(5)]: https://man.troglobit.com/man5/mcd.conf.5.html
+[mctl(8)]:     https://man.troglobit.com/man8/mctl.8.html
 [querierd]:  https://github.com/westermo/querierd
 [kernelkit]: https://github.com/kernelkit
 [license-badge]:  https://img.shields.io/badge/License-ISC-blue.svg
