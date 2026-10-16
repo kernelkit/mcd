@@ -99,6 +99,26 @@ static int is_igmp_proxy(const struct ifi *ifi)
     return ifi->ifi_flags & IFIF_PROXY_QUERIER;
 }
 
+static void querier_del(struct ifi *ifi)
+{
+    if (!ifi->ifi_querier)
+	return;
+
+    pev_timer_del(ifi->ifi_querier->al_timerid);
+    free(ifi->ifi_querier);
+    ifi->ifi_querier = NULL;
+}
+
+static void group_del(struct ifi *ifi, struct listaddr *g)
+{
+    pev_timer_del(g->al_timerid);
+    pev_timer_del(g->al_queryid);
+    pev_timer_del(g->al_pv_timerid);
+
+    TAILQ_REMOVE(&ifi->ifi_groups, g, al_link);
+    free(g);
+}
+
 /*
  * Restart IGMP Querier election
  *
@@ -120,11 +140,7 @@ void iface_check_election(struct ifi *ifi)
             return;
 	}
 
-        if (ifi->ifi_querier) {
-            pev_timer_del(ifi->ifi_querier->al_timerid);
-            free(ifi->ifi_querier);
-            ifi->ifi_querier = NULL;
-        }
+        querier_del(ifi);
 
 	dbg("%s is proxy got elected", ifi->ifi_name);
         goto elected;
@@ -156,9 +172,7 @@ void iface_check_election(struct ifi *ifi)
 	    inet_fmt(cur, s1, sizeof(s1));
 	    dbg("New local querier on %s, was %s (%u vs %u)",
 		  ifi->ifi_name, s1, ntohl(ifi->ifi_inaddr), ntohl(cur));
-	    pev_timer_del(ifi->ifi_querier->al_timerid);
-	    free(ifi->ifi_querier);
-	    ifi->ifi_querier = NULL;
+	    querier_del(ifi);
 	    goto elected;
 	}
 
@@ -208,7 +222,6 @@ void iface_add(int ifindex, int flags)
  */
 void iface_del(int ifindex, int flags)
 {
-    struct listaddr *al, *tmp;
     struct phaddr *pa, *pat;
     struct ifi *ifi;
 
@@ -218,16 +231,6 @@ void iface_del(int ifindex, int flags)
 
     dbg("Marking %s as removed from system", ifi->ifi_name);
     stop_iface(ifi);
-
-    if (ifi->ifi_querier) {
-	free(ifi->ifi_querier);
-	ifi->ifi_querier = NULL;
-    }
-
-    TAILQ_FOREACH_SAFE(al, &ifi->ifi_groups, al_link, tmp) {
-	TAILQ_REMOVE(&ifi->ifi_groups, al, al_link);
-	free(al);
-    }
 
     TAILQ_FOREACH_SAFE(pa, &ifi->ifi_addrs, pa_link, pat) {
 	TAILQ_REMOVE(&ifi->ifi_addrs, pa, pa_link);
@@ -376,14 +379,9 @@ static void stop_iface(struct ifi *ifi)
         pev_timer_del(ifi->ifi_timerid);
     ifi->ifi_timerid = 0;
 
-    /*
-     * Discard all group addresses.  (No need to tell kernel;
-     * the k_del_iface() call, below, will clean up kernel state.)
-     */
-    TAILQ_FOREACH_SAFE(a, &ifi->ifi_groups, al_link, tmp) {
-	TAILQ_REMOVE(&ifi->ifi_groups, a, al_link);
-	free(a);
-    }
+    TAILQ_FOREACH_SAFE(a, &ifi->ifi_groups, al_link, tmp)
+	group_del(ifi, a);
+    querier_del(ifi);
 
     dbg("Releasing querier duties on interface %s", ifi->ifi_name);
     ifi->ifi_flags &= ~IFIF_IGMP_QUERIER;
@@ -971,9 +969,7 @@ static void router_timeout_cb(int timeout, void *arg)
     struct ifi *ifi = (struct ifi *)arg;
 
     dbg("Querier %s timed out", inet_fmt(ifi->ifi_querier->al_addr, s1, sizeof(s1)));
-    pev_timer_del(ifi->ifi_querier->al_timerid);
-    free(ifi->ifi_querier);
-    ifi->ifi_querier = NULL;
+    querier_del(ifi);
 
     ifi->ifi_flags |= IFIF_IGMP_QUERIER;
     send_query(ifi, allhosts_group, igmp_response_interval, 0);
@@ -1000,10 +996,8 @@ static void group_version_cb(int timeout, void *arg)
 
     if (cbk->g->al_pv < 3)
 	pev_timer_set(cbk->g->al_pv_timerid, IGMP_GROUP_MEMBERSHIP_INTERVAL * 1000000);
-    else {
-	pev_timer_del(cbk->g->al_pv_timerid);
-	free(cbk);
-    }
+    else
+	cbk->g->al_pv_timerid = pev_timer_del(cbk->g->al_pv_timerid);
 }
 
 /*
@@ -1012,6 +1006,7 @@ static void group_version_cb(int timeout, void *arg)
 static int group_version_timer(int ifindex, int vid, struct listaddr *g)
 {
     cbk_t *cbk;
+    int tid;
 
     cbk = calloc(1, sizeof(cbk_t));
     if (!cbk) {
@@ -1023,7 +1018,10 @@ static int group_version_timer(int ifindex, int vid, struct listaddr *g)
     cbk->vid     = vid;
     cbk->g       = g;
 
-    return pev_timer_add(IGMP_GROUP_MEMBERSHIP_INTERVAL * 1000000, 0, group_version_cb, cbk);
+    tid = pev_timer_add(IGMP_GROUP_MEMBERSHIP_INTERVAL * 1000000, 0, group_version_cb, cbk);
+    pev_timer_set_cb_del(tid, free);
+
+    return tid;
 }
 
 /*
@@ -1042,16 +1040,7 @@ static void delete_group_cb(int timeout, void *arg)
     dbg("Group membership timeout for %s on %s",
 	  inet_fmt(cbk->g->al_addr, s1, sizeof(s1)), ifi->ifi_name);
 
-    pev_timer_del(g->al_timerid);
-
-    if (g->al_queryid > 0)
-	g->al_queryid = pev_timer_del(g->al_queryid);
-
-    if (g->al_pv_timerid > 0)
-	g->al_pv_timerid = pev_timer_del(g->al_pv_timerid);
-
-    TAILQ_REMOVE(&ifi->ifi_groups, g, al_link);
-    free(g);
+    group_del(ifi, g);
 }
 
 /*
@@ -1103,7 +1092,6 @@ static void send_query_cb(int timeout, void *arg)
   end:
     /* we're done, clear us from group */
     cbk->g->al_queryid = pev_timer_del(cbk->g->al_queryid);
-    free(cbk);
 }
 
 /*
@@ -1112,6 +1100,7 @@ static void send_query_cb(int timeout, void *arg)
 static int send_query_timer(int ifindex, struct listaddr *g, int delay, int num)
 {
     cbk_t *cbk;
+    int tid;
 
     cbk = calloc(1, sizeof(cbk_t));
     if (!cbk) {
@@ -1124,7 +1113,10 @@ static int send_query_timer(int ifindex, struct listaddr *g, int delay, int num)
     cbk->delay   = delay;
     cbk->num     = num;
 
-    return pev_timer_add(delay * 1000000, 0, send_query_cb, cbk);
+    tid = pev_timer_add(delay * 1000000, 0, send_query_cb, cbk);
+    pev_timer_set_cb_del(tid, free);
+
+    return tid;
 }
 
 /**
