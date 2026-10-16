@@ -75,7 +75,7 @@ struct ifi *config_find_iface(int ifindex, int vid)
     return NULL;
 }
 
-static int getmac(const char *ifname, char *mac, size_t size)
+static int getmac(const char *ifname, uint8_t *mac, size_t size)
 {
     struct ifreq ifr;
     int rc = 0;

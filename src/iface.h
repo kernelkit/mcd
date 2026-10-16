@@ -27,7 +27,7 @@ struct ifi {
     int		     ifi_timerid;	 /* IGMP query timer           	      */
     int		     ifi_startup_timerid;/* startup query burst timer         */
     int		     ifi_igmpv1_warn;    /* To rate-limit IGMPv1 warnings     */
-    char	     ifi_hwaddr[6];	 /* MAC address of this interface     */
+    uint8_t	     ifi_hwaddr[6];	 /* MAC address of this interface     */
 };
 
 #define IFIF_DOWN		0x000100 /* kernel state of interface */
