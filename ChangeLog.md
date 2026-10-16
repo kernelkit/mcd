@@ -10,6 +10,25 @@ All relevant, user visible, changes are documented in this file.
  - Add support for `static-group` per interface.  The group is joined in
    the kernel, which answers queries for it like any host, so a bridge
    keeps a permanent host membership for the group in its MDB
+ - Drop unused `--with-systemd` configure option, no unit file was ever
+   installed
+
+### Fixes
+ - Fix `mctl` writing terminal probe escape sequences to stderr when
+   stdout is not a terminal, e.g. when piped to `grep`
+ - Fix potential list corruption when the same interface is configured
+   with more than one `vlan`
+ - Fix use-after-free when an interface goes down with active group
+   timers or a remote querier being tracked
+
+
+[UNRELEASED][]
+--------------
+
+### Changes
+ - Add support for `static-group` per interface.  The group is joined in
+   the kernel, which answers queries for it like any host, so a bridge
+   keeps a permanent host membership for the group in its MDB
 
 ### Fixes
  - Fix `mctl` writing terminal probe escape sequences to stderr when

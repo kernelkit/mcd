@@ -27,10 +27,6 @@ jobs:
           else
             echo "latest=false" >> $GITHUB_OUTPUT
           fi
-      - name: Installing dependencies ...
-        run: |
-          sudo apt-get -y update
-          sudo apt-get -y install pkg-config libsystemd-dev
       - name: Creating Makefiles ...
         run: |
           ./autogen.sh

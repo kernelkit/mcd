@@ -13,9 +13,6 @@ AC_PROG_CC
 AC_PROG_INSTALL
 AC_PROG_YACC
 
-# Required to check for libsystemd-dev
-PKG_PROG_PKG_CONFIG
-
 # Check for linux/netlink.h is only to be able to define LINUX below
 AC_CHECK_HEADERS([fcntl.h ifaddrs.h sys/ioctl.h sys/time.h linux/netlink.h termios.h])
 AC_CHECK_HEADERS([net/if.h netinet/igmp.h], [], [], [
@@ -52,43 +49,15 @@ AC_ARG_WITH(group,
 	AS_HELP_STRING([--with-group=NAME], [Group for /run/mcd.sock (mctl), default: root]),
 	[group=$withval], [group=root])
 
-AC_ARG_WITH([systemd],
-     [AS_HELP_STRING([--with-systemd=DIR], [Directory for systemd service files])],,
-     [with_systemd=auto])
-
 # Create config.h from selected features and fallback defautls
 AS_IF([test "x$with_group" != "xno"], [
 	AS_IF([test "x$group" = "xyes"], [
 		group=root])])
 AC_DEFINE_UNQUOTED(DEFGROUP, "$group", [For /run/finit/socket])
-AS_IF([test "x$with_systemd" = "xyes" -o "x$with_systemd" = "xauto"], [
-     def_systemd=$($PKG_CONFIG --variable=systemdsystemunitdir systemd)
-     AS_IF([test "x$def_systemd" = "x"],
-         [AS_IF([test "x$with_systemd" = "xyes"],
-	     [AC_MSG_ERROR([systemd support requested but pkg-config unable to query systemd package])])
-	     with_systemd=no], [with_systemd="$def_systemd"])])
-AS_IF([test "x$with_systemd" != "xno"],
-     [AC_SUBST([systemddir], [$with_systemd])])
 
 AM_CONDITIONAL(BSD,         [test "x$ac_cv_header_net_if_dl_h"     = "xyes"])
 AM_CONDITIONAL(LINUX,       [test "x$ac_cv_header_linux_netlink_h" = "xyes"])
-AM_CONDITIONAL(SYSTEMD,     [test "x$with_systemd"                != "xno"])
 AM_CONDITIONAL(ENABLE_TEST, [test "x$enable_test"                 != "xno"])
-
-# Expand $sbindir early, into $SBINDIR, for systemd unit file
-# NOTE: This does *not* take prefix/exec_prefix override at "make
-#       install" into account, unfortunately.
-test "x$prefix" = xNONE && prefix=$ac_default_prefix
-test "x$exec_prefix" = xNONE && exec_prefix='${prefix}'
-DOCDIR=`eval echo $docdir`
-DOCDIR=`eval echo $DOCDIR`
-AC_SUBST(DOCDIR)
-SYSCONFDIR=`eval echo $sysconfdir`
-SYSCONFDIR=`eval echo $SYSCONFDIR`
-AC_SUBST(SYSCONFDIR)
-SBINDIR=`eval echo $sbindir`
-SBINDIR=`eval echo $SBINDIR`
-AC_SUBST(SBINDIR)
 
 # Workaround for as-of-yet unreleased runstatedir support, planned for
 # autoconf 2.70, which some major distros have backported.
@@ -109,7 +78,6 @@ cat <<EOF
 
 Optional features:
   IPC group.............: $group
-  systemd...............: $with_systemd
   Unit tests............: $enable_test
 
 ------------- Compiler version --------------
