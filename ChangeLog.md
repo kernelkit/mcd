@@ -3,98 +3,44 @@ Change Log
 
 All relevant, user visible, changes are documented in this file.
 
-[UNRELEASED][]
---------------
+[v3.0][] - 2026-10-16
+---------------------
+
+MLD querier support.  `mcd` now runs one querier per address family on
+every enabled interface, so the Linux bridge gets a real querier for
+IPv6 too.
+
+> **Note:** MLD is on by default on every enabled interface, use
+> `mld off` to keep an interface IGMP only.  `mctl show interfaces`
+> has a new Proto column and its JSON output lists both families.
 
 ### Changes
- - Add MLD querier support.  Every enabled interface now runs an MLD
-   querier next to the IGMP one, from its link-local address, with its
-   own election and MLDv2 to MLDv1 fallback.  New `iface` keywords
-   `mldv1`, `mldv2`, `igmp on|off` and `mld on|off`
- - `mctl show interfaces` has a new Proto column and lists both queriers
-   per interface.  JSON output gains a `family` key per querier and a
+ - Add MLD querier, RFC 2710 and RFC 3810.  Queries are sent from the
+   link-local address of the interface, with its own election, MLDv2
+   to MLDv1 fallback, and the same startup query burst as IGMP
+ - New `iface` keywords `mldv1`, `mldv2`, `igmp on|off` and `mld on|off`
+ - Add `static-group` per interface, IPv4 and IPv6.  The group is
+   joined in the kernel, which answers queries for it like any host, so
+   a bridge keeps a permanent host membership for it in the MDB.  The
+   memberships survive `SIGHUP`
+ - `mctl show interfaces` lists both queriers per interface with a new
+   Proto column.  JSON output gains a `family` key per querier and a
    top-level `mld-queriers` list in `show igmp json`
- - `static-group` accepts IPv6 groups
- - Add support for `static-group` per interface.  The group is joined in
-   the kernel, which answers queries for it like any host, so a bridge
-   keeps a permanent host membership for the group in its MDB
+ - Link up and down now reach every entry of an interface, raw VLAN
+   entries used to miss them
  - Drop unused `--with-systemd` configure option, no unit file was ever
    installed
+ - Add man pages mcd(8), mcd.conf(5) and mctl(8), also available at
+   https://man.troglobit.com
+ - Rewritten README with figures and worked examples
 
 ### Fixes
- - Fix `mctl` writing terminal probe escape sequences to stderr when
-   stdout is not a terminal, e.g. when piped to `grep`
- - Fix potential list corruption when the same interface is configured
-   with more than one `vlan`
  - Fix use-after-free when an interface goes down with active group
    timers or a remote querier being tracked
-
-
-[UNRELEASED][]
---------------
-
-### Changes
- - Add support for `static-group` per interface.  The group is joined in
-   the kernel, which answers queries for it like any host, so a bridge
-   keeps a permanent host membership for the group in its MDB
- - Drop unused `--with-systemd` configure option, no unit file was ever
-   installed
-
-### Fixes
- - Fix `mctl` writing terminal probe escape sequences to stderr when
-   stdout is not a terminal, e.g. when piped to `grep`
  - Fix potential list corruption when the same interface is configured
    with more than one `vlan`
- - Fix use-after-free when an interface goes down with active group
-   timers or a remote querier being tracked
-
-
-[UNRELEASED][]
---------------
-
-### Changes
- - Add support for `static-group` per interface.  The group is joined in
-   the kernel, which answers queries for it like any host, so a bridge
-   keeps a permanent host membership for the group in its MDB
-
-### Fixes
  - Fix `mctl` writing terminal probe escape sequences to stderr when
    stdout is not a terminal, e.g. when piped to `grep`
- - Fix potential list corruption when the same interface is configured
-   with more than one `vlan`
- - Fix use-after-free when an interface goes down with active group
-   timers or a remote querier being tracked
-
-
-[UNRELEASED][]
---------------
-
-### Fixes
- - Fix `mctl` writing terminal probe escape sequences to stderr when
-   stdout is not a terminal, e.g. when piped to `grep`
- - Fix potential list corruption when the same interface is configured
-   with more than one `vlan`
- - Fix use-after-free when an interface goes down with active group
-   timers or a remote querier being tracked
-
-
-[UNRELEASED][]
---------------
-
-### Fixes
- - Fix `mctl` writing terminal probe escape sequences to stderr when
-   stdout is not a terminal, e.g. when piped to `grep`
- - Fix potential list corruption when the same interface is configured
-   with more than one `vlan`
-
-
-[UNRELEASED][]
---------------
-
-### Fixes
- - Fix `mctl` writing terminal probe escape sequences to stderr when
-   stdout is not a terminal, e.g. when piped to `grep`
-
 
 
 [v2.4][] - 2026-04-29
@@ -324,7 +270,8 @@ Initial public release.
 Limited IGMPv1/v2/v3 querier with hard-coded query interval, etc.  Put
 interfaces in a .conf file, whitespace separated to enable querier.
 
-[UNRELEASED]: https://github.com/kernelkit/mcd/compare/v2.4...HEAD
+[UNRELEASED]: https://github.com/kernelkit/mcd/compare/v3.0...HEAD
+[v3.0]:       https://github.com/kernelkit/mcd/compare/v2.4...v3.0
 [v2.4]:       https://github.com/kernelkit/mcd/compare/v2.3...v2.4
 [v2.3]:       https://github.com/kernelkit/mcd/compare/v2.2...v2.3
 [v2.2]:       https://github.com/kernelkit/mcd/compare/v2.1...v2.2

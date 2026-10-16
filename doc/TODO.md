@@ -10,8 +10,8 @@ General
    set to operate in raw VLAN mode
 
 
-Planned for v3.0
-----------------
+Later
+-----
 
  - Add `vid NUM` filter to `show mdb`
  - Add support for optional view of reserved FRNT VLANs.  In the igmp app
