@@ -288,17 +288,26 @@ set up a namespace with a bridge and a few veth pairs.  See
 Origin and license
 ------------------
 
-`mcd` started life as [querierd][], a stripped down `mrouted` for
-Westermo's WeOS.  Version 1.0 marks the fork and rename, version 2.0
-replaced the last of the `mrouted` code.  The project is maintained by
-the [kernelkit][] team and licensed under the [ISC license][license].
+`mcd` began in 2021 as [querierd][], written by Joachim Wiberg at
+Westermo with DNA strands from [`mrouted`][mrouted].  It gave the Linux
+bridge in WeOS 5 a querier that industrial end devices would actually
+answer.  Jacques de Laval added proxy mode to querierd at Westermo and
+made four of its releases.  Westermo's last release was v0.10, in May
+2023.
 
+In 2024 its original author adopted it as `mcd` in [KernelKit][], the
+home of [Infix OS][Infix] and the place where Open Source projects from
+industrial networking are picked up and carried on.  Version 2.0
+replaced the last of the `mrouted` code, and version 3.0 added the MLD
+querier.  `mcd` is licensed under the [ISC license][license].
 
 [mcd(8)]:      https://man.troglobit.com/man8/mcd.8.html
 [mcd.conf(5)]: https://man.troglobit.com/man5/mcd.conf.5.html
 [mctl(8)]:     https://man.troglobit.com/man8/mctl.8.html
 [querierd]:  https://github.com/westermo/querierd
-[kernelkit]: https://github.com/kernelkit
+[mrouted]:   https://github.com/troglobit/mrouted
+[KernelKit]: https://kernelkit.org
+[Infix]:     https://github.com/kernelkit/infix
 [license-badge]:  https://img.shields.io/badge/License-ISC-blue.svg
 [license]:        https://en.wikipedia.org/wiki/ISC_license
 [build-badge]:    https://github.com/kernelkit/mcd/actions/workflows/build.yml/badge.svg

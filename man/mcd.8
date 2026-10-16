@@ -165,10 +165,38 @@ and so on.  The directories are set at build time.
 .Re
 .Sh HISTORY
 .Nm
-started as querierd, a stripped down mrouted for Westermo WeOS.  Version
-1.0 is the fork and rename, version 2.0 replaced the last of the
-mrouted code, and version 3.0 added the MLD querier.
-.Sh AUTHORS
+began in 2021 as querierd, written by
 .An Joachim Wiberg
-and the kernelkit team,
-.Lk https://github.com/kernelkit/mcd
+at Westermo with DNA strands from mrouted.  It gave the Linux bridge in
+WeOS 5 a querier that industrial end devices would actually answer.
+Westermo's last release of querierd was v0.10, in May 2023.
+.Pp
+In 2024 its original author adopted it as
+.Nm .
+Version 2.0 replaced the last of the mrouted code, and version 3.0 added
+the MLD querier.  Today
+.Nm
+is the multicast querier in Infix OS.
+.Sh AUTHORS
+.An -nosplit
+.Nm
+is maintained by
+.An Joachim Wiberg ,
+.An Tobias Waldekranz
+and the KernelKit team.  KernelKit is the home of Infix OS, and the
+place where Open Source projects from industrial networking are picked
+up and carried on.
+.Pp
+.Bl -tag -width KernelKit -offset indent -compact
+.It KernelKit
+.Lk https://kernelkit.org
+.It Infix OS
+.Lk https://github.com/kernelkit/infix
+.It querierd
+.Lk https://github.com/westermo/querierd
+.El
+.Pp
+.An Jacques de Laval
+added proxy mode to querierd at Westermo and made four of its releases.
+The configuration parser goes back to mrouted by
+.An Bill Fenner .
