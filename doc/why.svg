@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 400" width="900" height="400" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13">
+  <title>Without a querier the bridge floods a multicast stream to every port, with mcd it reaches only the port that joined</title>
+  <style>
+    .bg   { fill: #ffffff; }
+    .card { fill: #f6f8fa; stroke: #d0d7de; }
+    .box, .dev { fill: #ffffff; stroke: #8c959f; }
+    .txt  { fill: #1f2328; }
+    .dim  { fill: #57606a; }
+    .st   { fill: #bc4c00; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+    .wire { stroke: #8c959f; stroke-width: 1.5; fill: none; }
+    .s    { stroke: #bc4c00; stroke-width: 2.5; fill: none; }
+    .sm   { fill: #bc4c00; }
+    @media (prefers-color-scheme: dark) {
+      .bg   { fill: #0d1117; }
+      .card { fill: #161b22; stroke: #30363d; }
+      .box, .dev { fill: #0d1117; stroke: #8b949e; }
+      .txt  { fill: #e6edf3; }
+      .dim  { fill: #8b949e; }
+      .st   { fill: #f0883e; }
+      .wire { stroke: #8b949e; }
+      .s    { stroke: #f0883e; }
+      .sm   { fill: #f0883e; }
+    }
+  </style>
+  <defs>
+    <marker id="as" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" class="sm"/>
+    </marker>
+  </defs>
+  <rect class="bg" x="0" y="0" width="900" height="400" rx="12"/>
+  <rect class="card" x="20" y="20" width="420" height="360" rx="10"/>
+  <text class="txt" x="36" y="46" font-weight="700" font-size="15">No querier</text>
+  <rect class="box" x="32" y="66" width="396" height="100" rx="8"/>
+  <text class="txt" x="44" y="86" font-weight="600">br0</text>
+  <text class="dim" x="76" y="86">IGMP/MLD snooping</text>
+  <rect class="box" x="36" y="104" width="92" height="44" rx="5"/>
+  <text class="txt mono" x="82" y="131" text-anchor="middle">eth0</text>
+  <path class="wire" d="M82,148 L82,262"/>
+  <rect class="dev" x="36" y="262" width="92" height="52" rx="6"/>
+  <text class="txt" x="82" y="284" text-anchor="middle" font-weight="600" font-size="12">PLC</text>
+  <text class="st" x="82" y="302" text-anchor="middle" font-size="11">flooded</text>
+  <path class="s" d="M98,154 L98,256" marker-end="url(#as)"/>
+  <rect class="box" x="134" y="104" width="92" height="44" rx="5"/>
+  <text class="txt mono" x="180" y="131" text-anchor="middle">eth1</text>
+  <path class="wire" d="M180,148 L180,262"/>
+  <rect class="dev" x="134" y="262" width="92" height="52" rx="6"/>
+  <text class="txt" x="180" y="284" text-anchor="middle" font-weight="600" font-size="12">HMI panel</text>
+  <text class="st" x="180" y="302" text-anchor="middle" font-size="11">flooded</text>
+  <path class="s" d="M196,154 L196,256" marker-end="url(#as)"/>
+  <rect class="box" x="232" y="104" width="92" height="44" rx="5"/>
+  <text class="txt mono" x="278" y="131" text-anchor="middle">eth2</text>
+  <path class="wire" d="M278,148 L278,262"/>
+  <rect class="dev" x="232" y="262" width="92" height="52" rx="6"/>
+  <text class="txt" x="278" y="284" text-anchor="middle" font-weight="600" font-size="12">IP camera</text>
+  <text class="dim" x="278" y="302" text-anchor="middle" font-size="11">sends 239.1.1.1</text>
+  <path class="s" d="M294,256 L294,154" marker-end="url(#as)"/>
+  <rect class="box" x="330" y="104" width="92" height="44" rx="5"/>
+  <text class="txt mono" x="376" y="131" text-anchor="middle">eth3</text>
+  <path class="wire" d="M376,148 L376,262"/>
+  <rect class="dev" x="330" y="262" width="92" height="52" rx="6"/>
+  <text class="txt" x="376" y="284" text-anchor="middle" font-weight="600" font-size="12">Operator PC</text>
+  <text class="dim" x="376" y="302" text-anchor="middle" font-size="11">joined 239.1.1.1</text>
+  <path class="s" d="M392,154 L392,256" marker-end="url(#as)"/>
+  <text class="dim" x="36" y="340" font-size="12">Snooping entries age out, so the bridge</text>
+  <text class="dim" x="36" y="358" font-size="12">floods the stream to every port.</text>
+  <rect class="card" x="460" y="20" width="420" height="360" rx="10"/>
+  <text class="txt" x="476" y="46" font-weight="700" font-size="15">With mcd</text>
+  <rect class="box" x="472" y="66" width="396" height="100" rx="8"/>
+  <text class="txt" x="484" y="86" font-weight="600">br0</text>
+  <text class="dim" x="516" y="86">IGMP/MLD snooping</text>
+  <rect class="box" x="476" y="104" width="92" height="44" rx="5"/>
+  <text class="txt mono" x="522" y="131" text-anchor="middle">eth0</text>
+  <path class="wire" d="M522,148 L522,262"/>
+  <rect class="dev" x="476" y="262" width="92" height="52" rx="6"/>
+  <text class="txt" x="522" y="284" text-anchor="middle" font-weight="600" font-size="12">PLC</text>
+  <text class="dim" x="522" y="302" text-anchor="middle" font-size="11">left alone</text>
+  <rect class="box" x="574" y="104" width="92" height="44" rx="5"/>
+  <text class="txt mono" x="620" y="131" text-anchor="middle">eth1</text>
+  <path class="wire" d="M620,148 L620,262"/>
+  <rect class="dev" x="574" y="262" width="92" height="52" rx="6"/>
+  <text class="txt" x="620" y="284" text-anchor="middle" font-weight="600" font-size="12">HMI panel</text>
+  <text class="dim" x="620" y="302" text-anchor="middle" font-size="11">left alone</text>
+  <rect class="box" x="672" y="104" width="92" height="44" rx="5"/>
+  <text class="txt mono" x="718" y="131" text-anchor="middle">eth2</text>
+  <path class="wire" d="M718,148 L718,262"/>
+  <rect class="dev" x="672" y="262" width="92" height="52" rx="6"/>
+  <text class="txt" x="718" y="284" text-anchor="middle" font-weight="600" font-size="12">IP camera</text>
+  <text class="dim" x="718" y="302" text-anchor="middle" font-size="11">sends 239.1.1.1</text>
+  <path class="s" d="M734,256 L734,154" marker-end="url(#as)"/>
+  <rect class="box" x="770" y="104" width="92" height="44" rx="5"/>
+  <text class="txt mono" x="816" y="131" text-anchor="middle">eth3</text>
+  <path class="wire" d="M816,148 L816,262"/>
+  <rect class="dev" x="770" y="262" width="92" height="52" rx="6"/>
+  <text class="txt" x="816" y="284" text-anchor="middle" font-weight="600" font-size="12">Operator PC</text>
+  <text class="dim" x="816" y="302" text-anchor="middle" font-size="11">joined 239.1.1.1</text>
+  <path class="s" d="M832,154 L832,256" marker-end="url(#as)"/>
+  <text class="dim" x="476" y="340" font-size="12">Queries keep the membership fresh, so the</text>
+  <text class="dim" x="476" y="358" font-size="12">stream reaches only the port that joined.</text>
+</svg>

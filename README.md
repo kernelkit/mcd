@@ -36,6 +36,8 @@ switches, doing their best to keep multicast off low-capacity links.
 Without a querier, snooping times out and multicast turns into
 broadcast, which is what takes these sites down.
 
+![Two panels of the same bridge.  Without a querier, a camera stream on eth2 floods every other port.  With mcd, it reaches only eth3, where the operator PC joined the group](doc/why.svg)
+
 The bridge also lacks version fallback.  Per RFC, a LAN should run
 IGMPv3 until a v2 host appears, then drop to v2 for as long as that
 host keeps talking, and the same goes for MLDv2 and MLDv1.  The bridge
