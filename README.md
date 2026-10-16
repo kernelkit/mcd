@@ -1,16 +1,15 @@
-mcd: IGMP and MLD Querier for the Linux Bridge
-==============================================
-[![1][]][2] [![3][]][4] [![5][]][6]
+Multicast Querier for the Linux Bridge
+======================================
+[![ISC license][license-badge]][license] [![Build status][build-badge]][build] [![Coverity Scan status][coverity-badge]][coverity]
 
 `mcd` is a small daemon that turns a Linux bridge into a proper IGMP
 and MLD querier.  It sends queries from a real address, takes part in
 querier elections, falls back from IGMPv3 to v2 or v1 and from MLDv2 to
 v1 when old gear shows up, and follows interfaces and addresses as they
-come and go.  It ships
-with `mctl`, a tool that shows what the querier and the bridge are up
-to, in plain text or JSON.
+come and go.  It ships with `mctl`, a tool that shows what the querier
+and the bridge are up to, in plain text or JSON.
 
-![How mcd fits in](doc/overview.svg)
+![Diagram: mcd on a Linux host sends IGMP and MLD queries through the VLAN interfaces into the bridge, hosts on the bridge ports answer with membership reports, and a side panel lists what the bridge alone cannot do](doc/overview.svg)
 
 - [Why?](#why)
 - [Features](#features)
@@ -28,7 +27,8 @@ Why?
 The Linux bridge has IGMP/MLD snooping, with per-VLAN settings and a
 built-in querier.  So why run another one?
 
-Because the bridge querier only sends queries from source IP 0.0.0.0.
+Because the bridge querier only sends queries from source address
+0.0.0.0, or :: for IPv6.
 The bridge lives below your VLAN interfaces, so it cannot know which
 address to use, or even what the interfaces are called (`br0.1` or
 `vlan1`?).  Proxy queries like that are allowed by the RFCs, but some
@@ -42,7 +42,8 @@ broadcast, which is what takes these sites down.
 
 The bridge also lacks version fallback.  Per RFC, a LAN should run
 IGMPv3 until a v2 host appears, then drop to v2 for as long as that
-host keeps talking.  The bridge has no such fallback.
+host keeps talking, and the same goes for MLDv2 and MLDv1.  The bridge
+has no such fallback.
 
 `mcd` fills that gap.  It queries from the bridge's own addresses,
 follows the election rules, and keeps snooping armed on LANs that have
@@ -58,17 +59,17 @@ Features
   interface address, MLD from its link-local address, each with its
   own election.
 - Querier election per RFC 2236, 3376, 2710 and 3810, lowest address
-  wins.  When a
-  better querier shows up, `mcd` backs off and watches the other
-  querier timer.  When it expires, `mcd` takes over again.
+  wins.  When a better querier shows up, `mcd` backs off and watches
+  the other querier timer.  When it expires, `mcd` takes over again.
 - Startup query burst.  On assuming the querier role, `mcd` sends
   `robustness` queries spaced `query-interval / 4` apart, per RFC 3376
   §8.6 and §8.7.  A host that missed the first query gets another one
   within half a minute instead of waiting a full query interval.
 - Version fallback.  Starts at IGMPv3 and MLDv2, drops to the older
   versions when such hosts appear, and returns when they go quiet.
-- Proxy mode, a backup querier that sends from 0.0.0.0 and can never
-  win an election.  Used automatically when an interface has no address.
+- Proxy mode, a backup querier that sends from 0.0.0.0 or :: and can
+  never win an election.  Used automatically when an interface has no
+  address.
 - Raw VLAN mode.  Run a querier directly on a VLAN of a filtering
   bridge, no `vlanN` interface required.
 - Static groups, joined in the kernel so they never time out.
@@ -79,7 +80,7 @@ Features
   for scripts, a watch mode for humans.
 - Plain C, no runtime library dependencies, ISC licensed.
 
-![Querier lifecycle on one interface](doc/querier-timeline.svg)
+![Timeline of one querier: a startup burst of queries, then one every query interval, silence while a lower address querier is present, and taking over again when its timer expires](doc/querier-timeline.svg)
 
 
 Quick start
@@ -134,7 +135,7 @@ is passive on all interfaces.  The full syntax:
 | `global-response-interval`    | Max response time hosts get, controls how bursty replies are         |
 | `global-last-member-interval` | Seconds between group specific queries, `robustness` sets the count  |
 | `robustness`                  | Tolerance to lost reports and lost queriers, also the startup burst length |
-| `router-timeout`              | Other querier present interval, see below                            |
+| `router-timeout`              | Other querier present interval, explained below the table           |
 | `no router-alert`             | Drop the IP Router Alert option from queries                         |
 | `include`                     | Read one file, or every file matching a glob, e.g. `/etc/mc.d/*.conf` |
 
@@ -151,17 +152,17 @@ the IP header.  Turn it off only if you know you have to.
 
 ### Interface settings
 
-| Flag                 | Meaning                                                               |
-|----------------------|-----------------------------------------------------------------------|
-| `enable`, `disable`  | Run a querier on the interface, or not.  Default is `disable`         |
-| `vlan VID`           | Raw VLAN mode on a filtering bridge, see below                        |
-| `proxy-mode`         | Backup querier, source 0.0.0.0, never wins an election                |
-| `igmp on`, `igmp off`  | Run the IGMP querier on the interface, default on                   |
-| `igmpv1`, `igmpv2`, `igmpv3` | Starting IGMP version.  Default `igmpv3`, with automatic fallback |
-| `mld on`, `mld off`    | Run the MLD querier on the interface, default on                    |
-| `mldv1`, `mldv2`       | Starting MLD version.  Default `mldv2`, with automatic fallback      |
-| `query-interval N`   | Per interface override of `global-query-interval`                     |
-| `static-group GROUP` | Join GROUP on the interface, as a host would, see below               |
+| Flag                         | Meaning                                                              |
+|------------------------------|----------------------------------------------------------------------|
+| `enable`, `disable`          | Run the queriers on the interface, or not.  Default is `disable`     |
+| `vlan VID`                   | [Raw VLAN mode](#raw-vlan-mode) on a filtering bridge                |
+| `proxy-mode`                 | Backup querier, source 0.0.0.0 or ::, never wins an election         |
+| `igmp on`, `igmp off`        | Run the IGMP querier on the interface, default on                    |
+| `igmpv1`, `igmpv2`, `igmpv3` | Starting IGMP version.  Default `igmpv3`, with automatic fallback    |
+| `mld on`, `mld off`          | Run the MLD querier on the interface, default on                     |
+| `mldv1`, `mldv2`             | Starting MLD version.  Default `mldv2`, with automatic fallback      |
+| `query-interval N`           | Per interface override of `global-query-interval`                    |
+| `static-group GROUP`         | Join GROUP on the interface, as a host would, see [Static groups](#static-groups) |
 
 The keyword `phyint` is accepted as an alias for `iface`, and the old
 `proxy-queries` still works as an alias for `proxy-mode`.
@@ -174,14 +175,15 @@ bridge itself:
     iface vlan1 enable
     iface br0 enable
 
+Use the bridge directly when it has no VLAN filtering, or when the VLAN
+you care about is its untagged default.  For other VLANs of a filtering
+bridge, see [Raw VLAN mode](#raw-vlan-mode).
+
 Either way, both an IGMP and an MLD querier start.  IGMP queries use
 the interface address as source, MLD queries its link-local address,
 and `mcd` competes in both elections.  To run only one of them:
 
     iface vlan1 enable mld off
-  Use the bridge directly when it has no VLAN
-filtering, or when the VLAN you care about is its untagged default.
-For other VLANs of a filtering bridge, see raw VLAN mode below.
 
 `mcd` starts as IGMPv3 and MLDv2 and drops to the older version on its
 own if a legacy host appears.  To start out there instead:
@@ -192,11 +194,12 @@ own if a legacy host appears.  To start out there instead:
 
     iface vlan1 enable proxy-mode
 
-In proxy mode `mcd` sends from 0.0.0.0 and therefore always loses
-elections.  It only queries when no real querier is around, which makes
-it a safe backup on LANs that normally have a multicast router.
+In proxy mode `mcd` sends from 0.0.0.0, or :: for MLD, and therefore
+always loses elections.  It only queries when no real querier is
+around, which makes it a safe backup on LANs that normally have a
+multicast router.
 
-> **Note:** an interface without an IP address runs in proxy mode
+> **Note:** an interface without an address runs in proxy mode
 > whether you asked for it or not.  When an address shows up, via
 > netlink, `mcd` switches to standard mode by itself.
 
@@ -223,7 +226,8 @@ protocol version and query interval.
 `mcd` joins each group in the kernel, which then answers queries for it
 like any other host.  On a bridge this gives the group a permanent host
 membership in the MDB, so it is always forwarded to the bridge itself.
-The membership is dropped when the interface goes down or `mcd` exits.
+The membership stays until the group is removed from the configuration
+or `mcd` exits.  A link flap or a reload does not touch it.
 
 This does not work in raw VLAN mode, since the kernel cannot join on a
 specific VLAN of a bridge.
@@ -335,7 +339,7 @@ Options worth knowing:
 | Option                 | Effect                                                     |
 |------------------------|------------------------------------------------------------|
 | `--with-group=NAME`    | Group owner of `/run/mcd.sock`, default `root`.  Use e.g. `wheel` to let admins run `mctl` without `sudo` |
-| `--enable-test`        | Build the test suite, see below                            |
+| `--enable-test`        | Build the test suite, see [Testing](#testing)              |
 | `--prefix=`, `--sysconfdir=` | The usual, defaults are `/usr/local` and `/etc`      |
 
 Configure prints a summary at the end, check it before running `make`.
@@ -361,14 +365,14 @@ Origin and license
 `mcd` started life as [querierd][], a stripped down `mrouted` for
 Westermo's WeOS.  Version 1.0 marks the fork and rename, version 2.0
 replaced the last of the `mrouted` code.  The project is maintained by
-the [kernelkit][] team and licensed under the [ISC license][2].
+the [kernelkit][] team and licensed under the [ISC license][license].
 
 
 [querierd]:  https://github.com/westermo/querierd
 [kernelkit]: https://github.com/kernelkit
-[1]: https://img.shields.io/badge/License-ISC-blue.svg
-[2]: https://en.wikipedia.org/wiki/ISC_license
-[3]: https://github.com/kernelkit/mcd/actions/workflows/build.yml/badge.svg
-[4]: https://github.com/kernelkit/mcd/actions/workflows/build.yml/
-[5]: https://scan.coverity.com/projects/30099/badge.svg
-[6]: https://scan.coverity.com/projects/30099
+[license-badge]:  https://img.shields.io/badge/License-ISC-blue.svg
+[license]:        https://en.wikipedia.org/wiki/ISC_license
+[build-badge]:    https://github.com/kernelkit/mcd/actions/workflows/build.yml/badge.svg
+[build]:          https://github.com/kernelkit/mcd/actions/workflows/build.yml/
+[coverity-badge]: https://scan.coverity.com/projects/30099/badge.svg
+[coverity]:       https://scan.coverity.com/projects/30099

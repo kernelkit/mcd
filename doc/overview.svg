@@ -44,7 +44,7 @@
   <rect class="bg" x="0" y="0" width="954" height="500" rx="12"/>
 
   <!-- Host -->
-  <rect class="card" x="24" y="24" width="676" height="336" rx="10"/>
+  <rect class="card" x="24" y="24" width="676" height="364" rx="10"/>
   <text class="dim" x="40" y="46" font-weight="600">Linux switch or host</text>
 
   <!-- mcd centred over the VLAN interfaces, mctl off to the side -->
@@ -72,7 +72,7 @@
   <!-- Bridge -->
   <rect class="box" x="48" y="222" width="628" height="96" rx="8"/>
   <text class="txt" x="60" y="242" font-weight="600">br0</text>
-  <text class="dim" x="92" y="242">VLAN filtering, IGMP snooping on</text>
+  <text class="dim" x="92" y="242">VLAN filtering, IGMP/MLD snooping</text>
   <path class="wire" d="M168,194 L168,222"/>
   <path class="wire" d="M500,194 L500,222"/>
 
@@ -97,8 +97,10 @@
   <path class="wire" d="M439,302 L439,400"/>
   <path class="r"    d="M599,394 L599,306" marker-end="url(#ar)"/>
 
-  <text class="qt" x="269" y="345" text-anchor="end" font-size="12">General Query</text>
-  <text class="qt mono" x="269" y="361" text-anchor="end">src 192.168.1.1</text>
+  <text class="qt" x="269" y="333" text-anchor="end" font-size="12">IGMP General Query</text>
+  <text class="qt mono" x="269" y="347" text-anchor="end">src 192.168.1.1</text>
+  <text class="qt" x="269" y="367" text-anchor="end" font-size="12">MLD Listener Query</text>
+  <text class="qt mono" x="269" y="381" text-anchor="end">src fe80::1</text>
   <text class="rt" x="589" y="345" text-anchor="end" font-size="12">Membership Report</text>
   <text class="rt mono" x="589" y="361" text-anchor="end">join 239.1.1.1</text>
 
@@ -120,23 +122,24 @@
   <!-- Side panel -->
   <rect class="card" x="724" y="24" width="206" height="436" rx="10"/>
   <text class="txt" x="740" y="48" font-weight="700">Bridge alone</text>
-  <text class="dim" x="740" y="70">queries from 0.0.0.0 only</text>
-  <text class="dim" x="740" y="88">no IGMP or MLD fallback</text>
-  <text class="dim" x="740" y="106">unaware of vlanN on top</text>
+  <text class="dim" x="740" y="70">proxy queries only,</text>
+  <text class="dim" x="740" y="88">from 0.0.0.0 or ::</text>
+  <text class="dim" x="740" y="106">no version fallback</text>
+  <text class="dim" x="740" y="124">unaware of vlanN on top</text>
 
-  <text class="txt" x="740" y="144" font-weight="700">With mcd</text>
-  <text class="dim" x="740" y="166">real source address</text>
-  <text class="dim" x="740" y="184">querier election, RFC 3376</text>
-  <text class="dim" x="740" y="202">startup query burst</text>
-  <text class="dim" x="740" y="220">v3, v2, v1 fallback</text>
-  <text class="dim" x="740" y="238">proxy mode backup querier</text>
-  <text class="dim" x="740" y="256">raw VLAN mode</text>
-  <text class="dim" x="740" y="274">static groups</text>
-  <text class="dim" x="740" y="292">follows netlink events</text>
+  <text class="txt" x="740" y="162" font-weight="700">With mcd</text>
+  <text class="dim" x="740" y="184">real source addresses</text>
+  <text class="dim" x="740" y="202">IGMP and MLD elections</text>
+  <text class="dim" x="740" y="220">startup query burst</text>
+  <text class="dim" x="740" y="238">version fallback, both</text>
+  <text class="dim" x="740" y="256">proxy mode backup querier</text>
+  <text class="dim" x="740" y="274">raw VLAN mode</text>
+  <text class="dim" x="740" y="292">static groups</text>
+  <text class="dim" x="740" y="310">follows netlink events</text>
 
-  <text class="txt" x="740" y="330" font-weight="700">Result</text>
-  <text class="dim" x="740" y="352">snooping stays armed:</text>
-  <text class="dim" x="740" y="370">239.1.1.1 reaches eth3 only,</text>
-  <text class="dim" x="740" y="388">never floods eth0 to eth2,</text>
-  <text class="dim" x="740" y="406">no multicast router needed</text>
+  <text class="txt" x="740" y="348" font-weight="700">Result</text>
+  <text class="dim" x="740" y="370">snooping stays armed:</text>
+  <text class="dim" x="740" y="388">239.1.1.1 reaches eth3 only,</text>
+  <text class="dim" x="740" y="406">never floods eth0 to eth2,</text>
+  <text class="dim" x="740" y="424">no multicast router needed</text>
 </svg>
