@@ -256,10 +256,10 @@ static int get_width(void)
 
 		/* we may be running under watch(1) */
 		columns = getenv("COLUMNS");
-		if (columns) {
+		if (columns)
 			cols = atoi(columns);
-			return cols;
-		}
+
+		return cols;
 	}
 
 	memset(buf, 0, sizeof(buf));

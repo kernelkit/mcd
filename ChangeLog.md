@@ -3,6 +3,14 @@ Change Log
 
 All relevant, user visible, changes are documented in this file.
 
+[UNRELEASED][]
+--------------
+
+### Fixes
+ - Fix `mctl` writing terminal probe escape sequences to stderr when
+   stdout is not a terminal, e.g. when piped to `grep`
+
+
 
 [v2.4][] - 2026-04-29
 ---------------------
