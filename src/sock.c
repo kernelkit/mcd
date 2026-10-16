@@ -225,7 +225,7 @@ int sock_send(const struct ifi *ifi, size_t len)
 
 static int mcast_member(const struct ifi *ifi, const inet_addr_t *group, int join)
 {
-    if (group->ss_family == AF_INET6) {
+    if (group->family == AF_INET6) {
 	struct ipv6_mreq mreq = {
 	    .ipv6mr_multiaddr = *inet_addr_get6(group),
 	    .ipv6mr_interface = ifi->ifi_index,

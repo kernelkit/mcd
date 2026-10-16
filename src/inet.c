@@ -15,26 +15,22 @@ char s4[INET_ADDRSTR_LEN];
 
 /*
  * Orders addresses numerically within a family, by family otherwise.
- * Unset addresses (AF_UNSPEC) compare equal to each other.
  */
 int inet_addr_cmp(const inet_addr_t *a, const inet_addr_t *b)
 {
-    if (a->ss_family != b->ss_family)
-	return a->ss_family < b->ss_family ? -1 : 1;
+    if (a->family != b->family)
+	return a->family < b->family ? -1 : 1;
 
-    switch (a->ss_family) {
+    switch (a->family) {
     case AF_INET: {
-	uint32_t ia = ntohl(inet_addr_get4(a));
-	uint32_t ib = ntohl(inet_addr_get4(b));
+	uint32_t ia = ntohl(a->u.in.s_addr);
+	uint32_t ib = ntohl(b->u.in.s_addr);
 
 	return ia < ib ? -1 : ia > ib;
     }
 
-#ifdef AF_INET6
     case AF_INET6:
-	return memcmp(&((const struct sockaddr_in6 *)a)->sin6_addr,
-		      &((const struct sockaddr_in6 *)b)->sin6_addr, sizeof(struct in6_addr));
-#endif
+	return memcmp(&a->u.in6, &b->u.in6, sizeof(a->u.in6));
 
     default:
 	return 0;
@@ -43,46 +39,30 @@ int inet_addr_cmp(const inet_addr_t *a, const inet_addr_t *b)
 
 int inet_addr_linklocal(const inet_addr_t *addr)
 {
-    switch (addr->ss_family) {
+    switch (addr->family) {
     case AF_INET:
-	return IN_LINKLOCAL(ntohl(inet_addr_get4(addr)));
-
-#ifdef AF_INET6
+	return IN_LINKLOCAL(ntohl(addr->u.in.s_addr));
     case AF_INET6:
-	return IN6_IS_ADDR_LINKLOCAL(&((const struct sockaddr_in6 *)addr)->sin6_addr);
-#endif
-
+	return IN6_IS_ADDR_LINKLOCAL(&addr->u.in6);
     default:
 	return 0;
     }
 }
 
-/*
- * Copy only the part of sa that its family defines, the caller may
- * hand us a plain struct sockaddr_in.
- */
+/* From a socket address, as netlink and getifaddrs() give them */
 void inet_addr_set(inet_addr_t *addr, const struct sockaddr *sa)
 {
-    size_t len;
-
     switch (sa->sa_family) {
     case AF_INET:
-	len = sizeof(struct sockaddr_in);
+	inet_addr_set4(addr, ((const struct sockaddr_in *)sa)->sin_addr.s_addr);
 	break;
-
-#ifdef AF_INET6
     case AF_INET6:
-	len = sizeof(struct sockaddr_in6);
+	inet_addr_set6(addr, &((const struct sockaddr_in6 *)sa)->sin6_addr);
 	break;
-#endif
-
     default:
-	len = sizeof(*sa);
+	inet_addr_any(addr, sa->sa_family);
 	break;
     }
-
-    memset(addr, 0, sizeof(*addr));
-    memcpy(addr, sa, len);
 }
 
 /*
@@ -90,53 +70,47 @@ void inet_addr_set(inet_addr_t *addr, const struct sockaddr *sa)
  */
 uint32_t inet_addr_get4(const inet_addr_t *addr)
 {
-    if (addr->ss_family != AF_INET)
+    if (addr->family != AF_INET)
 	return INADDR_ANY;
 
-    return ((const struct sockaddr_in *)addr)->sin_addr.s_addr;
+    return addr->u.in.s_addr;
 }
 
 void inet_addr_set4(inet_addr_t *addr, uint32_t ina)
 {
-    struct sockaddr_in *sin = (struct sockaddr_in *)addr;
-
-    memset(addr, 0, sizeof(*addr));
-    sin->sin_family = AF_INET;
-    sin->sin_addr.s_addr = ina;
+    inet_addr_any(addr, AF_INET);
+    addr->u.in.s_addr = ina;
 }
 
 void inet_addr_set6(inet_addr_t *addr, const struct in6_addr *in6)
 {
-    struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)addr;
-
-    memset(addr, 0, sizeof(*addr));
-    sin6->sin6_family = AF_INET6;
-    sin6->sin6_addr = *in6;
+    inet_addr_any(addr, AF_INET6);
+    addr->u.in6 = *in6;
 }
 
 const struct in6_addr *inet_addr_get6(const inet_addr_t *addr)
 {
-    if (addr->ss_family != AF_INET6)
+    if (addr->family != AF_INET6)
 	return &in6addr_any;
 
-    return &((const struct sockaddr_in6 *)addr)->sin6_addr;
+    return &addr->u.in6;
 }
 
 /* The family's any-address, 0.0.0.0 or ::, what a proxy querier sends from */
 void inet_addr_any(inet_addr_t *addr, int family)
 {
     memset(addr, 0, sizeof(*addr));
-    addr->ss_family = family;
+    addr->family = family;
 }
 
 /* 0.0.0.0 or :: */
 int inet_addr_is_any(const inet_addr_t *addr)
 {
-    switch (addr->ss_family) {
+    switch (addr->family) {
     case AF_INET:
-	return inet_addr_get4(addr) == INADDR_ANY;
+	return addr->u.in.s_addr == INADDR_ANY;
     case AF_INET6:
-	return IN6_IS_ADDR_UNSPECIFIED(inet_addr_get6(addr));
+	return IN6_IS_ADDR_UNSPECIFIED(&addr->u.in6);
     default:
 	return 1;
     }
@@ -144,11 +118,11 @@ int inet_addr_is_any(const inet_addr_t *addr)
 
 int inet_addr_is_group(const inet_addr_t *addr)
 {
-    switch (addr->ss_family) {
+    switch (addr->family) {
     case AF_INET:
-	return IN_MULTICAST(ntohl(inet_addr_get4(addr)));
+	return IN_MULTICAST(ntohl(addr->u.in.s_addr));
     case AF_INET6:
-	return IN6_IS_ADDR_MULTICAST(inet_addr_get6(addr));
+	return IN6_IS_ADDR_MULTICAST(&addr->u.in6);
     default:
 	return 0;
     }
@@ -157,12 +131,11 @@ int inet_addr_is_group(const inet_addr_t *addr)
 /* Groups in 224.0.0.0/24 and ff02::/16 are never tracked */
 int inet_addr_is_lanscope(const inet_addr_t *addr)
 {
-    switch (addr->ss_family) {
+    switch (addr->family) {
     case AF_INET:
-	return ntohl(inet_addr_get4(addr)) <= INADDR_MAX_LOCAL_GROUP;
+	return ntohl(addr->u.in.s_addr) <= INADDR_MAX_LOCAL_GROUP;
     case AF_INET6:
-	return IN6_IS_ADDR_MC_LINKLOCAL(inet_addr_get6(addr)) ||
-	       IN6_IS_ADDR_MC_NODELOCAL(inet_addr_get6(addr));
+	return IN6_IS_ADDR_MC_LINKLOCAL(&addr->u.in6) || IN6_IS_ADDR_MC_NODELOCAL(&addr->u.in6);
     default:
 	return 0;
     }
@@ -170,26 +143,8 @@ int inet_addr_is_lanscope(const inet_addr_t *addr)
 
 char *inet_addr_fmt(const inet_addr_t *addr, char *s, size_t len)
 {
-    const void *src;
-
-    switch (addr->ss_family) {
-    case AF_INET:
-	src = &((const struct sockaddr_in *)addr)->sin_addr;
-	break;
-
-#ifdef AF_INET6
-    case AF_INET6:
-	src = &((const struct sockaddr_in6 *)addr)->sin6_addr;
-	break;
-#endif
-
-    default:
+    if (!inet_ntop(addr->family, &addr->u, s, len))
 	strlcpy(s, "unspec", len);
-	return s;
-    }
-
-    if (!inet_ntop(addr->ss_family, src, s, len))
-	return inet_fmt(INADDR_ANY, s, len);
 
     return s;
 }

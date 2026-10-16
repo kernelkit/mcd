@@ -29,9 +29,16 @@ extern char s3[INET_ADDRSTR_LEN];
 extern char s4[INET_ADDRSTR_LEN];
 
 /*
- * Replace in_addr_t with family agnostic type
+ * Family agnostic address, only the family and the address itself are
+ * ever needed.
  */
-typedef struct sockaddr_storage inet_addr_t;
+typedef struct {
+    sa_family_t family;
+    union {
+	struct in_addr  in;
+	struct in6_addr in6;
+    } u;
+} inet_addr_t;
 
 /*
  * External function declarations

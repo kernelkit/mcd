@@ -178,7 +178,7 @@ ifmod	: DISABLE		{ ifset(IFIF_DISABLED, 0); }
 	    a->al_flags = NBRF_STATIC_GROUP;
 	    time(&a->al_ctime);
 
-	    if (a->al_addr.ss_family == AF_INET6 && twin)
+	    if (a->al_addr.family == AF_INET6 && twin)
 		TAILQ_INSERT_TAIL(&twin->ifi_static, a, al_link);
 	    else
 		TAILQ_INSERT_TAIL(&ifi->ifi_static, a, al_link);
