@@ -126,6 +126,7 @@ extern void		send_igmp_query(const struct ifi *, int, const inet_addr_t *);
 /* iface.c */
 extern void		iface_init(void);
 extern void		iface_zero(struct ifi *);
+extern void		iface_lists_init(struct ifi *);
 extern void             iface_add(int, int);
 extern void             iface_del(int, int);
 extern void             iface_check_election(struct ifi *);

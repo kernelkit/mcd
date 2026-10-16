@@ -76,9 +76,13 @@ void iface_exit(void)
     }
 }
 
-/*
- * Note: remember to re-init all relevant TAILQ's in iface_init()!
- */
+void iface_lists_init(struct ifi *ifi)
+{
+    TAILQ_INIT(&ifi->ifi_static);
+    TAILQ_INIT(&ifi->ifi_groups);
+    TAILQ_INIT(&ifi->ifi_addrs);
+}
+
 void iface_zero(struct ifi *ifi)
 {
     ifi->ifi_flags	= IFIF_DISABLED;
@@ -87,9 +91,7 @@ void iface_zero(struct ifi *ifi)
     memset(&ifi->ifi_inaddr, 0, sizeof(ifi->ifi_inaddr));
     ifi->ifi_vlan	= 0;
     ifi->ifi_name[0]	= '\0';
-    TAILQ_INIT(&ifi->ifi_static);
-    TAILQ_INIT(&ifi->ifi_groups);
-    TAILQ_INIT(&ifi->ifi_addrs);
+    iface_lists_init(ifi);
     ifi->ifi_querier	= NULL;
     ifi->ifi_query_interval = igmp_query_interval;
     ifi->ifi_timerid	= 0;

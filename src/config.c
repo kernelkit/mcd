@@ -140,9 +140,7 @@ static struct ifi *iface_clone(const struct ifi *ifi, int family, struct ifi *af
 
     *clone = *ifi;
     clone->ifi_family = family;
-    TAILQ_INIT(&clone->ifi_static);
-    TAILQ_INIT(&clone->ifi_groups);
-    TAILQ_INIT(&clone->ifi_addrs);
+    iface_lists_init(clone);
     TAILQ_INSERT_AFTER(&ifaces, after, clone, ifi_link);
 
     return clone;
