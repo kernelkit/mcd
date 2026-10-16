@@ -1,17 +1,16 @@
-mcd: IGMP Querier for the Linux Bridge
-======================================
+mcd: IGMP and MLD Querier for the Linux Bridge
+==============================================
 [![1][]][2] [![3][]][4] [![5][]][6]
 
 `mcd` is a small daemon that turns a Linux bridge into a proper IGMP
-querier.  It sends queries from a real IP address, takes part in querier
-elections, falls back from IGMPv3 to v2 or v1 when old gear shows up,
-and follows interfaces and addresses as they come and go.  It ships
+and MLD querier.  It sends queries from a real address, takes part in
+querier elections, falls back from IGMPv3 to v2 or v1 and from MLDv2 to
+v1 when old gear shows up, and follows interfaces and addresses as they
+come and go.  It ships
 with `mctl`, a tool that shows what the querier and the bridge are up
 to, in plain text or JSON.
 
 ![How mcd fits in](doc/overview.svg)
-
-IPv4 (IGMP) is supported today.  IPv6 (MLD) is on the roadmap.
 
 - [Why?](#why)
 - [Features](#features)
@@ -55,15 +54,19 @@ Features
 
 - Queries go out with the interface address as source, so even picky
   end devices answer them.
-- Querier election per RFC 2236 and 3376, lowest IP wins.  When a
+- One querier per address family on every interface: IGMP from the
+  interface address, MLD from its link-local address, each with its
+  own election.
+- Querier election per RFC 2236, 3376, 2710 and 3810, lowest address
+  wins.  When a
   better querier shows up, `mcd` backs off and watches the other
   querier timer.  When it expires, `mcd` takes over again.
 - Startup query burst.  On assuming the querier role, `mcd` sends
   `robustness` queries spaced `query-interval / 4` apart, per RFC 3376
   §8.6 and §8.7.  A host that missed the first query gets another one
   within half a minute instead of waiting a full query interval.
-- Version fallback.  Starts at IGMPv3, drops to v2 or v1 when such
-  hosts appear, and returns when they go quiet.
+- Version fallback.  Starts at IGMPv3 and MLDv2, drops to the older
+  versions when such hosts appear, and returns when they go quiet.
 - Proxy mode, a backup querier that sends from 0.0.0.0 and can never
   win an election.  Used automatically when an interface has no address.
 - Raw VLAN mode.  Run a querier directly on a VLAN of a filtering
@@ -116,8 +119,9 @@ is passive on all interfaces.  The full syntax:
     router-timeout [1-1024]                   # default: calculated
     no router-alert                           # default: enabled
 
-    iface IFNAME [enable | disable] [vlan [1-4094]]
-          [proxy-mode] [igmpv1 | igmpv2 | igmpv3]
+    iface IFNAME [enable | disable] [vlan [1-4094]] [proxy-mode]
+          [igmp on|off] [igmpv1 | igmpv2 | igmpv3]
+          [mld on|off] [mldv1 | mldv2]
           [query-interval [1-1024]] [static-group GROUP ...]
 
     include /path/to.d/*.conf
@@ -152,7 +156,10 @@ the IP header.  Turn it off only if you know you have to.
 | `enable`, `disable`  | Run a querier on the interface, or not.  Default is `disable`         |
 | `vlan VID`           | Raw VLAN mode on a filtering bridge, see below                        |
 | `proxy-mode`         | Backup querier, source 0.0.0.0, never wins an election                |
+| `igmp on`, `igmp off`  | Run the IGMP querier on the interface, default on                   |
 | `igmpv1`, `igmpv2`, `igmpv3` | Starting IGMP version.  Default `igmpv3`, with automatic fallback |
+| `mld on`, `mld off`    | Run the MLD querier on the interface, default on                    |
+| `mldv1`, `mldv2`       | Starting MLD version.  Default `mldv2`, with automatic fallback      |
 | `query-interval N`   | Per interface override of `global-query-interval`                     |
 | `static-group GROUP` | Join GROUP on the interface, as a host would, see below               |
 
@@ -167,15 +174,19 @@ bridge itself:
     iface vlan1 enable
     iface br0 enable
 
-Either way, queries use the interface address as source and `mcd`
-competes in the election.  Use the bridge directly when it has no VLAN
+Either way, both an IGMP and an MLD querier start.  IGMP queries use
+the interface address as source, MLD queries its link-local address,
+and `mcd` competes in both elections.  To run only one of them:
+
+    iface vlan1 enable mld off
+  Use the bridge directly when it has no VLAN
 filtering, or when the VLAN you care about is its untagged default.
 For other VLANs of a filtering bridge, see raw VLAN mode below.
 
-`mcd` starts as IGMPv3 and drops to v2 on its own if a legacy host
-appears.  To start out in v2 instead:
+`mcd` starts as IGMPv3 and MLDv2 and drops to the older version on its
+own if a legacy host appears.  To start out there instead:
 
-    iface vlan1 enable igmpv2
+    iface vlan1 enable igmpv2 mldv1
 
 ### Proxy mode
 
@@ -207,7 +218,7 @@ protocol version and query interval.
 
 ### Static groups
 
-    iface vlan1 enable static-group 239.1.1.1 static-group 239.1.1.2
+    iface vlan1 enable static-group 239.1.1.1 static-group ff05::1
 
 `mcd` joins each group in the kernel, which then answers queries for it
 like any other host.  On a bridge this gives the group a permanent host
@@ -232,10 +243,13 @@ arguments for an overview:
     Router Ports            : eth3
     Flood Ports             :
 
-    Interface       VID  Querier                     State  Interval  Timeout  Ver
-    vlan1                192.168.1.1                    Up       125     None    3
-    vlan2                192.168.2.1                    Up       125     None    3
-    br0              42  0.0.0.0                        Up       125     None    3
+    Interface       VID  Proto  Querier                      State  Interval  Timeout  Ver
+    vlan1                IGMP   192.168.1.1                     Up       125     None    3
+    vlan1                MLD    fe80::7a4c:9bff:fe12:3456       Up       125     None    2
+    vlan2                IGMP   192.168.2.1                     Up       125     None    3
+    vlan2                MLD    fe80::7a4c:9bff:fe12:3456       Up       125     None    2
+    br0              42  IGMP   0.0.0.0                         Up       125     None    3
+    br0              42  MLD    ::                              Up       125     None    2
 
     Bridge          VID  Multicast Group       Ports
     br0               2  239.1.1.1             eth3
@@ -246,8 +260,8 @@ Commands:
 |-----------------------------|----------------------------------------------------|
 | `show` / `show igmp [json]` | Interfaces and group memberships, the default      |
 | `show status [json]`        | Daemon settings and bridge port roles              |
-| `show interfaces [json]`    | Querier state per interface                        |
-| `show groups [json]`        | IGMP group memberships                             |
+| `show interfaces [json]`    | Querier state per interface and protocol           |
+| `show groups [json]`        | IGMP and MLD group memberships from the bridge     |
 | `show router-ports [json]`  | Multicast router ports, grouped per bridge         |
 | `show mdb`                  | The bridge MDB, as `bridge mdb show` but readable  |
 | `check`                     | Verify that `ip`, `bridge` and `jq` are available  |
@@ -264,7 +278,8 @@ Useful options:
 | `-u, --ipc`      | Socket path, also settable with the `MCD_SOCK` variable     |
 
 Output width follows your terminal.  Add `json` to any `show` command
-for machine readable output:
+for machine readable output.  Queriers are listed under
+`multicast-queriers` for IGMP and `mld-queriers` for MLD:
 
     mctl show router-ports json
     [

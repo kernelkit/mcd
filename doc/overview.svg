@@ -48,15 +48,15 @@
   <text class="dim" x="40" y="46" font-weight="600">Linux switch or host</text>
 
   <!-- mcd centred over the VLAN interfaces, mctl off to the side -->
-  <rect class="mcd" x="259" y="60" width="150" height="56" rx="8"/>
+  <rect class="mcd" x="244" y="60" width="180" height="56" rx="8"/>
   <text class="txt" x="334" y="84" text-anchor="middle" font-weight="700" font-size="16">mcd</text>
-  <text class="dim" x="334" y="103" text-anchor="middle">IGMP querier daemon</text>
+  <text class="dim" x="334" y="103" text-anchor="middle">IGMP/MLD querier daemon</text>
 
   <rect class="mctl" x="560" y="60" width="120" height="56" rx="8"/>
   <text class="txt" x="620" y="84" text-anchor="middle" font-weight="700" font-size="16">mctl</text>
   <text class="dim" x="620" y="103" text-anchor="middle">status, MDB, JSON</text>
-  <path class="ipc" d="M560,88 L409,88"/>
-  <text class="dim mono" x="484" y="80" text-anchor="middle" font-size="11">/run/mcd.sock</text>
+  <path class="ipc" d="M560,88 L424,88"/>
+  <text class="dim mono" x="492" y="80" text-anchor="middle" font-size="11">/run/mcd.sock</text>
 
   <!-- VLAN interfaces -->
   <rect class="box" x="48" y="150" width="240" height="44" rx="6"/>
@@ -121,7 +121,7 @@
   <rect class="card" x="724" y="24" width="206" height="436" rx="10"/>
   <text class="txt" x="740" y="48" font-weight="700">Bridge alone</text>
   <text class="dim" x="740" y="70">queries from 0.0.0.0 only</text>
-  <text class="dim" x="740" y="88">no IGMPv3 to v2 fallback</text>
+  <text class="dim" x="740" y="88">no IGMP or MLD fallback</text>
   <text class="dim" x="740" y="106">unaware of vlanN on top</text>
 
   <text class="txt" x="740" y="144" font-weight="700">With mcd</text>
