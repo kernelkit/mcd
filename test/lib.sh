@@ -73,9 +73,10 @@ tenacious()
     while [ $timeout -gt 0 ]; do
 	$@ && return
 	timeout=$((timeout - 1))
+	sleep 1
     done
 
-    FAIL "Timeed out $*"
+    FAIL "Timed out $*"
 }
 
 emitter()

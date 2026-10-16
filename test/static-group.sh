@@ -31,17 +31,9 @@ iface br0 enable static-group $GROUP
 CONF
 cat "/tmp/$NM/config"
 
-# Wait up to 10 sec for the host join to show up in the bridge MDB
-wait_mdb()
+in_mdb()
 {
-    for _ in 1 2 3 4 5 6 7 8 9 10; do
-	if bridge mdb show | grep -q "port br0 grp $GROUP"; then
-	    return 0
-	fi
-	sleep 1
-    done
-
-    return 1
+    bridge mdb show | grep -q "port br0 grp $GROUP"
 }
 
 collect veth1
@@ -49,10 +41,9 @@ collect veth1
 print "Starting mcd ..."
 ../src/mcd -f "/tmp/$NM/config" -p "/tmp/$NM/pid" -u "/tmp/$NM/sock" -l debug -n &
 echo $! >> "/tmp/$NM/PIDs"
-sleep 1
 
 print "Verifying host join in bridge MDB ..."
-wait_mdb || FAIL "No host join for $GROUP in MDB"
+tenacious 10 in_mdb
 bridge mdb show
 
 print "Verifying mctl show groups ..."
@@ -61,8 +52,7 @@ print "Verifying mctl show groups ..."
 
 print "Reloading mcd (SIGHUP) ..."
 kill -HUP "$(cat "/tmp/$NM/pid")"
-sleep 1
-wait_mdb || FAIL "Host join for $GROUP lost on reload"
+tenacious 10 in_mdb
 
 print "Stopping mcd ..."
 kill "$(cat "/tmp/$NM/pid")"
