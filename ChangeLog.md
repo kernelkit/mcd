@@ -29,6 +29,25 @@ All relevant, user visible, changes are documented in this file.
  - Add support for `static-group` per interface.  The group is joined in
    the kernel, which answers queries for it like any host, so a bridge
    keeps a permanent host membership for the group in its MDB
+ - Drop unused `--with-systemd` configure option, no unit file was ever
+   installed
+
+### Fixes
+ - Fix `mctl` writing terminal probe escape sequences to stderr when
+   stdout is not a terminal, e.g. when piped to `grep`
+ - Fix potential list corruption when the same interface is configured
+   with more than one `vlan`
+ - Fix use-after-free when an interface goes down with active group
+   timers or a remote querier being tracked
+
+
+[UNRELEASED][]
+--------------
+
+### Changes
+ - Add support for `static-group` per interface.  The group is joined in
+   the kernel, which answers queries for it like any host, so a bridge
+   keeps a permanent host membership for the group in its MDB
 
 ### Fixes
  - Fix `mctl` writing terminal probe escape sequences to stderr when
@@ -297,16 +316,19 @@ Initial public release.
 Limited IGMPv1/v2/v3 querier with hard-coded query interval, etc.  Put
 interfaces in a .conf file, whitespace separated to enable querier.
 
-[UNRELEASED]: https://github.com/westermo/querierd/compare/v2.1...HEAD
-[v2.1]:       https://github.com/westermo/querierd/compare/v2.0...v2.1
-[v2.0]:       https://github.com/westermo/querierd/compare/v1.0...v2.0
-[v1.0]:       https://github.com/westermo/querierd/compare/v0.10...v1.0
-[v0.10]:      https://github.com/westermo/querierd/compare/v0.9...v0.10
-[v0.9]:       https://github.com/westermo/querierd/compare/v0.8...v0.9
-[v0.8]:       https://github.com/westermo/querierd/compare/v0.7...v0.8
-[v0.7]:       https://github.com/westermo/querierd/compare/v0.6...v0.7
-[v0.6]:       https://github.com/westermo/querierd/compare/v0.5...v0.6
-[v0.5]:       https://github.com/westermo/querierd/compare/v0.4...v0.5
-[v0.4]:       https://github.com/westermo/querierd/compare/v0.3...v0.4
-[v0.3]:       https://github.com/westermo/querierd/compare/v0.2...v0.3
-[v0.2]:       https://github.com/westermo/querierd/compare/v0.1...v0.2
+[UNRELEASED]: https://github.com/kernelkit/mcd/compare/v2.4...HEAD
+[v2.4]:       https://github.com/kernelkit/mcd/compare/v2.3...v2.4
+[v2.3]:       https://github.com/kernelkit/mcd/compare/v2.2...v2.3
+[v2.2]:       https://github.com/kernelkit/mcd/compare/v2.1...v2.2
+[v2.1]:       https://github.com/kernelkit/mcd/compare/v2.0...v2.1
+[v2.0]:       https://github.com/kernelkit/mcd/compare/v1.0...v2.0
+[v1.0]:       https://github.com/kernelkit/mcd/compare/v0.10...v1.0
+[v0.10]:      https://github.com/kernelkit/mcd/compare/v0.9...v0.10
+[v0.9]:       https://github.com/kernelkit/mcd/compare/v0.8...v0.9
+[v0.8]:       https://github.com/kernelkit/mcd/compare/v0.7...v0.8
+[v0.7]:       https://github.com/kernelkit/mcd/compare/v0.6...v0.7
+[v0.6]:       https://github.com/kernelkit/mcd/compare/v0.5...v0.6
+[v0.5]:       https://github.com/kernelkit/mcd/compare/v0.4...v0.5
+[v0.4]:       https://github.com/kernelkit/mcd/compare/v0.3...v0.4
+[v0.3]:       https://github.com/kernelkit/mcd/compare/v0.2...v0.3
+[v0.2]:       https://github.com/kernelkit/mcd/compare/v0.1...v0.2

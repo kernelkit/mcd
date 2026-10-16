@@ -1,0 +1,142 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 954 500" width="954" height="500" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13">
+  <title>mcd sits on top of the Linux bridge and acts as IGMP querier for each VLAN</title>
+  <style>
+    .bg   { fill: #ffffff; }
+    .card { fill: #f6f8fa; stroke: #d0d7de; }
+    .box  { fill: #ffffff; stroke: #8c959f; }
+    .mcd  { fill: #ddf4ff; stroke: #0969da; }
+    .mctl { fill: #fff8c5; stroke: #9a6700; }
+    .dev  { fill: #ffffff; stroke: #8c959f; }
+    .txt  { fill: #1f2328; }
+    .dim  { fill: #57606a; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+    .wire { stroke: #8c959f; stroke-width: 1.5; fill: none; }
+    .q    { stroke: #0969da; stroke-width: 2; fill: none; }
+    .qt   { fill: #0969da; }
+    .r    { stroke: #1a7f37; stroke-width: 2; fill: none; }
+    .rt   { fill: #1a7f37; }
+    .ipc  { stroke: #9a6700; stroke-width: 1.5; fill: none; stroke-dasharray: 4 3; }
+    @media (prefers-color-scheme: dark) {
+      .bg   { fill: #0d1117; }
+      .card { fill: #161b22; stroke: #30363d; }
+      .box, .dev { fill: #0d1117; stroke: #8b949e; }
+      .mcd  { fill: #0c2d6b; stroke: #58a6ff; }
+      .mctl { fill: #3b2300; stroke: #d29922; }
+      .txt  { fill: #e6edf3; }
+      .dim  { fill: #8b949e; }
+      .wire { stroke: #8b949e; }
+      .q    { stroke: #58a6ff; }
+      .qt   { fill: #58a6ff; }
+      .r    { stroke: #3fb950; }
+      .rt   { fill: #3fb950; }
+      .ipc  { stroke: #d29922; }
+    }
+  </style>
+  <defs>
+    <marker id="aq" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" class="qt"/>
+    </marker>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" class="rt"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="954" height="500" rx="12"/>
+
+  <!-- Host -->
+  <rect class="card" x="24" y="24" width="676" height="336" rx="10"/>
+  <text class="dim" x="40" y="46" font-weight="600">Linux switch or host</text>
+
+  <!-- mcd centred over the VLAN interfaces, mctl off to the side -->
+  <rect class="mcd" x="259" y="60" width="150" height="56" rx="8"/>
+  <text class="txt" x="334" y="84" text-anchor="middle" font-weight="700" font-size="16">mcd</text>
+  <text class="dim" x="334" y="103" text-anchor="middle">IGMP querier daemon</text>
+
+  <rect class="mctl" x="560" y="60" width="120" height="56" rx="8"/>
+  <text class="txt" x="620" y="84" text-anchor="middle" font-weight="700" font-size="16">mctl</text>
+  <text class="dim" x="620" y="103" text-anchor="middle">status, MDB, JSON</text>
+  <path class="ipc" d="M560,88 L409,88"/>
+  <text class="dim mono" x="484" y="80" text-anchor="middle" font-size="11">/run/mcd.sock</text>
+
+  <!-- VLAN interfaces -->
+  <rect class="box" x="48" y="150" width="240" height="44" rx="6"/>
+  <text class="txt" x="60" y="170" font-weight="600">vlan1</text>
+  <text class="dim mono" x="60" y="186">192.168.1.1/24</text>
+  <rect class="box" x="380" y="150" width="240" height="44" rx="6"/>
+  <text class="txt" x="392" y="170" font-weight="600">vlan2</text>
+  <text class="dim mono" x="392" y="186">192.168.2.1/24</text>
+
+  <path class="q" d="M300,116 L200,150" marker-end="url(#aq)"/>
+  <path class="q" d="M368,116 L470,150" marker-end="url(#aq)"/>
+
+  <!-- Bridge -->
+  <rect class="box" x="48" y="222" width="628" height="96" rx="8"/>
+  <text class="txt" x="60" y="242" font-weight="600">br0</text>
+  <text class="dim" x="92" y="242">VLAN filtering, IGMP snooping on</text>
+  <path class="wire" d="M168,194 L168,222"/>
+  <path class="wire" d="M500,194 L500,222"/>
+
+  <g class="mono">
+    <rect class="box" x="64"  y="262" width="110" height="40" rx="5"/>
+    <text class="txt" x="119" y="279" text-anchor="middle">eth0</text>
+    <text class="dim" x="119" y="294" text-anchor="middle">VLAN 1</text>
+    <rect class="box" x="224" y="262" width="110" height="40" rx="5"/>
+    <text class="txt" x="279" y="279" text-anchor="middle">eth1</text>
+    <text class="dim" x="279" y="294" text-anchor="middle">VLAN 1</text>
+    <rect class="box" x="384" y="262" width="110" height="40" rx="5"/>
+    <text class="txt" x="439" y="279" text-anchor="middle">eth2</text>
+    <text class="dim" x="439" y="294" text-anchor="middle">VLAN 2</text>
+    <rect class="box" x="544" y="262" width="110" height="40" rx="5"/>
+    <text class="txt" x="599" y="279" text-anchor="middle">eth3</text>
+    <text class="dim" x="599" y="294" text-anchor="middle">VLAN 2</text>
+  </g>
+
+  <!-- Port to device links; eth1 carries a query down, eth3 a report up -->
+  <path class="wire" d="M119,302 L119,400"/>
+  <path class="q"    d="M279,306 L279,394" marker-end="url(#aq)"/>
+  <path class="wire" d="M439,302 L439,400"/>
+  <path class="r"    d="M599,394 L599,306" marker-end="url(#ar)"/>
+
+  <text class="qt" x="269" y="345" text-anchor="end" font-size="12">General Query</text>
+  <text class="qt mono" x="269" y="361" text-anchor="end">src 192.168.1.1</text>
+  <text class="rt" x="589" y="345" text-anchor="end" font-size="12">Membership Report</text>
+  <text class="rt mono" x="589" y="361" text-anchor="end">join 239.1.1.1</text>
+
+  <!-- Devices -->
+  <rect class="dev" x="64"  y="400" width="110" height="60" rx="6"/>
+  <text class="txt" x="119" y="421" text-anchor="middle" font-weight="600">PLC</text>
+  <text class="dim" x="119" y="437" text-anchor="middle" font-size="12">drops queries</text>
+  <text class="dim" x="119" y="451" text-anchor="middle" font-size="12">from 0.0.0.0</text>
+  <rect class="dev" x="224" y="400" width="110" height="60" rx="6"/>
+  <text class="txt" x="279" y="425" text-anchor="middle" font-weight="600">HMI panel</text>
+  <text class="dim" x="279" y="444" text-anchor="middle" font-size="12">IGMPv2 only</text>
+  <rect class="dev" x="384" y="400" width="110" height="60" rx="6"/>
+  <text class="txt" x="439" y="425" text-anchor="middle" font-weight="600">IP camera</text>
+  <text class="dim mono" x="439" y="444" text-anchor="middle">239.1.1.1</text>
+  <rect class="dev" x="544" y="400" width="110" height="60" rx="6"/>
+  <text class="txt" x="599" y="425" text-anchor="middle" font-weight="600">Operator PC</text>
+  <text class="dim" x="599" y="444" text-anchor="middle" font-size="12">joins 239.1.1.1</text>
+
+  <!-- Side panel -->
+  <rect class="card" x="724" y="24" width="206" height="436" rx="10"/>
+  <text class="txt" x="740" y="48" font-weight="700">Bridge alone</text>
+  <text class="dim" x="740" y="70">queries from 0.0.0.0 only</text>
+  <text class="dim" x="740" y="88">no IGMPv3 to v2 fallback</text>
+  <text class="dim" x="740" y="106">unaware of vlanN on top</text>
+
+  <text class="txt" x="740" y="144" font-weight="700">With mcd</text>
+  <text class="dim" x="740" y="166">real source address</text>
+  <text class="dim" x="740" y="184">querier election, RFC 3376</text>
+  <text class="dim" x="740" y="202">startup query burst</text>
+  <text class="dim" x="740" y="220">v3, v2, v1 fallback</text>
+  <text class="dim" x="740" y="238">proxy mode backup querier</text>
+  <text class="dim" x="740" y="256">raw VLAN mode</text>
+  <text class="dim" x="740" y="274">static groups</text>
+  <text class="dim" x="740" y="292">follows netlink events</text>
+
+  <text class="txt" x="740" y="330" font-weight="700">Result</text>
+  <text class="dim" x="740" y="352">snooping stays armed:</text>
+  <text class="dim" x="740" y="370">239.1.1.1 reaches eth3 only,</text>
+  <text class="dim" x="740" y="388">never floods eth0 to eth2,</text>
+  <text class="dim" x="740" y="406">no multicast router needed</text>
+</svg>

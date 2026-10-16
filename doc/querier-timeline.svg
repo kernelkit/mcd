@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 300" width="860" height="300" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13">
+  <title>Querier lifecycle on one interface: election, startup burst, steady state, backing off for another querier</title>
+  <style>
+    .bg   { fill: #ffffff; }
+    .txt  { fill: #1f2328; }
+    .dim  { fill: #57606a; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+    .axis { stroke: #8c959f; stroke-width: 1.5; fill: none; }
+    .off  { stroke: #8c959f; stroke-width: 1.5; fill: none; stroke-dasharray: 5 4; }
+    .q    { stroke: #0969da; stroke-width: 2.5; fill: none; }
+    .qt   { fill: #0969da; }
+    .r    { stroke: #1a7f37; stroke-width: 2; fill: none; }
+    .rt   { fill: #1a7f37; }
+    .o    { stroke: #cf222e; stroke-width: 2.5; fill: none; }
+    .ot   { fill: #cf222e; }
+    .brk  { stroke: #57606a; stroke-width: 1; fill: none; }
+    @media (prefers-color-scheme: dark) {
+      .bg   { fill: #0d1117; }
+      .txt  { fill: #e6edf3; }
+      .dim  { fill: #8b949e; }
+      .axis, .off, .brk { stroke: #8b949e; }
+      .q    { stroke: #58a6ff; }
+      .qt   { fill: #58a6ff; }
+      .r    { stroke: #3fb950; }
+      .rt   { fill: #3fb950; }
+      .o    { stroke: #f85149; }
+      .ot   { fill: #f85149; }
+    }
+  </style>
+  <defs>
+    <marker id="aq" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" class="qt"/>
+    </marker>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" class="rt"/>
+    </marker>
+    <marker id="ao" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" class="ot"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="860" height="300" rx="12"/>
+
+  <!-- axis -->
+  <path class="axis" d="M40,170 L560,170"/>
+  <path class="off"  d="M560,170 L780,170"/>
+  <path class="axis" d="M780,170 L830,170"/>
+  <text class="dim" x="830" y="190" text-anchor="end">time (not to scale)</text>
+
+  <!-- queries: startup burst -->
+  <path class="q" d="M70,170 L70,120" marker-end="url(#aq)"/>
+  <path class="q" d="M130,170 L130,120" marker-end="url(#aq)"/>
+  <text class="qt mono" x="70" y="112" text-anchor="middle">Q</text>
+  <text class="qt mono" x="130" y="112" text-anchor="middle">Q</text>
+  <text class="dim mono" x="70" y="190" text-anchor="middle">0 s</text>
+  <text class="dim mono" x="130" y="190" text-anchor="middle">31 s</text>
+
+  <path class="brk" d="M60,70 L60,62 L140,62 L140,70"/>
+  <text class="txt" x="100" y="48" text-anchor="middle" font-weight="600">Startup burst</text>
+  <text class="dim" x="100" y="82" text-anchor="middle" font-size="12">robustness (2) queries,</text>
+  <text class="dim" x="100" y="96" text-anchor="middle" font-size="12">query-interval / 4 apart</text>
+
+  <!-- steady state -->
+  <path class="q" d="M330,170 L330,120" marker-end="url(#aq)"/>
+  <path class="q" d="M530,170 L530,120" marker-end="url(#aq)"/>
+  <text class="qt mono" x="330" y="112" text-anchor="middle">Q</text>
+  <text class="qt mono" x="530" y="112" text-anchor="middle">Q</text>
+  <text class="dim mono" x="330" y="190" text-anchor="middle">156 s</text>
+  <text class="dim mono" x="530" y="190" text-anchor="middle">281 s</text>
+
+  <path class="brk" d="M300,70 L300,62 L560,62 L560,70"/>
+  <text class="txt" x="430" y="48" text-anchor="middle" font-weight="600">Steady state</text>
+  <text class="dim" x="430" y="86" text-anchor="middle" font-size="12">General Query every query-interval (125 s)</text>
+
+  <!-- reports -->
+  <path class="r" d="M96,206 L96,176" marker-end="url(#ar)"/>
+  <path class="r" d="M104,206 L104,176" marker-end="url(#ar)"/>
+  <path class="r" d="M156,206 L156,176" marker-end="url(#ar)"/>
+  <path class="r" d="M356,206 L356,176" marker-end="url(#ar)"/>
+  <path class="r" d="M364,206 L364,176" marker-end="url(#ar)"/>
+  <path class="r" d="M556,206 L556,176" marker-end="url(#ar)"/>
+  <text class="rt" x="100" y="226" text-anchor="middle" font-size="12">Reports</text>
+  <text class="dim" x="60" y="242" font-size="12">within response-interval, 10 s</text>
+
+  <!-- other querier -->
+  <path class="o" d="M620,120 L620,166" marker-end="url(#ao)"/>
+  <text class="ot" x="632" y="124" font-weight="600">Lower IP querier appears</text>
+  <text class="dim" x="670" y="226" text-anchor="middle" font-size="12">mcd goes quiet and starts the</text>
+  <text class="dim" x="670" y="242" text-anchor="middle" font-size="12">other-querier-present timer (255 s)</text>
+
+  <!-- take over again -->
+  <path class="q" d="M800,170 L800,120" marker-end="url(#aq)"/>
+  <text class="qt mono" x="800" y="112" text-anchor="middle">Q</text>
+  <text class="dim" x="800" y="48" text-anchor="middle" font-size="12">Timer expires:</text>
+  <text class="dim" x="800" y="64" text-anchor="middle" font-size="12">mcd takes over,</text>
+  <text class="dim" x="800" y="80" text-anchor="middle" font-size="12">burst again</text>
+</svg>
