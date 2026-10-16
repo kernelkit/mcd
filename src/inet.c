@@ -13,31 +13,112 @@ char s2[INET_ADDRSTR_LEN];		/* of IP addresses, to be passed to inet_fmt() */
 char s3[INET_ADDRSTR_LEN];		/* or inet_fmts().                             */
 char s4[INET_ADDRSTR_LEN];
 
-int inet_addr_cmp(inet_addr_t *a, inet_addr_t *b)
+/*
+ * Orders addresses numerically within a family, by family otherwise.
+ * Unset addresses (AF_UNSPEC) compare equal to each other.
+ */
+int inet_addr_cmp(const inet_addr_t *a, const inet_addr_t *b)
 {
-	if (!a || !b) {
-		errno = EINVAL;
-		return 1;
-	}
+    if (a->ss_family != b->ss_family)
+	return a->ss_family < b->ss_family ? -1 : 1;
 
-	if (a->ss_family == AF_INET && b->ss_family == AF_INET) {
-		struct sockaddr_in *sa = (struct sockaddr_in *)a;
-		struct sockaddr_in *sb = (struct sockaddr_in *)b;
+    switch (a->ss_family) {
+    case AF_INET: {
+	uint32_t ia = ntohl(inet_addr_get4(a));
+	uint32_t ib = ntohl(inet_addr_get4(b));
 
-		return sa->sin_addr.s_addr - sb->sin_addr.s_addr;
-	}
+	return ia < ib ? -1 : ia > ib;
+    }
 
-#ifdef HAVE_IPV6_MULTICAST_HOST
-	if (a->ss_family == AF_INET6 && b->ss_family == AF_INET6) {
-		struct sockaddr_in6 *sa = (struct sockaddr_in6 *)a;
-		struct sockaddr_in6 *sb = (struct sockaddr_in6 *)b;
-
-		return memcmp(sa, sb, sizeof(*sa));
-	}
+#ifdef AF_INET6
+    case AF_INET6:
+	return memcmp(&((const struct sockaddr_in6 *)a)->sin6_addr,
+		      &((const struct sockaddr_in6 *)b)->sin6_addr, sizeof(struct in6_addr));
 #endif
 
-	errno = EAFNOSUPPORT;
-	return 1;
+    default:
+	return 0;
+    }
+}
+
+int inet_addr_linklocal(const inet_addr_t *addr)
+{
+    switch (addr->ss_family) {
+    case AF_INET:
+	return IN_LINKLOCAL(ntohl(inet_addr_get4(addr)));
+
+#ifdef AF_INET6
+    case AF_INET6:
+	return IN6_IS_ADDR_LINKLOCAL(&((const struct sockaddr_in6 *)addr)->sin6_addr);
+#endif
+
+    default:
+	return 0;
+    }
+}
+
+/*
+ * Copy only the part of sa that its family defines, the caller may
+ * hand us a plain struct sockaddr_in.
+ */
+void inet_addr_set(inet_addr_t *addr, const struct sockaddr *sa)
+{
+    size_t len;
+
+    switch (sa->sa_family) {
+    case AF_INET:
+	len = sizeof(struct sockaddr_in);
+	break;
+
+#ifdef AF_INET6
+    case AF_INET6:
+	len = sizeof(struct sockaddr_in6);
+	break;
+#endif
+
+    default:
+	len = sizeof(*sa);
+	break;
+    }
+
+    memset(addr, 0, sizeof(*addr));
+    memcpy(addr, sa, len);
+}
+
+/*
+ * IPv4 address in network byte order, INADDR_ANY when unset or not IPv4
+ */
+uint32_t inet_addr_get4(const inet_addr_t *addr)
+{
+    if (addr->ss_family != AF_INET)
+	return INADDR_ANY;
+
+    return ((const struct sockaddr_in *)addr)->sin_addr.s_addr;
+}
+
+char *inet_addr_fmt(const inet_addr_t *addr, char *s, size_t len)
+{
+    const void *src;
+
+    switch (addr->ss_family) {
+    case AF_INET:
+	src = &((const struct sockaddr_in *)addr)->sin_addr;
+	break;
+
+#ifdef AF_INET6
+    case AF_INET6:
+	src = &((const struct sockaddr_in6 *)addr)->sin6_addr;
+	break;
+#endif
+
+    default:			/* unset, IPv4 only until MLD lands */
+	return inet_fmt(INADDR_ANY, s, len);
+    }
+
+    if (!inet_ntop(addr->ss_family, src, s, len))
+	return inet_fmt(INADDR_ANY, s, len);
+
+    return s;
 }
 
 /*
@@ -163,10 +244,13 @@ char *inet_name(uint32_t addr, int numeric)
 /*
  * Convert an IP address in uint32_t (network) format into a printable string.
  */
-char *inet_fmt(inet_addr_t *addr, char *s, size_t len)
+char *inet_fmt(uint32_t addr, char *s, size_t len)
 {
-    if (getnameinfo((struct sockaddr *)addr, sizeof(*addr), s, len, NULL, 0, NI_NUMERICHOST))
-	return NULL;
+    uint8_t *a;
+
+    a = (uint8_t *)&addr;
+    snprintf(s, len, "%u.%u.%u.%u", a[0], a[1], a[2], a[3]);
+
     return s;
 }
 

@@ -36,13 +36,17 @@ typedef struct sockaddr_storage inet_addr_t;
 /*
  * External function declarations
  */
-extern int              inet_addr_cmp(inet_addr_t *a, inet_addr_t *b);
+extern int		inet_addr_cmp(const inet_addr_t *, const inet_addr_t *);
+extern int		inet_addr_linklocal(const inet_addr_t *);
+extern void		inet_addr_set(inet_addr_t *, const struct sockaddr *);
+extern uint32_t		inet_addr_get4(const inet_addr_t *);
+extern char	       *inet_addr_fmt(const inet_addr_t *, char *, size_t);
 extern int		inet_valid_group(uint32_t);
 extern int		inet_valid_host(uint32_t);
 extern int		inet_valid_mask(uint32_t);
 extern int		inet_valid_subnet(uint32_t, uint32_t);
 extern char            *inet_name(uint32_t, int);
-extern char            *inet_fmt(inet_addr_t, char *, size_t);
+extern char            *inet_fmt(uint32_t, char *, size_t);
 extern char            *inet_fmts(uint32_t, uint32_t, char *, size_t);
 extern uint32_t		inet_parse(char *, int);
 extern int		inet_cksum(uint16_t *, uint32_t);

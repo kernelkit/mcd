@@ -158,7 +158,7 @@ extern struct ifi      *config_iface_add(char *);
 extern struct ifi      *config_iface_vlan(struct ifi *, int);
 extern void             config_iface_addr_del(int, struct sockaddr *);
 extern struct ifi      *config_find_ifname(char *);
-extern struct ifi      *config_find_ifaddr(in_addr_t);
+extern struct ifi      *config_find_ifaddr(const inet_addr_t *);
 extern struct ifi      *config_find_iface(int, int);
 extern struct ifi      *config_init_tunnel(in_addr_t, in_addr_t, uint32_t);
 extern void             config_iface_update(struct ifi *);

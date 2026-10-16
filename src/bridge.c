@@ -786,7 +786,7 @@ int show_bridge_compat(FILE *fp)
 
 		vnum++;
 		if (!ifi->ifi_querier) {
-			inet_fmt(ifi->ifi_inaddr, s1, sizeof(s1));
+			inet_addr_fmt(&ifi->ifi_inaddr, s1, sizeof(s1));
 			fprintf(fp, "%4d  %-15s  LOCAL\n", vid, s1);
 			continue;
 		}

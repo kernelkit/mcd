@@ -150,31 +150,32 @@ void iface_check_election(struct ifi *ifi)
     }
 
     TAILQ_FOREACH(pa, &ifi->ifi_addrs, pa_link) {
-	inet_addr_t cand = pa->pa_addr;
+	const inet_addr_t *cand = &pa->pa_addr;
 
-	dbg("    candidate address %s ...", inet_fmt(cand, s1, sizeof(s1)));
-	if (curr) {
-	    if (ntohl(cand) >= ntohl(curr))
+	dbg("    candidate address %s ...", inet_addr_fmt(cand, s1, sizeof(s1)));
+	if (curr.ss_family) {
+	    if (inet_addr_cmp(cand, &curr) >= 0)
 		continue;
-	    if (IN_LINKLOCAL(ntohl(cand)))
+	    if (inet_addr_linklocal(cand))
 		continue;
 	}
 
-	curr = cand;
+	curr = *cand;
     }
 
-    if (curr != ifi->ifi_inaddr) {
-	info("Using %s address %s", ifi->ifi_name, inet_fmt(curr, s1, sizeof(s1)));
+    if (inet_addr_cmp(&curr, &ifi->ifi_inaddr)) {
+	info("Using %s address %s", ifi->ifi_name, inet_addr_fmt(&curr, s1, sizeof(s1)));
 	ifi->ifi_inaddr = curr;
     }
 
-    if (curr && ifi->ifi_querier) {
+    if (curr.ss_family && ifi->ifi_querier) {
+	uint32_t own = inet_addr_get4(&ifi->ifi_inaddr);
 	uint32_t cur = ifi->ifi_querier->al_addr;
 
-	if (ntohl(ifi->ifi_inaddr) < ntohl(cur)) {
+	if (ntohl(own) < ntohl(cur)) {
 	    inet_fmt(cur, s1, sizeof(s1));
 	    dbg("New local querier on %s, was %s (%u vs %u)",
-		  ifi->ifi_name, s1, ntohl(ifi->ifi_inaddr), ntohl(cur));
+		  ifi->ifi_name, s1, ntohl(own), ntohl(cur));
 	    querier_del(ifi);
 	    goto elected;
 	}
@@ -336,7 +337,7 @@ static void send_query(struct ifi *ifi, uint32_t dst, int qri, uint32_t group)
     dbg("Sending %squery on %s src %s",
 	  (ifi->ifi_flags & IFIF_IGMPV1) ? "v1 " :
 	  (ifi->ifi_flags & IFIF_IGMPV2) ? "v2 " : "v3 ",
-	  ifi->ifi_name, inet_name(ifi->ifi_inaddr, 1));
+	  ifi->ifi_name, inet_addr_fmt(&ifi->ifi_inaddr, s1, sizeof(s1)));
 
     send_igmp(ifi, dst, IGMP_MEMBERSHIP_QUERY, qri, group, datalen);
 }
@@ -461,10 +462,13 @@ void accept_membership_query(int ifindex, int vid, uint32_t src, uint32_t dst,
 {
     struct ifi *ifi;
     int notnew = 1;
+    uint32_t own;
 
     ifi = config_find_iface(ifindex, vid);
     if (!ifi)
 	return;
+
+    own = inet_addr_get4(&ifi->ifi_inaddr);
 
     /*
      * IGMPv1 + IGMPv2 don't send the query inteval (qqic field only in
@@ -492,7 +496,7 @@ void accept_membership_query(int ifindex, int vid, uint32_t src, uint32_t dst,
     }
 
     if (ifi->ifi_querier == NULL || ifi->ifi_querier->al_addr != src) {
-	uint32_t cur = ifi->ifi_querier ? ifi->ifi_querier->al_addr : ifi->ifi_inaddr;
+	uint32_t cur = ifi->ifi_querier ? ifi->ifi_querier->al_addr : own;
 
 	/*
 	 * This might be:
@@ -536,7 +540,7 @@ void accept_membership_query(int ifindex, int vid, uint32_t src, uint32_t dst,
 		 * address, go back and fix.  We do not consider a
 		 * link-local address better than, e.g., a 192.168.
 		 */
-		if (IN_LINKLOCAL(ntohl(ifi->ifi_inaddr)) && !IN_LINKLOCAL(ntohl(src)))
+		if (inet_addr_linklocal(&ifi->ifi_inaddr) && !IN_LINKLOCAL(ntohl(src)))
 		    goto again;
 	    }
 #if 0
@@ -563,7 +567,7 @@ void accept_membership_query(int ifindex, int vid, uint32_t src, uint32_t dst,
      * the [Max Response Time] in the packet.
      */
     if (!(ifi->ifi_flags & (IFIF_IGMPV1|IFIF_IGMP_QUERIER))
-	&& group != 0 && src != ifi->ifi_inaddr) {
+	&& group != 0 && src != own) {
 	struct listaddr *g;
 
 	dbg("Group-specific membership query for %s from %s on %s, timeout %d",

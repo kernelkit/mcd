@@ -51,12 +51,12 @@ struct ifi *config_find_ifname(char *nm)
     return NULL;
 }
 
-struct ifi *config_find_ifaddr(inet_addr_t ina)
+struct ifi *config_find_ifaddr(const inet_addr_t *ina)
 {
     struct ifi *ifi;
 
     TAILQ_FOREACH(ifi, &ifaces, ifi_link) {
-	if (!inet_addr_cmp(&ina, &ifi->ifi_inaddr))
+	if (!inet_addr_cmp(ina, &ifi->ifi_inaddr))
             return ifi;
     }
 
@@ -181,7 +181,7 @@ struct ifi *config_iface_vlan(struct ifi *ifi, int vid)
 
 static struct ifi *addr_add(int ifindex, struct sockaddr *sa, unsigned int flags)
 {
-    struct sockaddr_in *sin = (struct sockaddr_in *)sa;
+    inet_addr_t addr;
     struct phaddr *pa;
     struct ifi *ifi;
 
@@ -202,9 +202,11 @@ static struct ifi *addr_add(int ifindex, struct sockaddr *sa, unsigned int flags
     if (!ifi)
 	return NULL;
 
+    inet_addr_set(&addr, sa);
+
     /* kernel promotes secondary addresses, we know all addrs already */
     TAILQ_FOREACH(pa, &ifi->ifi_addrs, pa_link) {
-	if (!inet_addr_cmp(&pa->pa_addr, (inet_addr_t *)sin))
+	if (!inet_addr_cmp(&pa->pa_addr, &addr))
 	    return NULL;	/* Already have it */
     }
 
@@ -214,21 +216,21 @@ static struct ifi *addr_add(int ifindex, struct sockaddr *sa, unsigned int flags
 	exit(EX_OSERR);
     }
 
-    memcpy(&pa->pa_addr, sin, sizeof(pa->pa_addr));
+    pa->pa_addr = addr;
     TAILQ_INSERT_TAIL(&ifi->ifi_addrs, pa, pa_link);
 
     if (!(flags & IFF_UP))
 	ifi->ifi_flags |= IFIF_DOWN;
 
     dbg("New address %s for %s flags 0x%x",
-	  inet_fmt(pa->pa_addr, s1, sizeof(s1)), ifi->ifi_name, flags);
+	  inet_addr_fmt(&pa->pa_addr, s1, sizeof(s1)), ifi->ifi_name, flags);
 
     return ifi;
 }
 
 static struct ifi *addr_del(int ifindex, struct sockaddr *sa)
 {
-    struct sockaddr_in *sin = (struct sockaddr_in *)sa;
+    inet_addr_t addr;
     struct phaddr *pa, *tmp;
     struct ifi *ifi;
 
@@ -242,12 +244,14 @@ static struct ifi *addr_del(int ifindex, struct sockaddr *sa)
     if (!ifi)
 	return NULL;
 
+    inet_addr_set(&addr, sa);
+
     TAILQ_FOREACH_SAFE(pa, &ifi->ifi_addrs, pa_link, tmp) {
-	if (inet_addr_cmp(&pa->pa_addr, (inet_addr_t *)sin))
+	if (inet_addr_cmp(&pa->pa_addr, &addr))
 	    continue;
 
 	TAILQ_REMOVE(&ifi->ifi_addrs, pa, pa_link);
-	dbg("Drop address %s for %s", inet_fmt(pa->pa_addr, s1, sizeof(s1)),
+	dbg("Drop address %s for %s", inet_addr_fmt(&pa->pa_addr, s1, sizeof(s1)),
 	      ifi->ifi_name);
 	free(pa);
 	return ifi;
