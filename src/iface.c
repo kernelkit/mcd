@@ -111,6 +111,9 @@ static void querier_del(struct ifi *ifi)
 
 static void group_del(struct ifi *ifi, struct listaddr *g)
 {
+    if (g->al_flags & NBRF_STATIC_GROUP)
+	igmp_leave(ifi, g->al_addr);
+
     pev_timer_del(g->al_timerid);
     pev_timer_del(g->al_queryid);
     pev_timer_del(g->al_pv_timerid);
@@ -338,6 +341,42 @@ static void send_query(struct ifi *ifi, uint32_t dst, int qri, uint32_t group)
     send_igmp(ifi, dst, IGMP_MEMBERSHIP_QUERY, qri, group, datalen);
 }
 
+/*
+ * Join static groups in the kernel, which then answers queries for
+ * them, and track them as groups that never time out or leave.
+ */
+static void join_static_groups(struct ifi *ifi)
+{
+    struct listaddr *a, *g;
+
+    if (ifi->ifi_vlan) {
+	if (!TAILQ_EMPTY(&ifi->ifi_static))
+	    warnx("Static groups not supported in raw VLAN mode, skipping on %s", ifi->ifi_name);
+	return;
+    }
+
+    TAILQ_FOREACH(a, &ifi->ifi_static, al_link) {
+	inet_fmt(a->al_addr, s1, sizeof(s1));
+
+	if (igmp_join(ifi, a->al_addr)) {
+	    warn("Failed joining static group %s on %s", s1, ifi->ifi_name);
+	    continue;
+	}
+
+	g = malloc(sizeof(*g));
+	if (!g) {
+	    err("failed allocating static group");
+	    exit(EX_OSERR);
+	}
+
+	*g = *a;
+	time(&g->al_ctime);
+	TAILQ_INSERT_TAIL(&ifi->ifi_groups, g, al_link);
+
+	info("Joined static group %s on %s", s1, ifi->ifi_name);
+    }
+}
+
 static void start_iface(struct ifi *ifi)
 {
     uint32_t qi = ifi->ifi_query_interval;
@@ -347,6 +386,7 @@ static void start_iface(struct ifi *ifi)
 	qi = igmp_query_interval;
 
     igmp_iface_init(ifi);
+    join_static_groups(ifi);
 
     /*
      * Periodically query for local group memberships.

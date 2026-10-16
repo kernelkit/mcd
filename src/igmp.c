@@ -38,6 +38,7 @@ uint32_t	igmp_robustness;	     /* Default: 2                  */
 uint32_t	allhosts_group;		     /* All hosts addr in net order */
 uint32_t	allrtrs_group;		     /* All-Routers "  in net order */
 uint32_t	allreports_group;	     /* IGMPv3 member reports       */
+static int	join_sd = -1;		     /* static group memberships    */
 
 /*
  * Local function definitions.
@@ -93,12 +94,43 @@ void igmp_init(void)
     igmp_robustness           = IGMP_ROBUSTNESS_DEFAULT;
     router_timeout            = IGMP_OTHER_QUERIER_PRESENT_INTERVAL;
     router_alert              = 1;
+
+    /* Never bound, so it never receives data, only holds memberships */
+    join_sd = socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
+    if (join_sd < 0) {
+	err("failed creating static group socket");
+	exit(EX_OSERR);
+    }
 }
 
 void igmp_exit(void)
 {
+    if (join_sd >= 0) {
+	close(join_sd);
+	join_sd = -1;
+    }
     free(recv_buf);
     free(send_buf);
+}
+
+static int igmp_member(const struct ifi *ifi, uint32_t group, int opt)
+{
+    struct ip_mreqn mreq = {
+	.imr_multiaddr.s_addr = group,
+	.imr_ifindex = ifi->ifi_index,
+    };
+
+    return setsockopt(join_sd, IPPROTO_IP, opt, &mreq, sizeof(mreq));
+}
+
+int igmp_join(const struct ifi *ifi, uint32_t group)
+{
+    return igmp_member(ifi, group, IP_ADD_MEMBERSHIP);
+}
+
+int igmp_leave(const struct ifi *ifi, uint32_t group)
+{
+    return igmp_member(ifi, group, IP_DROP_MEMBERSHIP);
 }
 
 void igmp_iface_init(struct ifi *ifi)

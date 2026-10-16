@@ -1,4 +1,4 @@
-EXTRA_DIST         = lib.sh basic.sh sleepy.sh two.sh ipc.sh late.sh router-ports.sh
+EXTRA_DIST         = lib.sh basic.sh sleepy.sh two.sh ipc.sh late.sh router-ports.sh static-group.sh
 CLEANFILES         = *~ *.trs *.log
 
 TEST_EXTENSIONS    = .sh
@@ -10,3 +10,4 @@ TESTS             += ipc.sh
 TESTS             += late.sh
 TESTS             += two.sh
 TESTS             += router-ports.sh
+TESTS             += static-group.sh

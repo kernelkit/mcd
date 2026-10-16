@@ -124,6 +124,8 @@ extern void		igmp_init(void);
 extern void		igmp_exit(void);
 extern void		igmp_iface_init(struct ifi *);
 extern void		igmp_iface_exit(struct ifi *);
+extern int		igmp_join(const struct ifi *, uint32_t);
+extern int		igmp_leave(const struct ifi *, uint32_t);
 extern void		accept_igmp(int, int, uint8_t *, size_t);
 extern size_t		build_igmp(uint8_t *, uint32_t, uint32_t, int, int, uint32_t, int);
 extern void		send_igmp(const struct ifi *, uint32_t, int, int, uint32_t, int);
