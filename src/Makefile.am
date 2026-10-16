@@ -12,7 +12,8 @@ AM_CFLAGS        = -W -Wall -Wextra -Wno-unused-parameter -Wformat=2 -Wformat-ov
 sbin_PROGRAMS    = mcd mctl
 mcd_SOURCES      = main.c cfparse.y config.c defs.h	\
 		   iface.c iface.h netlink.c		\
-		   igmp.c igmp.h			\
+		   igmp.c igmp.h mld.c mld.h		\
+		   sock.c sock.h			\
 		   inet.c inet.h			\
 		   ipc.c  ipc.h				\
 		   log.c  log.h				\

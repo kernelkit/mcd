@@ -212,6 +212,7 @@ int main(int argc, char *argv[])
     compose_paths();
 
     pev_init();
+    sock_init();
     igmp_init();
     config_init();
     netlink_init();
@@ -241,7 +242,7 @@ static void cleanup(void)
 	in_cleanup++;
 
 	iface_exit();
-	igmp_exit();
+	sock_exit();
 	netlink_exit();
 	ipc_exit();
     }
@@ -280,9 +281,11 @@ void restart(void)
      * reset all the entries
      */
     iface_exit();
-    igmp_exit();
+    sock_exit();
     netlink_exit();
     ipc_exit();
+
+    sock_init();
 
     igmp_init();
     config_init();

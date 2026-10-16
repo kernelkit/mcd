@@ -63,12 +63,25 @@ struct ifi *config_find_ifaddr(const inet_addr_t *ina)
     return NULL;
 }
 
-struct ifi *config_find_iface(int ifindex, int vid)
+struct ifi *config_find_iface(int ifindex, int vid, int family)
 {
     struct ifi *ifi;
 
     TAILQ_FOREACH(ifi, &ifaces, ifi_link) {
-	if (ifindex == ifi->ifi_index && vid == ifi->ifi_vlan)
+	if (ifindex == ifi->ifi_index && vid == ifi->ifi_vlan && family == ifi->ifi_family)
+            return ifi;
+    }
+
+    return NULL;
+}
+
+/* Any entry for the interface, regardless of VLAN and family */
+struct ifi *config_find_ifindex(int ifindex)
+{
+    struct ifi *ifi;
+
+    TAILQ_FOREACH(ifi, &ifaces, ifi_link) {
+	if (ifindex == ifi->ifi_index)
             return ifi;
     }
 
@@ -112,6 +125,30 @@ void config_iface_update(struct ifi *ifi)
 }
 
 /*
+ * Every interface runs one querier per address family, a copy of the
+ * entry with the given family is inserted after the given one.
+ */
+static struct ifi *iface_clone(const struct ifi *ifi, int family, struct ifi *after)
+{
+    struct ifi *clone;
+
+    clone = malloc(sizeof(*clone));
+    if (!clone) {
+	err("failed cloning %s", ifi->ifi_name);
+	exit(EX_OSERR);
+    }
+
+    *clone = *ifi;
+    clone->ifi_family = family;
+    TAILQ_INIT(&clone->ifi_static);
+    TAILQ_INIT(&clone->ifi_groups);
+    TAILQ_INIT(&clone->ifi_addrs);
+    TAILQ_INSERT_AFTER(&ifaces, after, clone, ifi_link);
+
+    return clone;
+}
+
+/*
  * Called by parser to add an interface to start or watch for in the future
  */
 struct ifi *config_iface_add(char *ifname)
@@ -145,8 +182,23 @@ struct ifi *config_iface_add(char *ifname)
 	warn("failed finding hw address for iface %s", ifname);
 
     TAILQ_INSERT_TAIL(&ifaces, ifi, ifi_link);
+    iface_clone(ifi, AF_INET6, ifi);
 
     return ifi;
+}
+
+/*
+ * The AF_INET6 entry of an interface always follows its AF_INET one.
+ */
+struct ifi *config_iface_twin(struct ifi *ifi)
+{
+    struct ifi *twin = TAILQ_NEXT(ifi, ifi_link);
+
+    if (twin && twin->ifi_family == AF_INET6 && twin->ifi_vlan == ifi->ifi_vlan &&
+	!strcmp(twin->ifi_name, ifi->ifi_name))
+	return twin;
+
+    return NULL;
 }
 
 /*
@@ -155,28 +207,41 @@ struct ifi *config_iface_add(char *ifname)
  */
 struct ifi *config_iface_vlan(struct ifi *ifi, int vid)
 {
+    struct ifi *twin = config_iface_twin(ifi);
     struct ifi *clone;
 
     if (ifi->ifi_vlan == 0) {
 	ifi->ifi_vlan = vid;
+	if (twin)
+	    twin->ifi_vlan = vid;
 	return ifi;
     }
 
-    clone = malloc(sizeof(*clone));
-    if (!clone) {
-	err("failed cloning %s for new VLAN %d", ifi->ifi_name, vid);
-	exit(EX_OSERR);
+    clone = iface_clone(ifi, AF_INET, twin ? twin : ifi);
+    clone->ifi_vlan = vid;
+    if (twin) {
+	twin = iface_clone(twin, AF_INET6, clone);
+	twin->ifi_vlan = vid;
     }
 
-    memcpy(clone, ifi, sizeof(*clone));
-    TAILQ_INIT(&clone->ifi_static);
-    TAILQ_INIT(&clone->ifi_groups);
-    TAILQ_INIT(&clone->ifi_addrs);
-    TAILQ_INSERT_TAIL(&ifaces, clone, ifi_link);
-
-    clone->ifi_vlan = vid;
-
     return clone;
+}
+
+/*
+ * Called by parser for 'igmp off' and 'mld off', the protocol is not
+ * run on the interface at all.
+ */
+void config_iface_del(struct ifi *ifi)
+{
+    struct listaddr *a, *tmp;
+
+    TAILQ_FOREACH_SAFE(a, &ifi->ifi_static, al_link, tmp) {
+	TAILQ_REMOVE(&ifi->ifi_static, a, al_link);
+	free(a);
+    }
+
+    TAILQ_REMOVE(&ifaces, ifi, ifi_link);
+    free(ifi);
 }
 
 static struct ifi *addr_add(int ifindex, struct sockaddr *sa, unsigned int flags)
@@ -188,7 +253,7 @@ static struct ifi *addr_add(int ifindex, struct sockaddr *sa, unsigned int flags
     /*
      * Ignore any interface for an address family other than IP
      */
-    if (!sa || sa->sa_family != AF_INET)
+    if (!sa || (sa->sa_family != AF_INET && sa->sa_family != AF_INET6))
 	return NULL;
 
     /*
@@ -198,7 +263,7 @@ static struct ifi *addr_add(int ifindex, struct sockaddr *sa, unsigned int flags
     if ((flags & (IFF_LOOPBACK|IFF_MULTICAST)) != IFF_MULTICAST)
 	return NULL;
 
-    ifi = config_find_iface(ifindex, 0);
+    ifi = config_find_iface(ifindex, 0, sa->sa_family);
     if (!ifi)
 	return NULL;
 
@@ -237,10 +302,10 @@ static struct ifi *addr_del(int ifindex, struct sockaddr *sa)
     /*
      * Ignore any interface for an address family other than IP
      */
-    if (!sa || sa->sa_family != AF_INET)
+    if (!sa || (sa->sa_family != AF_INET && sa->sa_family != AF_INET6))
 	return NULL;
 
-    ifi = config_find_iface(ifindex, 0);
+    ifi = config_find_iface(ifindex, 0, sa->sa_family);
     if (!ifi)
 	return NULL;
 

@@ -7,6 +7,14 @@ All relevant, user visible, changes are documented in this file.
 --------------
 
 ### Changes
+ - Add MLD querier support.  Every enabled interface now runs an MLD
+   querier next to the IGMP one, from its link-local address, with its
+   own election and MLDv2 to MLDv1 fallback.  New `iface` keywords
+   `mldv1`, `mldv2`, `igmp on|off` and `mld on|off`
+ - `mctl show interfaces` has a new Proto column and lists both queriers
+   per interface.  JSON output gains a `family` key per querier and a
+   top-level `mld-queriers` list in `show igmp json`
+ - `static-group` accepts IPv6 groups
  - Add support for `static-group` per interface.  The group is joined in
    the kernel, which answers queries for it like any host, so a bridge
    keeps a permanent host membership for the group in its MDB

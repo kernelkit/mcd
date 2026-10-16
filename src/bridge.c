@@ -767,6 +767,9 @@ int show_bridge_compat(FILE *fp)
 
 	vnum = 0;
 	for (ifi = config_iface_iter(1); ifi; ifi = config_iface_iter(0)) {
+		if (ifi->ifi_family != AF_INET)
+			continue;
+
 		char mac[20], port[20], dev[10];
 		int len, vid, timeout;
 		time_t now;
@@ -791,7 +794,7 @@ int show_bridge_compat(FILE *fp)
 			continue;
 		}
 
-		inet_fmt(ifi->ifi_querier->al_addr, s1, sizeof(s1));
+		inet_addr_fmt(&ifi->ifi_querier->al_addr, s1, sizeof(s1));
 		now = time(NULL);
 		timeout = router_timeout - (now - ifi->ifi_querier->al_ctime);
 		dumpster(s1, mac, sizeof(mac), port, sizeof(port));

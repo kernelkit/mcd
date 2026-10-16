@@ -10,6 +10,7 @@ typedef struct {
     struct listaddr *g;
     int    ifindex;
     int    vid;
+    int    family;
     int    delay;
     int    num;
 } cbk_t;
@@ -22,7 +23,7 @@ extern struct ifaces ifaces;
 static void start_iface        (struct ifi *ifi);
 static void stop_iface         (struct ifi *ifi);
 
-static void send_query         (struct ifi *v, uint32_t dst, int code, uint32_t group);
+static void send_query         (struct ifi *ifi, int qri, const inet_addr_t *group);
 static void query_groups       (int timeout, void *arg);
 
 static void startup_query_cb   (int timeout, void *arg);
@@ -31,13 +32,13 @@ static void startup_query_timer(struct ifi *ifi);
 static void router_timeout_cb  (int timeout, void *arg);
 
 static void delete_group_cb    (int timeout, void *arg);
-static int  delete_group_timer (int ifindex, int vid, struct listaddr *g, int tmo);
+static int  delete_group_timer (struct ifi *ifi, struct listaddr *g, int tmo);
 
 static void send_query_cb      (int timeout, void *arg);
-static int  send_query_timer   (int ifindex, struct listaddr *g, int delay, int num);
+static int  send_query_timer   (struct ifi *ifi, struct listaddr *g, int delay, int num);
 
 static void group_version_cb   (int timeout, void *arg);
-static int  group_version_timer(int ifindex, int vid, struct listaddr *g);
+static int  group_version_timer(struct ifi *ifi, struct listaddr *g);
 
 void iface_init(void)
 {
@@ -81,6 +82,8 @@ void iface_exit(void)
 void iface_zero(struct ifi *ifi)
 {
     ifi->ifi_flags	= IFIF_DISABLED;
+    ifi->ifi_family	= AF_INET;
+    ifi->ifi_compat	= GEN_V3;
     memset(&ifi->ifi_inaddr, 0, sizeof(ifi->ifi_inaddr));
     ifi->ifi_vlan	= 0;
     ifi->ifi_name[0]	= '\0';
@@ -99,6 +102,20 @@ static int is_igmp_proxy(const struct ifi *ifi)
     return ifi->ifi_flags & IFIF_PROXY_QUERIER;
 }
 
+const char *iface_proto(const struct ifi *ifi)
+{
+    return ifi->ifi_family == AF_INET6 ? "MLD" : "IGMP";
+}
+
+/*
+ * IGMPv1/2/3 and MLDv1/2 share generation numbers 1..3 internally,
+ * this gives the version as the protocol itself numbers it.
+ */
+int iface_pv(const struct ifi *ifi, int pv)
+{
+    return ifi->ifi_family == AF_INET6 ? pv - 1 : pv;
+}
+
 static void querier_del(struct ifi *ifi)
 {
     if (!ifi->ifi_querier)
@@ -112,7 +129,7 @@ static void querier_del(struct ifi *ifi)
 static void group_del(struct ifi *ifi, struct listaddr *g)
 {
     if (g->al_flags & NBRF_STATIC_GROUP)
-	igmp_leave(ifi, g->al_addr);
+	mcast_leave(ifi, &g->al_addr);
 
     pev_timer_del(g->al_timerid);
     pev_timer_del(g->al_queryid);
@@ -138,7 +155,7 @@ void iface_check_election(struct ifi *ifi)
 
     if (is_igmp_proxy(ifi)) {
 	dbg("%s is proxy", ifi->ifi_name);
-        if (ifi->ifi_querier && ifi->ifi_querier->al_addr) {
+        if (ifi->ifi_querier && !inet_addr_is_any(&ifi->ifi_querier->al_addr)) {
 	    dbg("%s has known good querier", ifi->ifi_name);
             return;
 	}
@@ -153,12 +170,15 @@ void iface_check_election(struct ifi *ifi)
 	const inet_addr_t *cand = &pa->pa_addr;
 
 	dbg("    candidate address %s ...", inet_addr_fmt(cand, s1, sizeof(s1)));
-	if (curr.ss_family) {
-	    if (inet_addr_cmp(cand, &curr) >= 0)
+	/* MLD queries must have a link-local source, IGMP ones preferably not */
+	if (ifi->ifi_family == AF_INET6) {
+	    if (!inet_addr_linklocal(cand))
 		continue;
-	    if (inet_addr_linklocal(cand))
-		continue;
-	}
+	} else if (curr.ss_family && inet_addr_linklocal(cand))
+	    continue;
+
+	if (curr.ss_family && inet_addr_cmp(cand, &curr) >= 0)
+	    continue;
 
 	curr = *cand;
     }
@@ -169,13 +189,9 @@ void iface_check_election(struct ifi *ifi)
     }
 
     if (curr.ss_family && ifi->ifi_querier) {
-	uint32_t own = inet_addr_get4(&ifi->ifi_inaddr);
-	uint32_t cur = ifi->ifi_querier->al_addr;
-
-	if (ntohl(own) < ntohl(cur)) {
-	    inet_fmt(cur, s1, sizeof(s1));
-	    dbg("New local querier on %s, was %s (%u vs %u)",
-		  ifi->ifi_name, s1, ntohl(own), ntohl(cur));
+	if (inet_addr_cmp(&ifi->ifi_inaddr, &ifi->ifi_querier->al_addr) < 0) {
+	    dbg("New local querier on %s, was %s", ifi->ifi_name,
+		inet_addr_fmt(&ifi->ifi_querier->al_addr, s1, sizeof(s1)));
 	    querier_del(ifi);
 	    goto elected;
 	}
@@ -194,7 +210,7 @@ void iface_check_election(struct ifi *ifi)
     ifi->ifi_flags |= IFIF_IGMP_QUERIER;
     dbg("Assuming %squerier duties on interface %s",
           is_igmp_proxy(ifi) ? "proxy " : "", ifi->ifi_name);
-    send_query(ifi, allhosts_group, igmp_response_interval, 0);
+    send_query(ifi, igmp_response_interval, NULL);
     startup_query_timer(ifi);	/* RFC3376 §8.6, §8.7 startup query burst */
 }
 
@@ -209,14 +225,14 @@ void iface_add(int ifindex, int flags)
     if (!if_indextoname(ifindex, ifname))
 	return; /* should not happen, but lost (again?) */
 
-    /* Check if this is something we're interested in */
-    ifi = config_find_ifname(ifname);
-    if (!ifi)
-	return;
+    TAILQ_FOREACH(ifi, &ifaces, ifi_link) {
+	if (strcmp(ifi->ifi_name, ifname))
+	    continue;
 
-    dbg("Marking %s as now available in system", ifi->ifi_name);
-    ifi->ifi_index = ifindex;
-    config_iface_update(ifi);
+	dbg("Marking %s as now available in system", ifi->ifi_name);
+	ifi->ifi_index = ifindex;
+	config_iface_update(ifi);
+    }
 
     iface_check(ifindex, flags);
 }
@@ -229,42 +245,43 @@ void iface_del(int ifindex, int flags)
     struct phaddr *pa, *pat;
     struct ifi *ifi;
 
-    ifi = config_find_iface(ifindex, 0);
-    if (!ifi)
-	return;	/* unused in .conf */
+    if (!ifindex)
+	return;			/* entries not in the system */
 
-    dbg("Marking %s as removed from system", ifi->ifi_name);
-    stop_iface(ifi);
+    TAILQ_FOREACH(ifi, &ifaces, ifi_link) {
+	if (ifi->ifi_index != ifindex)
+	    continue;
 
-    TAILQ_FOREACH_SAFE(pa, &ifi->ifi_addrs, pa_link, pat) {
-	TAILQ_REMOVE(&ifi->ifi_addrs, pa, pa_link);
-	free(pa);
+	dbg("Marking %s as removed from system", ifi->ifi_name);
+	if (!(ifi->ifi_flags & IFIF_DOWN))
+	    stop_iface(ifi);
+
+	TAILQ_FOREACH_SAFE(pa, &ifi->ifi_addrs, pa_link, pat) {
+	    TAILQ_REMOVE(&ifi->ifi_addrs, pa, pa_link);
+	    free(pa);
+	}
+
+	memset(&ifi->ifi_inaddr, 0, sizeof(ifi->ifi_inaddr));
+	ifi->ifi_index = 0;
+	ifi->ifi_flags |= IFIF_DOWN;
     }
-
-    memset(&ifi->ifi_inaddr, 0, sizeof(ifi->ifi_inaddr));
-    ifi->ifi_index = 0;
-    ifi->ifi_flags |= IFIF_DOWN;
 }
 
-/* XXX: refactor to be a callback from config_find_ifname() */
 void iface_check(int ifindex, unsigned int flags)
 {
     struct ifi *ifi;
 
-    ifi = config_find_iface(ifindex, 0);
-    if (!ifi) {
-	dbg("Cannot find an active ifindex %d in configuration, skipping ...", ifindex);
-	return;
-    }
+    TAILQ_FOREACH(ifi, &ifaces, ifi_link) {
+	if (ifi->ifi_index != ifindex)
+	    continue;
 
-    dbg("Check %s flags 0x%x new flags 0x%x", ifi->ifi_name, ifi->ifi_flags, flags);
-    if (ifi->ifi_flags & IFIF_DOWN) {
-	if (flags & IFF_UP) {
-	    ifi->ifi_flags &= ~IFIF_DOWN;
-	    start_iface(ifi);
-	}
-    } else {
-	if (!(flags & IFF_UP)) {
+	dbg("Check %s flags 0x%x new flags 0x%x", ifi->ifi_name, ifi->ifi_flags, flags);
+	if (ifi->ifi_flags & IFIF_DOWN) {
+	    if (flags & IFF_UP) {
+		ifi->ifi_flags &= ~IFIF_DOWN;
+		start_iface(ifi);
+	    }
+	} else if (!(flags & IFF_UP)) {
 	    stop_iface(ifi);
 	    ifi->ifi_flags |= IFIF_DOWN;
 	}
@@ -315,31 +332,12 @@ void iface_check_state(void)
     close(sd);
 }
 
-static void send_query(struct ifi *ifi, uint32_t dst, int qri, uint32_t group)
+static void send_query(struct ifi *ifi, int qri, const inet_addr_t *group)
 {
-    int datalen = 4;
-
-    /*
-     * IGMP version to send depends on the compatibility mode of the
-     * interface:
-     *  - IGMPv2: routers MUST send Periodic Queries truncated at the
-     *    Group Address field (i.e., 8 bytes long).
-     *  - IGMPv1: routers MUST send Periodic Queries with a Max Response
-     *    Time of 0
-     */
-    if (ifi->ifi_flags & IFIF_IGMPV2) {
-	datalen = 0;
-    } else if (ifi->ifi_flags & IFIF_IGMPV1) {
-	datalen = 0;
-	qri = 0;
-    }
-
-    dbg("Sending %squery on %s src %s",
-	  (ifi->ifi_flags & IFIF_IGMPV1) ? "v1 " :
-	  (ifi->ifi_flags & IFIF_IGMPV2) ? "v2 " : "v3 ",
-	  ifi->ifi_name, inet_addr_fmt(&ifi->ifi_inaddr, s1, sizeof(s1)));
-
-    send_igmp(ifi, dst, IGMP_MEMBERSHIP_QUERY, qri, group, datalen);
+    if (ifi->ifi_family == AF_INET6)
+	send_mld_query(ifi, qri, group);
+    else
+	send_igmp_query(ifi, qri, group);
 }
 
 /*
@@ -357,9 +355,9 @@ static void join_static_groups(struct ifi *ifi)
     }
 
     TAILQ_FOREACH(a, &ifi->ifi_static, al_link) {
-	inet_fmt(a->al_addr, s1, sizeof(s1));
+	inet_addr_fmt(&a->al_addr, s1, sizeof(s1));
 
-	if (igmp_join(ifi, a->al_addr)) {
+	if (mcast_join(ifi, &a->al_addr)) {
 	    warn("Failed joining static group %s on %s", s1, ifi->ifi_name);
 	    continue;
 	}
@@ -386,7 +384,7 @@ static void start_iface(struct ifi *ifi)
     if (!qi)
 	qi = igmp_query_interval;
 
-    igmp_iface_init(ifi);
+    sock_iface_init(ifi);
     join_static_groups(ifi);
 
     /*
@@ -427,7 +425,7 @@ static void stop_iface(struct ifi *ifi)
     dbg("Releasing querier duties on interface %s", ifi->ifi_name);
     ifi->ifi_flags &= ~IFIF_IGMP_QUERIER;
 
-    igmp_iface_exit(ifi);
+    sock_iface_exit(ifi);
 
     info("Interface %s out of service", ifi->ifi_name);
 }
@@ -449,26 +447,20 @@ static void query_groups(int period, void *arg)
 	return;
 
     if (ifi->ifi_flags & IFIF_IGMP_QUERIER)
-	send_query(ifi, allhosts_group, igmp_response_interval, 0);
+	send_query(ifi, igmp_response_interval, NULL);
 }
 
 /*
- * Process an incoming host membership query.  Warn about
- * IGMP version mismatches, perform querier election, and
- * handle group-specific queries when we're not the querier.
+ * Process an incoming host membership query.  Warn about version
+ * mismatches, perform querier election, and handle group-specific
+ * queries when we're not the querier.
  */
-void accept_membership_query(int ifindex, int vid, uint32_t src, uint32_t dst,
-			     uint32_t group, int intv, int tmo, int ver)
+void accept_membership_query(struct ifi *ifi, const inet_addr_t *src, const inet_addr_t *group,
+			     int intv, int tmo, int ver)
 {
-    struct ifi *ifi;
     int notnew = 1;
-    uint32_t own;
 
-    ifi = config_find_iface(ifindex, vid);
-    if (!ifi)
-	return;
-
-    own = inet_addr_get4(&ifi->ifi_inaddr);
+    inet_addr_fmt(src, s1, sizeof(s1));
 
     /*
      * IGMPv1 + IGMPv2 don't send the query inteval (qqic field only in
@@ -477,8 +469,7 @@ void accept_membership_query(int ifindex, int vid, uint32_t src, uint32_t dst,
     if (intv == 0)
 	intv = ifi->ifi_query_interval;
 
-    if ((ver == 3 && (ifi->ifi_flags & IFIF_IGMPV2)) ||
-	(ver == 2 && (ifi->ifi_flags & IFIF_IGMPV1))) {
+    if (ver > ifi->ifi_compat) {
 	int i;
 
 	/*
@@ -489,14 +480,14 @@ void accept_membership_query(int ifindex, int vid, uint32_t src, uint32_t dst,
 	    i >>= 1;
 
 	if (i == 1) {
-	    warnx("Received IGMPv%d query from %s on %s, configured for IGMPv%d", ver,
-		  inet_fmt(src, s1, sizeof(s1)), ifi->ifi_name,
-		  (ifi->ifi_flags & IFIF_IGMPV1) ? 1 : 2);
+	    warnx("Received %sv%d query from %s on %s, configured for %sv%d",
+		  iface_proto(ifi), iface_pv(ifi, ver), s1, ifi->ifi_name, iface_proto(ifi),
+		  iface_pv(ifi, ifi->ifi_compat));
 	}
     }
 
-    if (ifi->ifi_querier == NULL || ifi->ifi_querier->al_addr != src) {
-	uint32_t cur = ifi->ifi_querier ? ifi->ifi_querier->al_addr : own;
+    if (ifi->ifi_querier == NULL || inet_addr_cmp(&ifi->ifi_querier->al_addr, src)) {
+	const inet_addr_t *cur = ifi->ifi_querier ? &ifi->ifi_querier->al_addr : &ifi->ifi_inaddr;
 
 	/*
 	 * This might be:
@@ -504,19 +495,18 @@ void accept_membership_query(int ifindex, int vid, uint32_t src, uint32_t dst,
 	 *   than the current querier (who might be me)
 	 * - A query from a new router that just started up and doesn't
 	 *   know who the querier is.
-	 * - A proxy query (source address 0.0.0.0), never wins elections
+	 * - A proxy query (source 0.0.0.0 or ::), never wins elections
 	 */
-	if (!ntohl(src)) {
+	if (inet_addr_is_any(src)) {
 	    dbg("Ignoring proxy query on %s", ifi->ifi_name);
 	    return;
 	}
 
-	if (ntohl(src) < ntohl(cur) || !cur) {
+	if (inet_addr_cmp(src, cur) < 0 || inet_addr_is_any(cur)) {
 	  again:
-	    dbg("New querier %s (was %s) on %s, timeout %d",
-		  inet_fmt(src, s1, sizeof(s1)), ifi->ifi_querier
-		  ? inet_fmt(ifi->ifi_querier->al_addr, s2, sizeof(s2)) : "me", ifi->ifi_name,
-		  router_timeout);
+	    dbg("New querier %s (was %s) on %s, timeout %d", s1, ifi->ifi_querier
+		? inet_addr_fmt(&ifi->ifi_querier->al_addr, s2, sizeof(s2)) : "me",
+		ifi->ifi_name, router_timeout);
 
 	    if (!ifi->ifi_querier) {
 		ifi->ifi_querier = calloc(1, sizeof(struct listaddr));
@@ -530,24 +520,19 @@ void accept_membership_query(int ifindex, int vid, uint32_t src, uint32_t dst,
 	    }
 
 	    time(&ifi->ifi_querier->al_ctime);
-	    ifi->ifi_querier->al_addr = src;
+	    ifi->ifi_querier->al_addr = *src;
 	    ifi->ifi_querier->al_interval = intv;
 	    notnew = 0;
 	} else {
-	    if (!ifi->ifi_querier) {
-		/*
-		 * If we just "won" the election with a link-local
-		 * address, go back and fix.  We do not consider a
-		 * link-local address better than, e.g., a 192.168.
-		 */
-		if (inet_addr_linklocal(&ifi->ifi_inaddr) && !IN_LINKLOCAL(ntohl(src)))
-		    goto again;
-	    }
-#if 0
-	    dbg("Ignoring query from %s; querier on %s is still %s",
-		  inet_fmt(src, s1, sizeof(s1)), ifi->ifi_name,
-		  ifi->ifi_querier ? inet_fmt(ifi->ifi_querier->al_addr, s2, sizeof(s2)) : "me");
-#endif
+	    /*
+	     * If we just "won" the election with an IPv4 link-local
+	     * address, go back and fix.  We do not consider a
+	     * link-local address better than, e.g., a 192.168.
+	     */
+	    if (!ifi->ifi_querier && ifi->ifi_family == AF_INET &&
+		inet_addr_linklocal(&ifi->ifi_inaddr) && !inet_addr_linklocal(src))
+		goto again;
+
 	    return;
 	}
     }
@@ -555,7 +540,7 @@ void accept_membership_query(int ifindex, int vid, uint32_t src, uint32_t dst,
     /*
      * Reset the timer since we've received a query.
      */
-    if (notnew && ifi->ifi_querier && src == ifi->ifi_querier->al_addr) {
+    if (notnew && ifi->ifi_querier && !inet_addr_cmp(src, &ifi->ifi_querier->al_addr)) {
 	dbg("Resetting query timeout %d sec", router_timeout);
 	pev_timer_set(ifi->ifi_querier->al_timerid, router_timeout * 1000000);
 	time(&ifi->ifi_querier->al_ctime);
@@ -566,185 +551,133 @@ void accept_membership_query(int ifindex, int vid, uint32_t src, uint32_t dst,
      * we must set our membership timer to [Last Member Query Count] *
      * the [Max Response Time] in the packet.
      */
-    if (!(ifi->ifi_flags & (IFIF_IGMPV1|IFIF_IGMP_QUERIER))
-	&& group != 0 && src != own) {
+    if (ifi->ifi_compat != GEN_V1 && !(ifi->ifi_flags & IFIF_IGMP_QUERIER)
+	&& !inet_addr_is_any(group) && inet_addr_cmp(src, &ifi->ifi_inaddr)) {
 	struct listaddr *g;
 
 	dbg("Group-specific membership query for %s from %s on %s, timeout %d",
-	      inet_fmt(group, s2, sizeof(s2)),
-	      inet_fmt(src, s1, sizeof(s1)), ifi->ifi_name, tmo);
+	    inet_addr_fmt(group, s2, sizeof(s2)), s1, ifi->ifi_name, tmo);
 
 	TAILQ_FOREACH(g, &ifi->ifi_groups, al_link) {
-	    if (group == g->al_addr && g->al_queryid == 0) {
-		if (g->al_timerid > 0)
-		    g->al_timerid = pev_timer_del(g->al_timerid);
+	    if (inet_addr_cmp(group, &g->al_addr) || g->al_queryid != 0)
+		continue;
 
-		if (g->al_queryid > 0)
-		    g->al_queryid = pev_timer_del(g->al_queryid);
+	    if (g->al_timerid > 0)
+		g->al_timerid = pev_timer_del(g->al_timerid);
 
-		/* setup a timeout to remove the group membership */
-		g->al_timerid = delete_group_timer(ifindex, vid, g, IGMP_LAST_MEMBER_QUERY_COUNT * tmo);
+	    /* setup a timeout to remove the group membership */
+	    g->al_timerid = delete_group_timer(ifi, g, IGMP_LAST_MEMBER_QUERY_COUNT * tmo);
 
-		dbg("Timer for grp %s on %s set to %d",
-		      inet_fmt(group, s2, sizeof(s2)), ifi->ifi_name, pev_timer_get(g->al_timerid) / 1000);
-		break;
-	    }
+	    dbg("Timer for grp %s on %s set to %d", s2, ifi->ifi_name,
+		pev_timer_get(g->al_timerid) / 1000);
+	    break;
 	}
     }
 }
 
-static void group_debug(struct listaddr *g, char *s, int is_change)
+static void group_debug(const struct ifi *ifi, const struct listaddr *g, const char *s, int is_change)
 {
-    dbg("%sIGMP v%d compatibility mode for group %s",
-	  is_change ? "Change to " : "", g->al_pv, s);
+    dbg("%s%s v%d compatibility mode for group %s", is_change ? "Change to " : "",
+	iface_proto(ifi), iface_pv(ifi, g->al_pv), s);
 }
 
 /*
- * Process an incoming group membership report.
+ * Process an incoming group membership report.  The report generation
+ * pv is 1 for IGMPv1, 2 for IGMPv2 and MLDv1, 3 for IGMPv3 and MLDv2.
  */
-void accept_group_report(int ifindex, int vid, uint32_t src, uint32_t dst, uint32_t group, int r_type)
+void accept_group_report(struct ifi *ifi, const inet_addr_t *src, const inet_addr_t *group, int pv)
 {
     struct listaddr *g;
-    struct ifi *ifi;
 
-    inet_fmt(src, s1, sizeof(s1));
-    inet_fmt(dst, s2, sizeof(s2));
-    inet_fmt(group, s3, sizeof(s3));
+    inet_addr_fmt(src, s1, sizeof(s1));
+    inet_addr_fmt(group, s3, sizeof(s3));
 
-    /* Do not filter LAN scoped groups */
-    if (ntohl(group) <= INADDR_MAX_LOCAL_GROUP) { /* group <= 224.0.0.255? */
+    if (inet_addr_is_lanscope(group)) {
 	dbg("    %-16s LAN scoped group, skipping.", s3);
 	return;
     }
 
-    ifi = config_find_iface(ifindex, vid);
-    if (!ifi)
-	return;
-
-    info("Accepting group membership report: src %s, dst %s, grp %s", s1, s2, s3);
+    info("Accepting group membership report: src %s, grp %s", s1, s3);
 
     /*
      * Look for the group in our group list; if found, reset its timer.
      */
     TAILQ_FOREACH(g, &ifi->ifi_groups, al_link) {
-	int old_report = 0;
+	if (inet_addr_cmp(group, &g->al_addr))
+	    continue;
 
-	if (group == g->al_addr) {
-	    if (g->al_flags & NBRF_STATIC_GROUP) {
-		dbg("Ignoring IGMP JOIN for static group %s on %s.", s3, s1);
-		return;
-	    }
-
-	    switch (r_type) {
-	    case IGMP_V1_MEMBERSHIP_REPORT:
-		old_report = 1;
-		if (g->al_pv > 1) {
-		    g->al_pv = 1;
-		    group_debug(g, s3, 1);
-		}
-		break;
-
-	    case IGMP_V2_MEMBERSHIP_REPORT:
-		old_report = 1;
-		if (g->al_pv > 2) {
-		    g->al_pv = 2;
-		    group_debug(g, s3, 1);
-		}
-		break;
-
-	    default:
-		break;
-	    }
-
-	    g->al_reporter = src;
-
-	    /** delete old timers, set a timer for expiration **/
-	    if (g->al_queryid > 0)
-		g->al_queryid = pev_timer_del(g->al_queryid);
-
-	    if (g->al_timerid > 0)
-		g->al_timerid = pev_timer_del(g->al_timerid);
-
-	    g->al_timerid = delete_group_timer(ifindex, vid, g, IGMP_GROUP_MEMBERSHIP_INTERVAL);
-
-	    /*
-	     * Reset timer for switching version back every time an older
-	     * version report is received
-	     */
-	    if (g->al_pv < 3 && old_report) {
-		if (g->al_pv_timerid)
-		    g->al_pv_timerid = pev_timer_del(g->al_pv_timerid);
-
-		g->al_pv_timerid = group_version_timer(ifindex, vid, g);
-	    }
-	    break;
-	}
-    }
-
-    /*
-     * If not found, add it to the list and update kernel cache.
-     */
-    if (!g) {
-	g = calloc(1, sizeof(struct listaddr));
-	if (!g) {
-	    err("failed allocating group");
-	    exit(EX_OSERR);
+	if (g->al_flags & NBRF_STATIC_GROUP) {
+	    dbg("Ignoring %s JOIN for static group %s on %s.", iface_proto(ifi), s3, s1);
+	    return;
 	}
 
-	g->al_addr = group;
-
-	switch (r_type) {
-	case IGMP_V1_MEMBERSHIP_REPORT:
-	    g->al_pv = 1;
-	    break;
-
-	case IGMP_V2_MEMBERSHIP_REPORT:
-	    g->al_pv = 2;
-	    break;
-
-	default:
-	    g->al_pv = 3;
-	    break;
+	if (pv < g->al_pv) {
+	    g->al_pv = pv;
+	    group_debug(ifi, g, s3, 1);
 	}
 
-	group_debug(g, s3, 0);
+	g->al_reporter = *src;
 
-	/** set a timer for expiration **/
-        g->al_queryid	= 0;
-	g->al_reporter	= src;
-	g->al_timerid	= delete_group_timer(ifindex, vid, g, IGMP_GROUP_MEMBERSHIP_INTERVAL);
+	/** delete old timers, set a timer for expiration **/
+	if (g->al_queryid > 0)
+	    g->al_queryid = pev_timer_del(g->al_queryid);
+
+	if (g->al_timerid > 0)
+	    g->al_timerid = pev_timer_del(g->al_timerid);
+
+	g->al_timerid = delete_group_timer(ifi, g, IGMP_GROUP_MEMBERSHIP_INTERVAL);
 
 	/*
-	 * Set timer for swithing version back if an older version
-	 * report is received
+	 * Reset timer for switching version back every time an older
+	 * version report is received
 	 */
-	if (g->al_pv < 3)
-	    g->al_pv_timerid = group_version_timer(ifindex, vid, g);
+	if (g->al_pv < 3 && pv < 3) {
+	    if (g->al_pv_timerid > 0)
+		g->al_pv_timerid = pev_timer_del(g->al_pv_timerid);
 
-	TAILQ_INSERT_TAIL(&ifi->ifi_groups, g, al_link);
-	time(&g->al_ctime);
+	    g->al_pv_timerid = group_version_timer(ifi, g);
+	}
+	return;
     }
+
+    g = calloc(1, sizeof(struct listaddr));
+    if (!g) {
+	err("failed allocating group");
+	exit(EX_OSERR);
+    }
+
+    g->al_addr = *group;
+    g->al_pv   = pv;
+    group_debug(ifi, g, s3, 0);
+
+    /** set a timer for expiration **/
+    g->al_reporter = *src;
+    g->al_timerid  = delete_group_timer(ifi, g, IGMP_GROUP_MEMBERSHIP_INTERVAL);
+
+    /*
+     * Set timer for swithing version back if an older version
+     * report is received
+     */
+    if (g->al_pv < 3)
+	g->al_pv_timerid = group_version_timer(ifi, g);
+
+    TAILQ_INSERT_TAIL(&ifi->ifi_groups, g, al_link);
+    time(&g->al_ctime);
 }
 
 /*
- * Process an incoming IGMPv2 Leave Group message, an IGMPv3 BLOCK(), or
- * IGMPv3 TO_IN({}) membership report.  Handles older version hosts.
- *
- * We detect IGMPv3 by the dst always being 0.
+ * Process an incoming leave: an IGMPv2 Leave, an MLDv1 Done, or a BLOCK
+ * or TO_IN({}) record from a v3 generation report, flagged with v3 as
+ * older hosts in the group then take precedence, RFC 3376 §7.3.2.
  */
-void accept_leave_message(int ifindex, int vid, uint32_t src, uint32_t dst, uint32_t group)
+void accept_leave_message(struct ifi *ifi, const inet_addr_t *src, const inet_addr_t *group, int v3)
 {
     struct listaddr *g;
-    struct ifi *ifi;
 
-    inet_fmt(src, s1, sizeof(s1));
-    inet_fmt(group, s3, sizeof(s3));
+    inet_addr_fmt(src, s1, sizeof(s1));
+    inet_addr_fmt(group, s3, sizeof(s3));
 
-    ifi = config_find_iface(ifindex, vid);
-    if (!ifi)
-	return;
-
-    if (!(ifi->ifi_flags & IFIF_IGMP_QUERIER) || (ifi->ifi_flags & IFIF_IGMPV1)) {
+    if (!(ifi->ifi_flags & IFIF_IGMP_QUERIER) || ifi->ifi_compat == GEN_V1) {
 	dbg("Ignoring group leave, not querier or interface in IGMPv1 mode.");
 	return;
     }
@@ -754,29 +687,30 @@ void accept_leave_message(int ifindex, int vid, uint32_t src, uint32_t dst, uint
      * query.
      */
     TAILQ_FOREACH(g, &ifi->ifi_groups, al_link) {
-	if (group != g->al_addr)
+	if (inet_addr_cmp(group, &g->al_addr))
 	    continue;
 
 	if (g->al_flags & NBRF_STATIC_GROUP) {
-	    dbg("Ignoring IGMP LEAVE for static group %s on %s.", s3, s1);
+	    dbg("Ignoring %s LEAVE for static group %s on %s.", iface_proto(ifi), s3, s1);
 	    return;
 	}
 
 	/* Ignore IGMPv2 LEAVE in IGMPv1 mode, RFC3376, sec. 7.3.2. */
-	if (g->al_pv == 1) {
-	    dbg("Ignoring IGMP LEAVE for %s on %s, IGMPv1 host exists.", s3, s1);
+	if (g->al_pv == GEN_V1) {
+	    dbg("Ignoring LEAVE for %s on %s, IGMPv1 host exists.", s3, s1);
 	    return;
 	}
 
 	/* Ignore IGMPv3 BLOCK in IGMPv2 mode, RFC3376, sec. 7.3.2. */
-	if (g->al_pv == 2 && dst == 0) {
-	    dbg("Ignoring IGMP BLOCK/TO_IN({}) for %s on %s, IGMPv2 host exists.", s3, s1);
+	if (g->al_pv == GEN_V2 && v3) {
+	    dbg("Ignoring BLOCK/TO_IN({}) for %s on %s, %sv%d host exists.", s3, s1,
+		iface_proto(ifi), iface_pv(ifi, GEN_V2));
 	    return;
 	}
 
 	/* still waiting for a reply to a query, ignore the leave */
 	if (g->al_queryid) {
-	    dbg("Ignoring IGMP LEAVE for %s on %s, pending group-specific query.", s3, s1);
+	    dbg("Ignoring LEAVE for %s on %s, pending group-specific query.", s3, s1);
 	    return;
 	}
 
@@ -785,9 +719,9 @@ void accept_leave_message(int ifindex, int vid, uint32_t src, uint32_t dst, uint
 	    g->al_timerid = pev_timer_del(g->al_timerid);
 
 	/** send a group specific query **/
-	g->al_queryid = send_query_timer(ifi->ifi_index, g, igmp_last_member_interval,
-				       IGMP_LAST_MEMBER_QUERY_COUNT);
-	g->al_timerid = delete_group_timer(ifindex, vid, g, igmp_last_member_interval
+	g->al_queryid = send_query_timer(ifi, g, igmp_last_member_interval,
+					 IGMP_LAST_MEMBER_QUERY_COUNT);
+	g->al_timerid = delete_group_timer(ifi, g, igmp_last_member_interval
 					   * (IGMP_LAST_MEMBER_QUERY_COUNT + 1));
 
 	dbg("Accepted group leave for %s on %s", s3, s1);
@@ -799,155 +733,124 @@ void accept_leave_message(int ifindex, int vid, uint32_t src, uint32_t dst, uint
      * still is a group-specific query pending, or when the group is in
      * older version compat, RFC3376.
      */
-    dbg("Ignoring IGMP LEAVE/BLOCK for %s on %s, group not found.", s3, s1);
+    dbg("Ignoring LEAVE/BLOCK for %s on %s, group not found.", s3, s1);
 }
 
-
 /*
- * Loop through and process all sources in a v3 record.
- *
- * Parameters:
- *     r_type   Report type of IGMP message
- *     src      Src address of IGMP message
- *     dst      Multicast group
- *     sources  Pointer to the beginning of sources list in the IGMP message
- *     canary   Pointer to the end of IGMP message
- *
- * Returns:
- *     POSIX OK (0) if succeeded, non-zero on failure.
+ * One group record of an IGMPv3 or MLDv2 report, the record types are
+ * the same in both.  Source lists are not tracked, RFC 5790 lightweight
+ * semantics: a record with sources is a (*,G) join, a BLOCK a leave.
  */
-int accept_sources(int ifindex, int vid, int r_type, uint32_t src, uint32_t dst, uint8_t *sources,
-		   uint8_t *canary, int rec_num_sources)
+void accept_group_record(struct ifi *ifi, const inet_addr_t *src, const inet_addr_t *group,
+			 int type, int nsrcs)
 {
-    uint8_t *ptr;
-    int j;
+    switch (type) {
+    case IGMP_MODE_IS_EXCLUDE:
+    case IGMP_CHANGE_TO_EXCLUDE_MODE:
+	if (nsrcs == 0)
+	    accept_group_report(ifi, src, group, GEN_V3);
+	else
+	    dbg("IS_EX/TO_EX({x}) not supported, RFC 5790.");
+	break;
 
-    for (j = 0, ptr = sources; j < rec_num_sources; ++j, src += 4) {
-	struct in_addr *ina = (struct in_addr *)ptr;
+    case IGMP_MODE_IS_INCLUDE:
+    case IGMP_CHANGE_TO_INCLUDE_MODE:
+	if (nsrcs == 0)
+	    accept_leave_message(ifi, src, group, 1);
+	else
+	    accept_group_report(ifi, src, group, GEN_V3);
+	break;
 
-        if ((ptr + 4) > canary) {
-	    dbg("Invalid IGMPv3 report, too many sources, would overflow.");
-            return 1;
-        }
+    case IGMP_ALLOW_NEW_SOURCES:
+	if (nsrcs)
+	    accept_group_report(ifi, src, group, GEN_V3);
+	break;
 
-	dbg("Add source (%s,%s)", inet_fmt(ina->s_addr, s2, sizeof(s2)),
-	      inet_fmt(dst, s1, sizeof(s1)));
+    case IGMP_BLOCK_OLD_SOURCES:
+	if (nsrcs)
+	    accept_leave_message(ifi, src, group, 1);
+	break;
 
-        accept_group_report(ifindex, vid, src, ina->s_addr, dst, r_type);
+    default:
+	/* RFC 3376: Unrecognized Record Type values MUST be silently ignored. */
+	break;
     }
-
-    return 0;
 }
 
-
 /*
- * Handle IGMP v3 membership reports (join/leave)
+ * Walk the group records of an IGMPv3 or MLDv2 report, RFC 3376 §4.2
+ * and RFC 3810 §5.2: an 8-byte report header, then records with a
+ * 4-byte header, the group, and the sources.  Only the address width
+ * differs between the two.
  */
-void accept_membership_report(int ifindex, int vid, uint32_t src, uint32_t dst, struct igmpv3_report *report, ssize_t reportlen)
+void accept_v3_report(struct ifi *ifi, const inet_addr_t *src, const uint8_t *buf, size_t len)
 {
-    uint8_t *canary = (uint8_t *)report + reportlen;
-    struct igmpv3_grec *record;
-    int num_groups, i;
+    size_t alen = ifi->ifi_family == AF_INET6 ? sizeof(struct in6_addr) : sizeof(struct in_addr);
+    const uint8_t *ptr = buf + 8, *end = buf + len;
+    uint16_t num;
+    int i;
 
-    num_groups = ntohs(report->ngrec);
-    if (num_groups < 0) {
-	info("Invalid Membership Report from %s: num_groups = %d",
-	      inet_fmt(src, s1, sizeof(s1)), num_groups);
+    if (len < 8)
 	return;
-    }
 
-    dbg("IGMP v3 report, %zd bytes, from %s to %s with %d group records.",
-	  reportlen, inet_fmt(src, s1, sizeof(s1)), inet_fmt(dst, s2, sizeof(s2)), num_groups);
+    memcpy(&num, buf + 6, sizeof(num));
+    num = ntohs(num);
 
-    record = &report->grec[0];
+    dbg("%sv%d report, %zu bytes, from %s with %d group records.", iface_proto(ifi),
+	iface_pv(ifi, GEN_V3), len, inet_addr_fmt(src, s1, sizeof(s1)), num);
 
-    for (i = 0; i < num_groups; i++) {
-	struct in_addr  rec_group;
-	uint8_t        *sources;
-	int             rec_type;
-	int             rec_auxdatalen;
-	int             rec_num_sources;
-	int             j, rc;
-	int             record_size = 0;
+    for (i = 0; i < num; i++) {
+	inet_addr_t group;
+	uint16_t nsrcs;
+	size_t size;
 
-	rec_num_sources = ntohs(record->grec_nsrcs);
-	rec_auxdatalen = record->grec_auxwords;
-	record_size = sizeof(struct igmpv3_grec) + sizeof(uint32_t) * rec_num_sources + rec_auxdatalen;
-	if ((uint8_t *)record + record_size > canary) {
-	    info("Invalid group report %p > %p", (uint8_t *)record + record_size, canary);
+	if (ptr + 4 + alen > end) {
+	    info("Invalid %s report from %s, record %d truncated", iface_proto(ifi), s1, i);
 	    return;
 	}
 
-	rec_type = record->grec_type;
-	rec_group.s_addr = (in_addr_t)record->grec_mca;
-	sources = (uint8_t *)record->grec_src;
-
-	switch (rec_type) {
-	case IGMP_MODE_IS_EXCLUDE:
-	case IGMP_CHANGE_TO_EXCLUDE_MODE:
-	    if (rec_num_sources == 0) {
-		/* RFC 5790: TO_EX({}) can be interpreted as a (*,G)
-		 *           join, i.e., to include all sources.
-		 */
-		accept_group_report(ifindex, vid, src, 0, rec_group.s_addr, report->type);
-	    } else {
-		/* RFC 5790: LW-IGMPv3 does not use TO_EX({x}),
-		 *           i.e., filter with non-null source.
-		 */
-		dbg("IS_EX/TO_EX({x}), not unsupported, RFC5790.");
-	    }
-	    break;
-
-	case IGMP_MODE_IS_INCLUDE:
-	case IGMP_CHANGE_TO_INCLUDE_MODE:
-	    if (rec_num_sources == 0) {
-		/* RFC5790: TO_IN({}) can be interpreted as an
-		 *          IGMPv2 (*,G) leave.
-		 */
-		accept_leave_message(ifindex, vid, src, 0, rec_group.s_addr);
-	    } else {
-		/* RFC5790: TO_IN({x}), regular RFC3376 (S,G)
-		 *          join with >= 1 source, 'S'.
-		 */
-		rc = accept_sources(ifindex, vid, report->type, src, rec_group.s_addr,
-				    sources, canary, rec_num_sources);
-		if (rc)
-		    return;
-	    }
-	    break;
-
-	case IGMP_ALLOW_NEW_SOURCES:
-	    /* RFC5790: Same as TO_IN({x}) */
-	    rc = accept_sources(ifindex, vid, report->type, src, rec_group.s_addr,
-				sources, canary, rec_num_sources);
-	    if (rc)
-		return;
-	    break;
-
-	case IGMP_BLOCK_OLD_SOURCES:
-	    /* RFC5790: Instead of TO_EX({x}) */
-	    for (j = 0; j < rec_num_sources; j++) {
-		uint8_t *gsrc = (uint8_t *)&record->grec_src[j];
-		struct in_addr *ina = (struct in_addr *)gsrc;
-
-		if (gsrc > canary) {
-		    info("Invalid group record");
-		    return;
-		}
-
-		dbg("Remove source[%d] (%s,%s)", j,
-		      inet_fmt(ina->s_addr, s2, sizeof(s2)), inet_ntoa(rec_group));
-		accept_leave_message(ifindex, vid, src, 0, rec_group.s_addr);
-	    }
-	    break;
-
-	default:
-	    /* RFC3376: Unrecognized Record Type values MUST be silently ignored. */
-	    break;
+	memcpy(&nsrcs, ptr + 2, sizeof(nsrcs));
+	nsrcs = ntohs(nsrcs);
+	size  = 4 + alen + nsrcs * alen + ptr[1] * 4;
+	if (ptr + size > end) {
+	    info("Invalid %s report from %s, record %d overflows", iface_proto(ifi), s1, i);
+	    return;
 	}
 
-	record = (struct igmpv3_grec *)((uint8_t *)record + record_size);
+	if (alen == sizeof(struct in6_addr)) {
+	    inet_addr_set6(&group, (const struct in6_addr *)(ptr + 4));
+	} else {
+	    uint32_t ina;
+
+	    memcpy(&ina, ptr + 4, sizeof(ina));
+	    inet_addr_set4(&group, ina);
+	}
+
+	accept_group_record(ifi, src, &group, ptr[0], nsrcs);
+	ptr += size;
     }
+}
+
+/*
+ * Timer context, freed by the timer deletion hook.  Timers look the
+ * interface up again when they fire, it may have gone away.
+ */
+static cbk_t *cbk_new(const struct ifi *ifi, struct listaddr *g)
+{
+    cbk_t *cbk;
+
+    cbk = calloc(1, sizeof(*cbk));
+    if (!cbk) {
+	err("failed allocating timer context");
+	exit(EX_OSERR);
+    }
+
+    cbk->ifindex = ifi->ifi_index;
+    cbk->vid     = ifi->ifi_vlan;
+    cbk->family  = ifi->ifi_family;
+    cbk->g       = g;
+
+    return cbk;
 }
 
 /*
@@ -959,11 +862,11 @@ static void startup_query_cb(int timeout, void *arg)
     cbk_t *cbk = (cbk_t *)arg;
     struct ifi *ifi;
 
-    ifi = config_find_iface(cbk->ifindex, cbk->vid);
+    ifi = config_find_iface(cbk->ifindex, cbk->vid, cbk->family);
     if (!ifi || !(ifi->ifi_flags & IFIF_IGMP_QUERIER))
 	goto end;
 
-    send_query(ifi, allhosts_group, igmp_response_interval, 0);
+    send_query(ifi, igmp_response_interval, NULL);
     if (--cbk->num > 0) {
 	pev_timer_set(ifi->ifi_startup_timerid, cbk->delay * 1000000);
 	return;
@@ -987,14 +890,7 @@ static void startup_query_timer(struct ifi *ifi)
     if (igmp_robustness <= 1)
 	return;
 
-    cbk = calloc(1, sizeof(cbk_t));
-    if (!cbk) {
-	err("failed allocating startup query timer");
-	exit(EX_OSERR);
-    }
-
-    cbk->ifindex = ifi->ifi_index;
-    cbk->vid     = ifi->ifi_vlan;
+    cbk = cbk_new(ifi, NULL);
     cbk->num     = igmp_robustness - 1;
     cbk->delay   = sqi;
 
@@ -1012,11 +908,11 @@ static void router_timeout_cb(int timeout, void *arg)
 {
     struct ifi *ifi = (struct ifi *)arg;
 
-    dbg("Querier %s timed out", inet_fmt(ifi->ifi_querier->al_addr, s1, sizeof(s1)));
+    dbg("Querier %s timed out", inet_addr_fmt(&ifi->ifi_querier->al_addr, s1, sizeof(s1)));
     querier_del(ifi);
 
     ifi->ifi_flags |= IFIF_IGMP_QUERIER;
-    send_query(ifi, allhosts_group, igmp_response_interval, 0);
+    send_query(ifi, igmp_response_interval, NULL);
     startup_query_timer(ifi);	/* RFC3376 §8.6, §8.7 startup query burst */
 }
 
@@ -1028,15 +924,16 @@ static void group_version_cb(int timeout, void *arg)
     cbk_t *cbk = (cbk_t *)arg;
     struct ifi *ifi;
 
-    ifi = config_find_iface(cbk->ifindex, cbk->vid);
+    ifi = config_find_iface(cbk->ifindex, cbk->vid, cbk->family);
     if (!ifi)
 	return;
 
     if (cbk->g->al_pv < 3)
 	cbk->g->al_pv++;
 
-    info("Switching IGMP compatibility mode from v%d to v%d for group %s on %s",
-	  cbk->g->al_pv - 1, cbk->g->al_pv, inet_fmt(cbk->g->al_addr, s1, sizeof(s1)), ifi->ifi_name);
+    info("Switching %s compatibility mode from v%d to v%d for group %s on %s", iface_proto(ifi),
+	 iface_pv(ifi, cbk->g->al_pv - 1), iface_pv(ifi, cbk->g->al_pv),
+	 inet_addr_fmt(&cbk->g->al_addr, s1, sizeof(s1)), ifi->ifi_name);
 
     if (cbk->g->al_pv < 3)
 	pev_timer_set(cbk->g->al_pv_timerid, IGMP_GROUP_MEMBERSHIP_INTERVAL * 1000000);
@@ -1047,22 +944,11 @@ static void group_version_cb(int timeout, void *arg)
 /*
  * Set a timer to switch version back on an interface.
  */
-static int group_version_timer(int ifindex, int vid, struct listaddr *g)
+static int group_version_timer(struct ifi *ifi, struct listaddr *g)
 {
-    cbk_t *cbk;
     int tid;
 
-    cbk = calloc(1, sizeof(cbk_t));
-    if (!cbk) {
-	err("failed allocating group timer");
-	exit(EX_OSERR);
-    }
-
-    cbk->ifindex = ifindex;
-    cbk->vid     = vid;
-    cbk->g       = g;
-
-    tid = pev_timer_add(IGMP_GROUP_MEMBERSHIP_INTERVAL * 1000000, 0, group_version_cb, cbk);
+    tid = pev_timer_add(IGMP_GROUP_MEMBERSHIP_INTERVAL * 1000000, 0, group_version_cb, cbk_new(ifi, g));
     pev_timer_set_cb_del(tid, free);
 
     return tid;
@@ -1077,12 +963,12 @@ static void delete_group_cb(int timeout, void *arg)
     struct listaddr *g = cbk->g;
     struct ifi *ifi;
 
-    ifi = config_find_iface(cbk->ifindex, cbk->vid);
+    ifi = config_find_iface(cbk->ifindex, cbk->vid, cbk->family);
     if (!ifi)
 	return;
 
     dbg("Group membership timeout for %s on %s",
-	  inet_fmt(cbk->g->al_addr, s1, sizeof(s1)), ifi->ifi_name);
+	inet_addr_fmt(&cbk->g->al_addr, s1, sizeof(s1)), ifi->ifi_name);
 
     group_del(ifi, g);
 }
@@ -1090,26 +976,11 @@ static void delete_group_cb(int timeout, void *arg)
 /*
  * Set a timer to delete the record of a group membership on an interface.
  */
-static int delete_group_timer(int ifindex, int vid, struct listaddr *g, int tmo)
+static int delete_group_timer(struct ifi *ifi, struct listaddr *g, int tmo)
 {
-    cbk_t *cbk;
     int tid;
 
-    /* cbk is freed as a side effect of pev_timer_del (via the deletion cb) */
-    cbk = calloc(1, sizeof(cbk_t));
-    if (!cbk) {
-	err("failed allocating group timer");
-	exit(EX_OSERR);
-    }
-
-    cbk->ifindex = ifindex;
-    cbk->vid     = vid;
-    cbk->g       = g;
-
-    /* Record mtime for IPC "show igmp" */
-//    g->al_mtime = virtual_time;
-
-    tid = pev_timer_add(tmo * 1000000, 0, delete_group_cb, cbk);
+    tid = pev_timer_add(tmo * 1000000, 0, delete_group_cb, cbk_new(ifi, g));
     pev_timer_set_cb_del(tid, free);
 
     return tid;
@@ -1123,11 +994,11 @@ static void send_query_cb(int timeout, void *arg)
     cbk_t *cbk = (cbk_t *)arg;
     struct ifi *ifi;
 
-    ifi = config_find_iface(cbk->ifindex, cbk->vid);
+    ifi = config_find_iface(cbk->ifindex, cbk->vid, cbk->family);
     if (!ifi)
 	goto end;
 
-    send_query(ifi, cbk->g->al_addr, cbk->delay, cbk->g->al_addr);
+    send_query(ifi, cbk->delay, &cbk->g->al_addr);
     if (--cbk->num > 0) {
 	pev_timer_set(cbk->g->al_queryid, cbk->delay * 1000000);
 	return;
@@ -1141,21 +1012,13 @@ static void send_query_cb(int timeout, void *arg)
 /*
  * Set a timer to send a group-specific query.
  */
-static int send_query_timer(int ifindex, struct listaddr *g, int delay, int num)
+static int send_query_timer(struct ifi *ifi, struct listaddr *g, int delay, int num)
 {
-    cbk_t *cbk;
+    cbk_t *cbk = cbk_new(ifi, g);
     int tid;
 
-    cbk = calloc(1, sizeof(cbk_t));
-    if (!cbk) {
-	err("failed allocating query timer");
-	exit(EX_OSERR);
-    }
-
-    cbk->ifindex = ifindex;
-    cbk->g       = g;
-    cbk->delay   = delay;
-    cbk->num     = num;
+    cbk->delay = delay;
+    cbk->num   = num;
 
     tid = pev_timer_add(delay * 1000000, 0, send_query_cb, cbk);
     pev_timer_set_cb_del(tid, free);

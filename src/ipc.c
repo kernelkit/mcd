@@ -332,7 +332,7 @@ static int show_status(FILE *fp)
 	return 0;
 }
 
-static int show_igmp_iface(FILE *fp)
+static int show_igmp_iface(FILE *fp, int family)
 {
 	struct ifi *ifi;
 	int first = 1;
@@ -341,12 +341,16 @@ static int show_igmp_iface(FILE *fp)
 		fprintf(fp, "[\n");
 		prefix += 2;
 	} else
-		fprintf(fp, "Interface       VID  Querier                     State  Interval  Timeout  Ver=\n");
+		fprintf(fp, "%-15s%4s  %-5s  %-27s  %8s  %8s  %7s  %3s=\n", "Interface", "VID",
+			"Proto", "Querier", "State", "Interval", "Timeout", "Ver");
 
 	for (ifi = config_iface_iter(1); ifi; ifi = config_iface_iter(0)) {
 		int interval = ifi->ifi_query_interval, rt_tmo = -1;
 		char timeout[10];
 		int version;
+
+		if (family != AF_UNSPEC && ifi->ifi_family != family)
+			continue;
 
 		if (!ifi->ifi_querier) {
 			inet_addr_fmt(&ifi->ifi_inaddr, s1, sizeof(s1));
@@ -354,19 +358,14 @@ static int show_igmp_iface(FILE *fp)
 		} else {
 			time_t t;
 
-			inet_fmt(ifi->ifi_querier->al_addr, s1, sizeof(s1));
+			inet_addr_fmt(&ifi->ifi_querier->al_addr, s1, sizeof(s1));
 			interval = ifi->ifi_querier->al_interval;
 			t = time(NULL) - ifi->ifi_querier->al_ctime;
 			rt_tmo = (int)((time_t)router_timeout - t);
 			snprintf(timeout, sizeof(timeout), "%d", rt_tmo);
 		}
 
-		if (ifi->ifi_flags & IFIF_IGMPV1)
-			version = 1;
-		else if (ifi->ifi_flags & IFIF_IGMPV2)
-			version = 2;
-		else
-			version = 3;
+		version = iface_pv(ifi, ifi->ifi_compat);
 
 		if (json) {
 			const char *State = ifstate(ifi);
@@ -380,6 +379,7 @@ static int show_igmp_iface(FILE *fp)
 				state[i] = tolower(State[i]);
 
 			jprint(fp, "interface", ifi->ifi_name, &once);
+			jprint(fp, "family", ifi->ifi_family == AF_INET6 ? "ipv6" : "ipv4", &once);
 			if (ifi->ifi_vlan)
 				jprinti(fp, "vid", ifi->ifi_vlan, &once);
 			jprint(fp, "state", state, &once);
@@ -397,8 +397,8 @@ static int show_igmp_iface(FILE *fp)
 
 			if (ifi->ifi_vlan)
 				snprintf(vlan, sizeof(vlan), "%4d", ifi->ifi_vlan);
-			fprintf(fp, "%-15s%4s  %-23s  %8s  %8d  %7s  %3d\n", ifi->ifi_name,
-				vlan, s1, ifstate(ifi), interval, timeout, version);
+			fprintf(fp, "%-15s%4s  %-5s  %-27s  %8s  %8d  %7s  %3d\n", ifi->ifi_name,
+				vlan, iface_proto(ifi), s1, ifstate(ifi), interval, timeout, version);
 		}
 	}
 
@@ -408,6 +408,11 @@ static int show_igmp_iface(FILE *fp)
 	}
 
 	return 0;
+}
+
+static int show_igmp_ifaces(FILE *fp)
+{
+	return show_igmp_iface(fp, AF_UNSPEC);
 }
 
 static int show_igmp(FILE *fp)
@@ -442,12 +447,15 @@ static int show_igmp(FILE *fp)
 		fprintf(fp, "\n");
 	}
 
-	if (json)
+	if (json) {
 		fprintf(fp, ",\n%*s\"multicast-queriers\": ", prefix, "");
-
-	rc += show_igmp_iface(fp);
-	if (!json)
+		rc += show_igmp_iface(fp, AF_INET);
+		fprintf(fp, ",\n%*s\"mld-queriers\": ", prefix, "");
+		rc += show_igmp_iface(fp, AF_INET6);
+	} else {
+		rc += show_igmp_iface(fp, AF_UNSPEC);
 		fprintf(fp, "\n");
+	}
 
 	if (json)
 		fprintf(fp, ",\n%*s\"multicast-groups\": ", prefix, "");
@@ -639,7 +647,7 @@ static void ipc_handle(int sd, void *arg)
 		break;
 
 	case IPC_IGMP_IFACE:
-		ipc_show(client, show_igmp_iface, cmd, sizeof(cmd));
+		ipc_show(client, show_igmp_ifaces, cmd, sizeof(cmd));
 		break;
 
 	case IPC_IGMP:

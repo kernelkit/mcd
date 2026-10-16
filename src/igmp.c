@@ -1,34 +1,15 @@
 /* SPDX-License-Identifier: ISC */
 
-#include <stddef.h>
 #include <net/ethernet.h>
 #include <netinet/if_ether.h>
-#include <linux/if_packet.h>
-#include <linux/filter.h>
 
 #include "defs.h"
 #include "igmp.h"
 #include "inet.h"
 
-#define PIM_QUERY           0
-#define PIM_REGISTER        1
-#define PIM_REGISTER_STOP   2
-#define PIM_JOIN_PRUNE      3
-#define PIM_RP_REACHABLE    4
-#define PIM_ASSERT          5
-#define PIM_GRAFT           6
-#define PIM_GRAFT_ACK       7
-
-struct vlan {
-	uint16_t tci;    /* Tag Control Information: PCP (3 bits), DEI (1 bit), VID (12 bits) */
-	uint16_t tpid;   /* Tag Protocol ID (EtherType of encapsulated protocol) */
-};
-
 /*
  * Exported variables.
  */
-uint8_t		*recv_buf; 		     /* input packet buffer         */
-uint8_t		*send_buf; 		     /* output packet buffer        */
 int             router_alert;		     /* IP option Router Alert      */
 uint32_t        router_timeout;		     /* Other querier present intv. */
 uint32_t	igmp_query_interval;	     /* Default: 125 sec            */
@@ -38,52 +19,9 @@ uint32_t	igmp_robustness;	     /* Default: 2                  */
 uint32_t	allhosts_group;		     /* All hosts addr in net order */
 uint32_t	allrtrs_group;		     /* All-Routers "  in net order */
 uint32_t	allreports_group;	     /* IGMPv3 member reports       */
-static int	join_sd = -1;		     /* static group memberships    */
 
-/*
- * Local function definitions.
- */
-static void	igmp_read(int sd, void *arg);
-static size_t	build_ipv4(uint8_t *buf, uint32_t src, uint32_t dst, short unsigned int datalen);
-
-
-static int set_filter(int sd)
-{
-	struct sock_filter code[] = {
-		/* Load the IP protocol field from the IP header */
-		BPF_STMT(BPF_LD + BPF_B + BPF_ABS, ETH_HLEN + offsetof(struct iphdr, protocol)),
-		/* Check if it's IGMP (protocol number 2) */
-		BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, IPPROTO_IGMP, 0, 1),
-		/* Return -1 (all bytes) if the condition is true */
-		BPF_STMT(BPF_RET + BPF_K, (u_int)-1),
-		/* Otherwise, ignore the packet */
-		BPF_STMT(BPF_RET + BPF_K, 0),
-	};
-	struct sock_fprog bpf = {
-		.len = sizeof(code) / sizeof(code[0]),
-		.filter = code,
-	};
-
-	if (setsockopt(sd, SOL_SOCKET, SO_ATTACH_FILTER, &bpf, sizeof(bpf)) < 0)
-		return -1;
-
-	return 0;
-}
-
-/*
- * Open and initialize the igmp socket, and fill in the non-changing
- * IP header fields in the output packet buffer.
- */
 void igmp_init(void)
 {
-    recv_buf = calloc(1, RECV_BUF_SIZE);
-    send_buf = calloc(1, RECV_BUF_SIZE);
-
-    if (!recv_buf || !send_buf) {
-	err("failed allocating Rx/Tx buffers");
-	exit(EX_OSERR);
-    }
-
     allhosts_group   = htonl(INADDR_ALLHOSTS_GROUP);
     allrtrs_group    = htonl(INADDR_ALLRTRS_GROUP);
     allreports_group = htonl(INADDR_ALLRPTS_GROUP);
@@ -94,158 +32,30 @@ void igmp_init(void)
     igmp_robustness           = IGMP_ROBUSTNESS_DEFAULT;
     router_timeout            = IGMP_OTHER_QUERIER_PRESENT_INTERVAL;
     router_alert              = 1;
-
-    /* Never bound, so it never receives data, only holds memberships */
-    join_sd = socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
-    if (join_sd < 0) {
-	err("failed creating static group socket");
-	exit(EX_OSERR);
-    }
 }
 
-void igmp_exit(void)
+static const char *igmp_packet_kind(uint8_t type)
 {
-    if (join_sd >= 0) {
-	close(join_sd);
-	join_sd = -1;
-    }
-    free(recv_buf);
-    free(send_buf);
-}
-
-static int igmp_member(const struct ifi *ifi, uint32_t group, int opt)
-{
-    struct ip_mreqn mreq = {
-	.imr_multiaddr.s_addr = group,
-	.imr_ifindex = ifi->ifi_index,
-    };
-
-    return setsockopt(join_sd, IPPROTO_IP, opt, &mreq, sizeof(mreq));
-}
-
-int igmp_join(const struct ifi *ifi, uint32_t group)
-{
-    return igmp_member(ifi, group, IP_ADD_MEMBERSHIP);
-}
-
-int igmp_leave(const struct ifi *ifi, uint32_t group)
-{
-    return igmp_member(ifi, group, IP_DROP_MEMBERSHIP);
-}
-
-void igmp_iface_init(struct ifi *ifi)
-{
-    struct sockaddr_ll sll = {
-	.sll_family   = AF_PACKET,
-	.sll_protocol = htons(ETH_P_ALL),
-	.sll_ifindex  = ifi->ifi_index,
-    };
-    int ena = 1;
-
-    ifi->ifi_sock = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
-    if (ifi->ifi_sock < 0) {
-	err("failed creating raw IGMP packet socket");
-	exit(EX_OSERR);
-    }
-
-    if (setsockopt(ifi->ifi_sock, SOL_PACKET, PACKET_AUXDATA, &ena, sizeof(ena)) < 0) {
-	err("failed enabling PACKET_AUXDATA on IGMP socket");
-	exit(EX_OSERR);
-    }
-
-    if (set_filter(ifi->ifi_sock)) {
-	err("failed setting socket filter");
-	exit(EX_OSERR);
-    }
-
-    if (bind(ifi->ifi_sock, (struct sockaddr *)&sll, sizeof(sll))) {
-	err("failed binding socket to interface %s", ifi->ifi_name);
-	exit(EX_OSERR);
-    }
-
-    ifi->ifi_sockid = pev_sock_add(ifi->ifi_sock, igmp_read, ifi);
-    if (ifi->ifi_sockid == -1) {
-	err("failed registering IGMP handler");
-	exit(EX_OSERR);
-    }
-}
-
-void igmp_iface_exit(struct ifi *ifi)
-{
-    pev_sock_del(ifi->ifi_sockid);
-    close(ifi->ifi_sock);
-}
-
-char *igmp_packet_kind(uint32_t type, uint32_t code)
-{
-    static char unknown[20];
-
     switch (type) {
-	case IGMP_MEMBERSHIP_QUERY:		return "membership query  ";
-	case IGMP_V1_MEMBERSHIP_REPORT:		return "v1 member report  ";
-	case IGMP_V2_MEMBERSHIP_REPORT:		return "v2 member report  ";
-	case IGMP_V3_MEMBERSHIP_REPORT:		return "v3 member report  ";
-	case IGMP_V2_LEAVE_GROUP:		return "leave message     ";
-	default:
-	    snprintf(unknown, sizeof(unknown), "unk: 0x%02x/0x%02x    ", type, code);
-	    return unknown;
+    case IGMP_MEMBERSHIP_QUERY:		return "membership query  ";
+    case IGMP_V1_MEMBERSHIP_REPORT:	return "v1 member report  ";
+    case IGMP_V2_MEMBERSHIP_REPORT:	return "v2 member report  ";
+    case IGMP_V3_MEMBERSHIP_REPORT:	return "v3 member report  ";
+    case IGMP_V2_LEAVE_GROUP:		return "leave message     ";
+    default:				return NULL;
     }
 }
 
 /*
- * Read an IGMP message from the socket
+ * Process a received IPv4 frame, only IGMP passes the socket filter.
+ * The socket is bound to the interface, a tagged frame belongs to the
+ * raw VLAN entry with that ID, if any.
  */
-static void igmp_read(int sd, void *arg)
+void accept_igmp(struct ifi *ifi, int vid, uint8_t *buf, size_t len)
 {
-    struct ifi *ifi = (struct ifi *)arg;
-    struct tpacket_auxdata *auxdata;
-    struct sockaddr_ll sll = { 0 };
-    struct msghdr msg = { 0 };
-    struct cmsghdr *cmsg;
-    char cmbuf[0x100];
-    struct iovec iov;
-    size_t eth_len;
-    ssize_t len;
-    int vid = 0;
-
-    iov.iov_base = recv_buf;
-    iov.iov_len = RECV_BUF_SIZE;
-    msg.msg_name = &sll;
-    msg.msg_namelen = sizeof(sll);
-    msg.msg_control = cmbuf;
-    msg.msg_controllen = sizeof(cmbuf);
-    msg.msg_iov  = &iov;
-    msg.msg_iovlen = 1;
-    msg.msg_flags = 0;
-
-    while ((len = recvmsg(sd, &msg, 0)) < 0) {
-	if (errno == EINTR)
-	    continue;		/* Received signal, retry syscall. */
-
-	warn("failed recvfrom() in igmp_read()");
-	return;
-    }
-
-    for (cmsg = CMSG_FIRSTHDR(&msg); cmsg != NULL; cmsg = CMSG_NXTHDR(&msg, cmsg)) {
-	if (cmsg->cmsg_level == SOL_PACKET && cmsg->cmsg_type == PACKET_AUXDATA) {
-	    auxdata = (struct tpacket_auxdata *)CMSG_DATA(cmsg);
-	    vid = auxdata->tp_vlan_tci & 0x0fff;
-	}
-    }
-
-    /* The sll.sll_ifindex holds the sender's ifindex */
-    eth_len = sizeof(struct ether_header);
-    accept_igmp(ifi->ifi_index, vid, recv_buf + eth_len, len - eth_len);
-}
-
-/*
- * Process a newly received IGMP packet that is sitting in the input
- * packet buffer.
- */
-void accept_igmp(int ifindex, int vid, uint8_t *buf, size_t len)
-{
-    int ipdatalen, iphdrlen, igmpdatalen, timeout, interval = 0, igmp_version = 3;
-    uint32_t src, dst, group;
+    int ipdatalen, iphdrlen, igmpdatalen, timeout, interval = 0, ver = GEN_V3;
+    inet_addr_t src, group;
+    const char *kind;
     struct igmp *igmp;
     struct ip *ip;
 
@@ -254,114 +64,77 @@ void accept_igmp(int ifindex, int vid, uint8_t *buf, size_t len)
 	return;
     }
 
-    ip        = (struct ip *)buf;
-    src       = ip->ip_src.s_addr;
-    dst       = ip->ip_dst.s_addr;
-
-    /*
-     * this is most likely a message from the kernel indicating that
-     * a new src grp pair message has arrived and so, it would be 
-     * necessary to install a route into the kernel for this.
-     */
-    if (ip->ip_p == 0) {
-	if (src != 0 && dst != 0)
-	    /* upcall, ignore */
-	return;
-    }
+    ip = (struct ip *)buf;
+    inet_addr_set4(&src, ip->ip_src.s_addr);
+    inet_addr_fmt(&src, s1, sizeof(s1));
 
     iphdrlen  = ip->ip_hl << 2;
     ipdatalen = ntohs(ip->ip_len) - iphdrlen;
 
-    if ((size_t)(iphdrlen + ipdatalen) != len) {
+    if ((size_t)(iphdrlen + ipdatalen) > len) {
 	info("received packet from %s shorter (%zu bytes) than hdr+data length (%d+%d)",
-	     inet_fmt(src, s1, sizeof(s1)), len, iphdrlen, ipdatalen);
+	     s1, len, iphdrlen, ipdatalen);
 	return;
     }
 
     igmp        = (struct igmp *)(buf + iphdrlen);
-    group       = igmp->igmp_group.s_addr;
     igmpdatalen = ipdatalen - IGMP_MINLEN;
     if (igmpdatalen < 0) {
-	info("received IP data field too short (%u bytes) for IGMP, from %s",
-	     ipdatalen, inet_fmt(src, s1, sizeof(s1)));
+	info("received IP data field too short (%u bytes) for IGMP, from %s", ipdatalen, s1);
 	return;
     }
 
-    dbg("RECV %s from %-15s ifi %-2d.%d to %s",
-	  igmp_packet_kind(igmp->igmp_type, igmp->igmp_code),
-	  inet_fmt(src, s1, sizeof(s1)), ifindex, vid, inet_fmt(dst, s2, sizeof(s2)));
+    kind = igmp_packet_kind(igmp->igmp_type);
+    if (!kind)
+	return;
+
+    dbg("RECV %s from %-15s ifi %-2d.%d to %s", kind, s1, ifi->ifi_index, vid,
+	inet_fmt(ip->ip_dst.s_addr, s2, sizeof(s2)));
+
+    if (vid != ifi->ifi_vlan) {
+	ifi = config_find_iface(ifi->ifi_index, vid, AF_INET);
+	if (!ifi)
+	    return;
+    }
+
+    inet_addr_set4(&group, igmp->igmp_group.s_addr);
 
     switch (igmp->igmp_type) {
-	case IGMP_MEMBERSHIP_QUERY:
-	    /* RFC 3376:7.1 */
-	    if (ipdatalen == 8) {
-		if (igmp->igmp_code == 0)
-		    igmp_version = 1;
-		else
-		    igmp_version = 2;
-		timeout = igmp->igmp_code * IGMP_TIMER_SCALE;
-	    } else if (ipdatalen >= 12) {
-		struct igmpv3_query *query = (struct igmpv3_query *)(buf + iphdrlen);
+    case IGMP_MEMBERSHIP_QUERY:
+	/* RFC 3376:7.1 */
+	if (ipdatalen == 8) {
+	    ver = igmp->igmp_code == 0 ? GEN_V1 : GEN_V2;
+	    timeout = igmp->igmp_code * IGMP_TIMER_SCALE;
+	} else if (ipdatalen >= 12) {
+	    struct igmpv3_query *query = (struct igmpv3_query *)igmp;
 
-		igmp_version = 3;
-		timeout = igmp_code_time(query->code) / IGMP_TIMER_SCALE;
-		interval = igmp_code_time(query->qqic);
-	    } else {
-		info("Received invalid IGMP query: Max Resp Code = %d, length = %d",
-		      igmp->igmp_code, ipdatalen);
-		timeout = 0;
-	    }
-	    accept_membership_query(ifindex, vid, src, dst, group, interval, timeout, igmp_version);
-	    return;
+	    timeout  = igmp_code_time(query->code) / IGMP_TIMER_SCALE;
+	    interval = igmp_code_time(query->qqic);
+	} else {
+	    info("Received invalid IGMP query: Max Resp Code = %d, length = %d",
+		 igmp->igmp_code, ipdatalen);
+	    timeout = 0;
+	}
+	accept_membership_query(ifi, &src, &group, interval, timeout, ver);
+	break;
 
-	case IGMP_V1_MEMBERSHIP_REPORT:
-	case IGMP_V2_MEMBERSHIP_REPORT:
-	    accept_group_report(ifindex, vid, src, dst, group, igmp->igmp_type);
-	    return;
+    case IGMP_V1_MEMBERSHIP_REPORT:
+	accept_group_report(ifi, &src, &group, GEN_V1);
+	break;
 
-	case IGMP_V2_LEAVE_GROUP:
-	    accept_leave_message(ifindex, vid, src, dst, group);
-	    return;
+    case IGMP_V2_MEMBERSHIP_REPORT:
+	accept_group_report(ifi, &src, &group, GEN_V2);
+	break;
 
-	case IGMP_V3_MEMBERSHIP_REPORT:
-	    if (igmpdatalen < IGMP_V3_GROUP_RECORD_MIN_SIZE) {
-		info("Too short IGMP v3 Membership report: igmpdatalen(%d) < MIN(%d)",
-		      igmpdatalen, IGMP_V3_GROUP_RECORD_MIN_SIZE);
-		return;
-	    }
-	    accept_membership_report(ifindex, vid, src, dst, (struct igmpv3_report *)(buf + iphdrlen), len - iphdrlen);
-	    return;
+    case IGMP_V2_LEAVE_GROUP:
+	accept_leave_message(ifi, &src, &group, 0);
+	break;
 
-	default:
-	    break;
+    case IGMP_V3_MEMBERSHIP_REPORT:
+	accept_v3_report(ifi, &src, (uint8_t *)igmp, ipdatalen);
+	break;
     }
 }
-
-static size_t build_ether(uint8_t *buf, const uint8_t *srcmac, const uint32_t *dst, uint16_t proto)
-{
-    struct ether_header *eh = (struct ether_header *)buf;
-
-    memset(eh, 0, sizeof(*eh));
-
-    memcpy(eh->ether_shost, srcmac, sizeof(eh->ether_shost));
-    ETHER_MAP_IP_MULTICAST(dst, eh->ether_dhost);
-    eh->ether_type = htons(proto);
-
-    return sizeof(*eh);
-}
-
-static size_t build_vlan(uint8_t *buf, uint16_t vid, uint16_t proto)
-{
-    struct vlan *v = (struct vlan *)buf;
-    uint16_t pcp = 6;
-    uint16_t dei = 0;
-
-    v->tci  = htons((pcp << 13) | (dei << 12) | vid);
-    v->tpid = htons(proto);
-
-    return sizeof(*v);
-}
-
 
 static size_t build_ipv4(uint8_t *buf, uint32_t src, uint32_t dst, short unsigned int datalen)
 {
@@ -379,7 +152,6 @@ static size_t build_ipv4(uint8_t *buf, uint32_t src, uint32_t dst, short unsigne
     ip->ip_src.s_addr = src;
     ip->ip_dst.s_addr = dst;
     ip->ip_len        = htons(len + datalen);
-    ip->ip_ttl        = 1;
 
     /*
      *  We don't have anything unique to set this to - for proxy queries,
@@ -406,8 +178,7 @@ static size_t build_ipv4(uint8_t *buf, uint32_t src, uint32_t dst, short unsigne
     return len;
 }
 
-size_t build_query(uint8_t *buf, uint32_t src, uint32_t dst, int type, int qri, int interval,
-		   uint32_t group, int datalen)
+static size_t build_query(uint8_t *buf, int qri, int interval, uint32_t group, int datalen)
 {
     struct igmpv3_query *igmp = (struct igmpv3_query *)buf;
     size_t igmp_len = IGMP_MINLEN + datalen;
@@ -415,18 +186,14 @@ size_t build_query(uint8_t *buf, uint32_t src, uint32_t dst, int type, int qri, 
 
     memset(igmp, 0, igmp_len);
 
-    igmp->type        = type;
-    if (datalen >= 4)
-        igmp->code    = igmp_floating_point(code);
-    else
-        igmp->code    = code;
-    igmp->group       = group;
-    igmp->csum        = 0;
-
+    igmp->type  = IGMP_MEMBERSHIP_QUERY;
+    igmp->group = group;
     if (datalen >= 4) {
-        igmp->qrv     = igmp_robustness;
-        igmp->qqic    = igmp_floating_point(interval);
-    }
+        igmp->code = igmp_floating_point(code);
+        igmp->qrv  = igmp_robustness;
+        igmp->qqic = igmp_floating_point(interval);
+    } else
+        igmp->code = code;
 
     /* Note: calculate IGMP checksum last. */
     igmp->csum = inet_cksum((uint16_t *)igmp, igmp_len);
@@ -435,74 +202,40 @@ size_t build_query(uint8_t *buf, uint32_t src, uint32_t dst, int type, int qri, 
 }
 
 /*
- * Construct an IGMP message in the output packet buffer.  The caller may
- * have already placed data in that buffer, of length 'datalen'.
+ * Send a General Query, or a Group-Specific one when group is set.
+ * IGMPv2 routers send queries truncated after the group field, IGMPv1
+ * ones with Max Response Time zero, RFC 2236 §2 and RFC 3376 §7.
  */
-size_t build_igmp(uint8_t *buf, uint32_t src, uint32_t dst, int type, int code, uint32_t group, int datalen)
-{
-    struct igmp *igmp;
-    size_t igmp_len = IGMP_MINLEN + datalen;
-
-    igmp                    = (struct igmp *)buf;
-    igmp->igmp_type         = type;
-    igmp->igmp_code         = code;
-    igmp->igmp_group.s_addr = group;
-    igmp->igmp_cksum        = 0;
-    igmp->igmp_cksum        = inet_cksum((uint16_t *)igmp, igmp_len);
-
-    return igmp_len;
-}
-
-/*
- * Call build_igmp() to build an IGMP message in the output packet buffer.
- * Then send the message from the interface with IP address 'src' to
- * destination 'dst'.
- */
-void send_igmp(const struct ifi *ifi, uint32_t dst, int type, int code, uint32_t group, int datalen)
+void send_igmp_query(const struct ifi *ifi, int qri, const inet_addr_t *group)
 {
     uint32_t src = inet_addr_get4(&ifi->ifi_inaddr);
-    struct sockaddr_ll sll = { 0 };
-    struct ip *ip;
+    uint32_t grp = group ? inet_addr_get4(group) : 0;
+    uint32_t dst = group ? grp : allhosts_group;
+    uint8_t dmac[ETH_ALEN];
+    int datalen = 4;
     size_t len;
-    int rc;
 
-    memset(send_buf, 0, RECV_BUF_SIZE);
+    if (ifi->ifi_compat == GEN_V2) {
+	datalen = 0;
+    } else if (ifi->ifi_compat == GEN_V1) {
+	datalen = 0;
+	qri = 0;
+    }
 
-    if (ifi->ifi_vlan) {
-	len = build_ether(send_buf, ifi->ifi_hwaddr, &dst, ETH_P_8021Q);
-	len += build_vlan(send_buf + len, ifi->ifi_vlan, ETH_P_IP);
-    } else
-	len = build_ether(send_buf, ifi->ifi_hwaddr, &dst, ETH_P_IP);
-
-    /* Set IP header length,  router-alert is optional */
-    ip        = (struct ip *)(send_buf + len);
-    ip->ip_hl = IP_HEADER_RAOPT_LEN >> 2;
-
+    ETHER_MAP_IP_MULTICAST(&dst, dmac);
+    len  = build_ether(send_buf, ifi, dmac, ETH_P_IP);
     len += build_ipv4(send_buf + len, src, dst, IGMP_MINLEN + datalen);
+    len += build_query(send_buf + len, qri, ifi->ifi_query_interval, grp, datalen);
 
-    if (IGMP_MEMBERSHIP_QUERY == type)
-	len += build_query(send_buf + len, src, dst, type, code, ifi->ifi_query_interval, group, datalen);
-    else
-	len += build_igmp(send_buf + len, src, dst, type, code, group, datalen);
+    inet_fmt(src, s1, sizeof(s1));
+    inet_fmt(dst, s2, sizeof(s2));
 
-    /* Make sure to send in same interface we're receiving */
-    sll.sll_family = AF_PACKET;
-    sll.sll_protocol = htons(ETH_P_ALL);
-    sll.sll_ifindex = ifi->ifi_index;
-
-    rc = sendto(ifi->ifi_sock, send_buf, len, 0, (struct sockaddr *)&sll, sizeof(sll));
-    if (rc < 0) {
-	if (errno == ENETDOWN)
-	    iface_check_state();
-	else
-	    warn("sendto to %s on %s",
-		  inet_fmt(dst, s1, sizeof(s1)), inet_fmt(src, s2, sizeof(s2)));
+    if (sock_send(ifi, len) < 0) {
+	warn("sendto %s from %s on %s", s2, s1, ifi->ifi_name);
 	return;
     }
 
-    dbg("SENT %s from %-15s to %s", igmp_packet_kind(type, code),
-	  src == INADDR_ANY ? "INADDR_ANY" : inet_fmt(src, s1, sizeof(s1)),
-	  inet_fmt(dst, s2, sizeof(s2)));
+    dbg("SENT IGMPv%d membership query from %s to %s on %s", ifi->ifi_compat, s1, s2, ifi->ifi_name);
 }
 
 /**

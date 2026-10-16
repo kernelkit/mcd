@@ -31,8 +31,18 @@ int                yyparse(void);
 static FILE *yyin;
 static int lineno;
 
-static struct ifi *ifi;
+static struct ifi *ifi;		/* AF_INET entry being parsed  */
+static struct ifi *twin;	/* its AF_INET6 entry, if any  */
 static struct ifi scrap;
+static int off4, off6;		/* igmp off, mld off           */
+
+/* Apply flag changes to both entries of the interface */
+static void ifset(uint32_t set, uint32_t clr)
+{
+    ifi->ifi_flags = (ifi->ifi_flags & ~clr) | set;
+    if (twin)
+	twin->ifi_flags = (twin->ifi_flags & ~clr) | set;
+}
 
 %}
 
@@ -41,6 +51,7 @@ static struct ifi scrap;
     int       num;
     char     *ptr;
     uint32_t  addr, group;
+    inet_addr_t ina;
 };
 
 %token GLOBAL_QUERY_INTERVAL GLOBAL_QUERY_LAST_MEMBER_INTERVAL GLOBAL_QUERY_RESPONSE_INTERVAL
@@ -48,11 +59,13 @@ static struct ifi scrap;
 %token IGMP_ROBUSTNESS ROUTER_TIMEOUT ROUTER_ALERT INCLUDE
 %token NO PHYINT
 %token DISABLE ENABLE IGMPV1 IGMPV2 IGMPV3 STATIC_GROUP PROXY_QUERIER
+%token MLDV1 MLDV2 IGMP MLD
 %token VLAN
 %token <num> BOOLEAN
 %token <num> NUMBER
 %token <ptr> STRING
-%token <addr> ADDR GROUP
+%token <addr> ADDR
+%token <ina> GROUP
 
 %start conf
 
@@ -84,8 +97,18 @@ stmt	: error
 	    ifi = config_iface_add($2);
 	    if (!ifi)
 		ifi = &scrap;
+	    twin = ifi == &scrap ? NULL : config_iface_twin(ifi);
+	    off4 = off6 = 0;
 	}
 	ifmods
+	{
+	    if (off6 && twin)
+		config_iface_del(twin);
+	    if (off4 && ifi != &scrap)
+		config_iface_del(ifi);
+	    ifi = &scrap;
+	    twin = NULL;
+	}
 	| NO ROUTER_ALERT
 	{
 	    router_alert = 0;
@@ -130,12 +153,16 @@ ifmods	: /* empty */
 	| ifmods ifmod
 	;
 
-ifmod	: DISABLE		{ ifi->ifi_flags |= IFIF_DISABLED; }
-	| ENABLE		{ ifi->ifi_flags &= ~IFIF_DISABLED; }
-	| PROXY_QUERIER		{ ifi->ifi_flags |= IFIF_PROXY_QUERIER; }
-	| IGMPV1		{ ifi->ifi_flags &= ~IFIF_IGMPV2; ifi->ifi_flags |= IFIF_IGMPV1; }
-	| IGMPV2		{ ifi->ifi_flags &= ~IFIF_IGMPV1; ifi->ifi_flags |= IFIF_IGMPV2; }
-	| IGMPV3		{ ifi->ifi_flags &= ~IFIF_IGMPV1; ifi->ifi_flags &= ~IFIF_IGMPV2; }
+ifmod	: DISABLE		{ ifset(IFIF_DISABLED, 0); }
+	| ENABLE		{ ifset(0, IFIF_DISABLED); }
+	| PROXY_QUERIER		{ ifset(IFIF_PROXY_QUERIER, 0); }
+	| IGMPV1		{ ifi->ifi_compat = GEN_V1; }
+	| IGMPV2		{ ifi->ifi_compat = GEN_V2; }
+	| IGMPV3		{ ifi->ifi_compat = GEN_V3; }
+	| MLDV1		{ if (twin) twin->ifi_compat = GEN_V2; }
+	| MLDV2		{ if (twin) twin->ifi_compat = GEN_V3; }
+	| IGMP BOOLEAN	{ off4 = !$2; }
+	| MLD BOOLEAN	{ off6 = !$2; }
 	| STATIC_GROUP GROUP
 	{
 	    struct listaddr *a;
@@ -151,19 +178,25 @@ ifmod	: DISABLE		{ ifi->ifi_flags |= IFIF_DISABLED; }
 	    a->al_flags = NBRF_STATIC_GROUP;
 	    time(&a->al_ctime);
 
-	    TAILQ_INSERT_TAIL(&ifi->ifi_static, a, al_link);
+	    if (a->al_addr.ss_family == AF_INET6 && twin)
+		TAILQ_INSERT_TAIL(&twin->ifi_static, a, al_link);
+	    else
+		TAILQ_INSERT_TAIL(&ifi->ifi_static, a, al_link);
 	}
 	| QUERY_INTERVAL NUMBER
 	{
 	    if ($2 < 1 || $2 > 1024)
 		fatal("Invalid multicast query interval [1,1024]: %d", $2);
 	    ifi->ifi_query_interval = $2;
+	    if (twin)
+		twin->ifi_query_interval = $2;
 	}
 	| VLAN NUMBER
 	{
 	    if ($2 < 1 || $2 > 4094)
 		fatal("Invalid VLAN ID [1,4094]");
 	    ifi = config_iface_vlan(ifi, $2);
+	    twin = config_iface_twin(ifi);
 	}
 	;
 
@@ -264,6 +297,10 @@ static struct keyword {
 	{ "igmpv1",		IGMPV1, 0 },
 	{ "igmpv2",		IGMPV2, 0 },
 	{ "igmpv3",		IGMPV3, 0 },
+	{ "mldv1",		MLDV1, 0 },
+	{ "mldv2",		MLDV2, 0 },
+	{ "igmp",		IGMP, 0 },
+	{ "mld",		MLD, 0 },
 	{ "static-group",	STATIC_GROUP, 0 },
 	{ "proxy-queries",	PROXY_QUERIER, 0}, /* compat */
 	{ "proxy-mode",		PROXY_QUERIER, 0},
@@ -275,6 +312,7 @@ static int yylex(void)
 {
     struct keyword *w;
     uint32_t addr, n;
+    struct in6_addr in6;
     char *q;
 
     q = yytoken();
@@ -296,6 +334,12 @@ static int yylex(void)
         return BOOLEAN;
     }
 
+    if (inet_pton(AF_INET6, q, &in6) == 1) {
+	inet_addr_set6(&yylval.ina, &in6);
+	if (inet_addr_is_group(&yylval.ina))
+	    return GROUP;
+    }
+
     if (sscanf(q, "%[.0-9]/%u%c", s1, &n, s2) == 2) {
 	addr = inet_parse(s1, 1);
         /* fall through to returning STRING */
@@ -307,7 +351,7 @@ static int yylex(void)
 		return ADDR;
 	    }
 	    if (inet_valid_group(addr)) {
-		yylval.addr = addr;
+		inet_addr_set4(&yylval.ina, addr);
 		return GROUP;
 	    }
         }

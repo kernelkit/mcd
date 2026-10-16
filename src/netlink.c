@@ -25,23 +25,29 @@ static void netlink_read(int sd, void *arg)
                 struct rtattr *rth = IFA_RTA(ifa);
                 int rtl = IFA_PAYLOAD(nlh);
 
-                while (rtl && RTA_OK(rth, rtl)) {
-                    if (rth->rta_type == IFA_LOCAL) {
-			struct in_addr *ina = (struct in_addr *)RTA_DATA(rth);
-			struct sockaddr_in sin = { 0 };
-			int flags;
+                for (; rtl && RTA_OK(rth, rtl); rth = RTA_NEXT(rth, rtl)) {
+		    struct sockaddr_storage ss = { 0 };
+		    struct sockaddr *sa = (struct sockaddr *)&ss;
+		    int flags = IFF_UP | IFF_MULTICAST;
 
-			flags = IFF_UP | IFF_MULTICAST;
-			sin.sin_family = ifa->ifa_family;
-			sin.sin_addr = *ina;
+		    /* IPv4 has the local address in IFA_LOCAL, IPv6 in IFA_ADDRESS */
+		    if (ifa->ifa_family == AF_INET && rth->rta_type == IFA_LOCAL) {
+			struct sockaddr_in *sin = (struct sockaddr_in *)sa;
 
-			if (nlh->nlmsg_type == RTM_NEWADDR)
-			    config_iface_addr_add(ifa->ifa_index, (struct sockaddr *)&sin, flags);
-			else
-			    config_iface_addr_del(ifa->ifa_index, (struct sockaddr *)&sin);
-                    }
+			sin->sin_family = AF_INET;
+			sin->sin_addr = *(struct in_addr *)RTA_DATA(rth);
+		    } else if (ifa->ifa_family == AF_INET6 && rth->rta_type == IFA_ADDRESS) {
+			struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)sa;
 
-                    rth = RTA_NEXT(rth, rtl);
+			sin6->sin6_family = AF_INET6;
+			sin6->sin6_addr = *(struct in6_addr *)RTA_DATA(rth);
+		    } else
+			continue;
+
+		    if (nlh->nlmsg_type == RTM_NEWADDR)
+			config_iface_addr_add(ifa->ifa_index, sa, flags);
+		    else
+			config_iface_addr_del(ifa->ifa_index, sa);
                 }
             }
 
@@ -49,7 +55,7 @@ static void netlink_read(int sd, void *arg)
                 struct ifinfomsg *ifi = (struct ifinfomsg *)NLMSG_DATA(nlh);
 
 		if (nlh->nlmsg_type == RTM_NEWLINK) {
-		    if (!config_find_iface(ifi->ifi_index, 0))
+		    if (!config_find_ifindex(ifi->ifi_index))
 			iface_add(ifi->ifi_index, ifi->ifi_flags);
 		    else
 			iface_check(ifi->ifi_index, ifi->ifi_flags);
@@ -73,7 +79,7 @@ void netlink_init(void)
     }
 
     addr.nl_family = AF_NETLINK;
-    addr.nl_groups = RTMGRP_IPV4_IFADDR | RTMGRP_LINK;
+    addr.nl_groups = RTMGRP_IPV4_IFADDR | RTMGRP_IPV6_IFADDR | RTMGRP_LINK;
     if (bind(sd, (struct sockaddr *)&addr, sizeof(addr)) == -1) {
 	err("failed binding NETLINK socket");
 	close(sd);

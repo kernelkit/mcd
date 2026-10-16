@@ -21,6 +21,8 @@ struct ifi {
     int		     ifi_vlan;	         /* Raw VLAN ID for send and accept   */
     char	     ifi_name[IFNAMSIZ]; /* interface name                    */
     int		     ifi_index;          /* Primarily for Linux systems       */
+    int		     ifi_family;         /* AF_INET or AF_INET6, one querier each */
+    int		     ifi_compat;         /* Protocol generation, GEN_V1 .. GEN_V3 */
     inet_addr_t      ifi_inaddr;         /* Current address of this interface */
     uint32_t	     ifi_query_interval; /* IGMP query interval               */
     struct listaddr *ifi_querier;        /* IGMP querier (one or none)        */
@@ -33,9 +35,15 @@ struct ifi {
 #define IFIF_DOWN		0x000100 /* kernel state of interface */
 #define IFIF_DISABLED		0x000200 /* administratively disabled */
 #define IFIF_IGMP_QUERIER	0x000400 /* I am the subnet's querier */
-#define IFIF_IGMPV1		0x000800 /* Act as an IGMPv1 Router   */
-#define IFIF_IGMPV2		0x001000 /* Act as an IGMPv2 Router   */
-#define IFIF_PROXY_QUERIER	0x002000 /* Act as IGMP proxy querier */
+#define IFIF_PROXY_QUERIER	0x002000 /* Act as proxy querier      */
+
+/*
+ * Protocol generations shared by IGMP and MLD, per interface compat
+ * mode and per group: IGMPv1, IGMPv2 and MLDv1, IGMPv3 and MLDv2.
+ */
+#define GEN_V1			1
+#define GEN_V2			2
+#define GEN_V3			3
 
 struct phaddr {
     TAILQ_ENTRY(phaddr) pa_link;
@@ -44,10 +52,10 @@ struct phaddr {
 
 struct listaddr {
     TAILQ_ENTRY(listaddr) al_link;	/* link to next/prev addr           */
-    uint32_t	     al_addr;		/* local group or neighbor address  */
+    inet_addr_t      al_addr;		/* local group or neighbor address  */
     uint32_t	     al_mtime;		/* mtime from virtual_time, for IPC */
     time_t	     al_ctime;		/* entry creation time		    */
-    uint32_t	     al_reporter;	/* a host which reported membership */
+    inet_addr_t      al_reporter;	/* a host which reported membership */
     int		     al_timerid;	/* timer for group membership	    */
     int		     al_queryid;	/* timer for repeated leave query   */
     int		     al_interval;	/* querier's query interval         */

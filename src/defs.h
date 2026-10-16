@@ -46,6 +46,8 @@ typedef void (*ihfunc_t) (int);
 #include "iface.h"
 #include "log.h"
 #include "igmp.h"
+#include "mld.h"
+#include "sock.h"
 #include "pathnames.h"
 #include "pev.h"
 
@@ -57,9 +59,6 @@ TAILQ_HEAD(ifaces, ifi);
 /*
  * External declarations for global variables and functions.
  */
-#define RECV_BUF_SIZE 1536
-extern uint8_t		*recv_buf;
-extern uint8_t		*send_buf;
 extern int		router_alert;
 extern uint32_t		router_timeout;
 extern uint32_t		allhosts_group;
@@ -121,16 +120,8 @@ extern void             restart(void);
 
 /* igmp.c */
 extern void		igmp_init(void);
-extern void		igmp_exit(void);
-extern void		igmp_iface_init(struct ifi *);
-extern void		igmp_iface_exit(struct ifi *);
-extern int		igmp_join(const struct ifi *, uint32_t);
-extern int		igmp_leave(const struct ifi *, uint32_t);
-extern void		accept_igmp(int, int, uint8_t *, size_t);
-extern size_t		build_igmp(uint8_t *, uint32_t, uint32_t, int, int, uint32_t, int);
-extern void		send_igmp(const struct ifi *, uint32_t, int, int, uint32_t, int);
-extern char *		igmp_packet_kind(uint32_t, uint32_t);
-extern int		igmp_debug_kind(uint32_t, uint32_t);
+extern void		accept_igmp(struct ifi *, int, uint8_t *, size_t);
+extern void		send_igmp_query(const struct ifi *, int, const inet_addr_t *);
 
 /* iface.c */
 extern void		iface_init(void);
@@ -141,10 +132,13 @@ extern void             iface_check_election(struct ifi *);
 extern void             iface_check(int, unsigned int);
 extern void		iface_check_state(void);
 extern void		iface_exit(void);
-extern void		accept_group_report(int, int, uint32_t, uint32_t, uint32_t, int);
-extern void		accept_leave_message(int, int, uint32_t, uint32_t, uint32_t);
-extern void		accept_membership_query(int, int, uint32_t, uint32_t, uint32_t, int, int, int);
-extern void		accept_membership_report(int, int, uint32_t, uint32_t, struct igmpv3_report *, ssize_t);
+extern const char      *iface_proto(const struct ifi *);
+extern int		iface_pv(const struct ifi *, int);
+extern void		accept_group_report(struct ifi *, const inet_addr_t *, const inet_addr_t *, int);
+extern void		accept_group_record(struct ifi *, const inet_addr_t *, const inet_addr_t *, int, int);
+extern void		accept_v3_report(struct ifi *, const inet_addr_t *, const uint8_t *, size_t);
+extern void		accept_leave_message(struct ifi *, const inet_addr_t *, const inet_addr_t *, int);
+extern void		accept_membership_query(struct ifi *, const inet_addr_t *, const inet_addr_t *, int, int, int);
 
 /* netlink.c */
 extern void             netlink_init(void);
@@ -156,10 +150,13 @@ extern void		config_set_ifflag(uint32_t);
 extern struct ifi      *config_iface_iter(int);
 extern struct ifi      *config_iface_add(char *);
 extern struct ifi      *config_iface_vlan(struct ifi *, int);
+extern struct ifi      *config_iface_twin(struct ifi *);
+extern void		config_iface_del(struct ifi *);
 extern void             config_iface_addr_del(int, struct sockaddr *);
 extern struct ifi      *config_find_ifname(char *);
 extern struct ifi      *config_find_ifaddr(const inet_addr_t *);
-extern struct ifi      *config_find_iface(int, int);
+extern struct ifi      *config_find_iface(int, int, int);
+extern struct ifi      *config_find_ifindex(int);
 extern struct ifi      *config_init_tunnel(in_addr_t, in_addr_t, uint32_t);
 extern void             config_iface_update(struct ifi *);
 extern void             config_iface_addr_add(int, struct sockaddr *, unsigned int);
