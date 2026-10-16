@@ -15,6 +15,7 @@ extern void		sock_iface_exit(struct ifi *);
 extern size_t		build_ether(uint8_t *, const struct ifi *, const uint8_t *, uint16_t);
 extern int		sock_send(const struct ifi *, size_t);
 extern int		mcast_join(const struct ifi *, const inet_addr_t *);
-extern int		mcast_leave(const struct ifi *, const inet_addr_t *);
+extern void		sock_reload_begin(void);
+extern void		sock_reload_end(void);
 
 #endif /* MCD_SOCK_H_ */

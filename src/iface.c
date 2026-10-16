@@ -130,9 +130,6 @@ static void querier_del(struct ifi *ifi)
 
 static void group_del(struct ifi *ifi, struct listaddr *g)
 {
-    if (g->al_flags & NBRF_STATIC_GROUP)
-	mcast_leave(ifi, &g->al_addr);
-
     pev_timer_del(g->al_timerid);
     pev_timer_del(g->al_queryid);
     pev_timer_del(g->al_pv_timerid);
@@ -346,7 +343,9 @@ static void send_query(struct ifi *ifi, int qri, const inet_addr_t *group)
 
 /*
  * Join static groups in the kernel, which then answers queries for
- * them, and track them as groups that never time out or leave.
+ * them, and track them as groups that never time out or leave.  The
+ * kernel memberships are released by sock_reload_end() once a group
+ * leaves the configuration.
  */
 static void join_static_groups(struct ifi *ifi)
 {

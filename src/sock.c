@@ -15,6 +15,19 @@ uint8_t	   *send_buf;			/* output packet buffer */
 static int  join_sd  = -1;		/* IPv4 static group memberships */
 static int  join_sd6 = -1;		/* IPv6 static group memberships */
 
+/*
+ * Kernel memberships held for static groups.  They are keyed by
+ * interface and group, so a reload only touches groups that changed.
+ */
+struct member {
+    TAILQ_ENTRY(member) link;
+    int         ifindex;
+    inet_addr_t group;
+    int         stale;
+};
+
+static TAILQ_HEAD(, member) members = TAILQ_HEAD_INITIALIZER(members);
+
 struct vlan {
     uint16_t tci;			/* PCP (3 bits), DEI (1 bit), VID (12 bits) */
     uint16_t tpid;			/* EtherType of encapsulated protocol      */
@@ -70,8 +83,16 @@ void sock_init(void)
 	warn("failed creating IPv6 static group socket, no IPv6 static groups");
 }
 
+/* Closing the join sockets drops every membership, the kernel sends the leaves */
 void sock_exit(void)
 {
+    struct member *m, *tmp;
+
+    TAILQ_FOREACH_SAFE(m, &members, link, tmp) {
+	TAILQ_REMOVE(&members, m, link);
+	free(m);
+    }
+
     if (join_sd >= 0)
 	close(join_sd);
     if (join_sd6 >= 0)
@@ -223,12 +244,12 @@ int sock_send(const struct ifi *ifi, size_t len)
     return -1;
 }
 
-static int mcast_member(const struct ifi *ifi, const inet_addr_t *group, int join)
+static int mcast_member(int ifindex, const inet_addr_t *group, int join)
 {
     if (group->family == AF_INET6) {
 	struct ipv6_mreq mreq = {
 	    .ipv6mr_multiaddr = *inet_addr_get6(group),
-	    .ipv6mr_interface = ifi->ifi_index,
+	    .ipv6mr_interface = ifindex,
 	};
 
 	return setsockopt(join_sd6, IPPROTO_IPV6, join ? IPV6_JOIN_GROUP : IPV6_LEAVE_GROUP,
@@ -236,7 +257,7 @@ static int mcast_member(const struct ifi *ifi, const inet_addr_t *group, int joi
     } else {
 	struct ip_mreqn mreq = {
 	    .imr_multiaddr.s_addr = inet_addr_get4(group),
-	    .imr_ifindex = ifi->ifi_index,
+	    .imr_ifindex = ifindex,
 	};
 
 	return setsockopt(join_sd, IPPROTO_IP, join ? IP_ADD_MEMBERSHIP : IP_DROP_MEMBERSHIP,
@@ -244,14 +265,65 @@ static int mcast_member(const struct ifi *ifi, const inet_addr_t *group, int joi
     }
 }
 
-int mcast_join(const struct ifi *ifi, const inet_addr_t *group)
+static struct member *member_find(int ifindex, const inet_addr_t *group)
 {
-    return mcast_member(ifi, group, 1);
+    struct member *m;
+
+    TAILQ_FOREACH(m, &members, link) {
+	if (m->ifindex == ifindex && !inet_addr_cmp(&m->group, group))
+	    return m;
+    }
+
+    return NULL;
 }
 
-int mcast_leave(const struct ifi *ifi, const inet_addr_t *group)
+int mcast_join(const struct ifi *ifi, const inet_addr_t *group)
 {
-    return mcast_member(ifi, group, 0);
+    struct member *m;
+
+    m = member_find(ifi->ifi_index, group);
+    if (m) {
+	m->stale = 0;
+	return 0;
+    }
+
+    if (mcast_member(ifi->ifi_index, group, 1))
+	return -1;
+
+    m = calloc(1, sizeof(*m));
+    if (!m) {
+	err("failed allocating membership");
+	exit(EX_OSERR);
+    }
+
+    m->ifindex = ifi->ifi_index;
+    m->group   = *group;
+    TAILQ_INSERT_TAIL(&members, m, link);
+
+    return 0;
+}
+
+/* Reload: mark all memberships, joins clear the mark, the rest are left */
+void sock_reload_begin(void)
+{
+    struct member *m;
+
+    TAILQ_FOREACH(m, &members, link)
+	m->stale = 1;
+}
+
+void sock_reload_end(void)
+{
+    struct member *m, *tmp;
+
+    TAILQ_FOREACH_SAFE(m, &members, link, tmp) {
+	if (!m->stale)
+	    continue;
+
+	mcast_member(m->ifindex, &m->group, 0);
+	TAILQ_REMOVE(&members, m, link);
+	free(m);
+    }
 }
 
 /**

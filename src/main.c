@@ -280,17 +280,16 @@ void restart(void)
     /*
      * reset all the entries
      */
+    sock_reload_begin();
     iface_exit();
-    sock_exit();
     netlink_exit();
     ipc_exit();
-
-    sock_init();
 
     igmp_init();
     config_init();
     netlink_init();
     iface_init();
+    sock_reload_end();
     ipc_init(sock_file);
 
     /* Touch PID file to acknowledge SIGHUP */
