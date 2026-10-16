@@ -9,6 +9,16 @@ All relevant, user visible, changes are documented in this file.
 ### Fixes
  - Fix `mctl` writing terminal probe escape sequences to stderr when
    stdout is not a terminal, e.g. when piped to `grep`
+ - Fix potential list corruption when the same interface is configured
+   with more than one `vlan`
+
+
+[UNRELEASED][]
+--------------
+
+### Fixes
+ - Fix `mctl` writing terminal probe escape sequences to stderr when
+   stdout is not a terminal, e.g. when piped to `grep`
 
 
 

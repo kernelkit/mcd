@@ -169,6 +169,9 @@ struct ifi *config_iface_vlan(struct ifi *ifi, int vid)
     }
 
     memcpy(clone, ifi, sizeof(*clone));
+    TAILQ_INIT(&clone->ifi_static);
+    TAILQ_INIT(&clone->ifi_groups);
+    TAILQ_INIT(&clone->ifi_addrs);
     TAILQ_INSERT_TAIL(&ifaces, clone, ifi_link);
 
     clone->ifi_vlan = vid;
