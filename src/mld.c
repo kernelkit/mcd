@@ -88,10 +88,8 @@ static const char *mld_packet_kind(uint8_t type)
 }
 
 /*
- * Process a received IPv6 frame, only ICMPv6 passes the socket filter.
- * Hop-by-hop options precede ICMPv6, RFC 2710 §3 requires the Router
- * Alert option.  The socket is bound to the interface, a tagged frame
- * belongs to the raw VLAN entry with that ID, if any.
+ * Process a received MLD packet, hop-by-hop options precede ICMPv6 as
+ * RFC 2710 §3 requires the Router Alert option.
  */
 void accept_mld(struct ifi *ifi, int vid, uint8_t *buf, size_t len)
 {
@@ -150,12 +148,6 @@ void accept_mld(struct ifi *ifi, int vid, uint8_t *buf, size_t len)
 
     dbg("RECV %s from %s ifi %-2d.%d to %s", kind, s1, ifi->ifi_index, vid,
 	inet_ntop(AF_INET6, &ip6->ip6_dst, s2, sizeof(s2)));
-
-    if (vid != ifi->ifi_vlan) {
-	ifi = config_find_iface(ifi->ifi_index, vid, AF_INET6);
-	if (!ifi)
-	    return;
-    }
 
     if (mld->mld_type == MLDV2_LISTENER_REPORT) {
 	accept_v3_report(ifi, &src, (uint8_t *)mld, plen);

@@ -47,9 +47,7 @@ static const char *igmp_packet_kind(uint8_t type)
 }
 
 /*
- * Process a received IPv4 frame, only IGMP passes the socket filter.
- * The socket is bound to the interface, a tagged frame belongs to the
- * raw VLAN entry with that ID, if any.
+ * Process a received IGMP packet.
  */
 void accept_igmp(struct ifi *ifi, int vid, uint8_t *buf, size_t len)
 {
@@ -90,12 +88,6 @@ void accept_igmp(struct ifi *ifi, int vid, uint8_t *buf, size_t len)
 
     dbg("RECV %s from %-15s ifi %-2d.%d to %s", kind, s1, ifi->ifi_index, vid,
 	inet_fmt(ip->ip_dst.s_addr, s2, sizeof(s2)));
-
-    if (vid != ifi->ifi_vlan) {
-	ifi = config_find_iface(ifi->ifi_index, vid, AF_INET);
-	if (!ifi)
-	    return;
-    }
 
     inet_addr_set4(&group, igmp->igmp_group.s_addr);
 

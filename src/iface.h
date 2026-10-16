@@ -10,13 +10,14 @@
 #include "inet.h"
 #include "queue.h"
 
+struct sock;
+
 struct ifi {
     TAILQ_ENTRY(ifi) ifi_link;		 /* link to next/prev interface       */
     TAILQ_HEAD(,listaddr) ifi_static;    /* list of static groups (phyints)   */
     TAILQ_HEAD(,listaddr) ifi_groups;    /* list of local groups  (phyints)   */
     TAILQ_HEAD(,phaddr) ifi_addrs;	 /* Secondary addresses               */
-    int		     ifi_sock;		 /* Raw socket bound to interface     */
-    int		     ifi_sockid;	 /* Socket event identifier (pev)     */
+    struct sock     *ifi_sock;		 /* Packet socket, shared per family  */
     uint32_t	     ifi_flags;	         /* IFIF_ flags defined below         */
     int		     ifi_vlan;	         /* Raw VLAN ID for send and accept   */
     char	     ifi_name[IFNAMSIZ]; /* interface name                    */

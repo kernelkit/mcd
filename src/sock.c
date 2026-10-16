@@ -14,6 +14,24 @@ uint8_t	   *recv_buf;			/* input packet buffer  */
 uint8_t	   *send_buf;			/* output packet buffer */
 static int  join_sd  = -1;		/* IPv4 static group memberships */
 static int  join_sd6 = -1;		/* IPv6 static group memberships */
+static int  reloading;			/* between sock_reload_begin/end */
+
+/*
+ * One packet socket per interface and family, shared and refcounted
+ * by the entries on it.  The untagged entry is remembered, tagged
+ * frames belong to the raw VLAN entry with that ID.
+ */
+struct sock {
+    TAILQ_ENTRY(sock) link;
+    int ifindex;
+    int family;
+    int sd;
+    int id;				/* pev socket id */
+    int refs;
+    struct ifi *ifi;			/* untagged entry, if any */
+};
+
+static TAILQ_HEAD(, sock) socks = TAILQ_HEAD_INITIALIZER(socks);
 
 /*
  * Kernel memberships held for static groups.  They are keyed by
@@ -83,15 +101,22 @@ void sock_init(void)
 	warn("failed creating IPv6 static group socket, no IPv6 static groups");
 }
 
-/* Closing the join sockets drops every membership, the kernel sends the leaves */
+static void member_del(struct member *m)
+{
+    TAILQ_REMOVE(&members, m, link);
+    free(m);
+}
+
+/*
+ * Process exit, closing the join sockets drops every membership and
+ * the kernel sends the leaves.
+ */
 void sock_exit(void)
 {
     struct member *m, *tmp;
 
-    TAILQ_FOREACH_SAFE(m, &members, link, tmp) {
-	TAILQ_REMOVE(&members, m, link);
-	free(m);
-    }
+    TAILQ_FOREACH_SAFE(m, &members, link, tmp)
+	member_del(m);
 
     if (join_sd >= 0)
 	close(join_sd);
@@ -105,17 +130,18 @@ void sock_exit(void)
 
 /*
  * Frames arrive with the VLAN tag stripped, the ID is in the
- * ancillary data.  Dispatch on the family the socket is bound to.
+ * ancillary data.
  */
 static void sock_read(int sd, void *arg)
 {
-    struct ifi *ifi = (struct ifi *)arg;
+    struct sock *sock = (struct sock *)arg;
     struct tpacket_auxdata *auxdata;
     struct sockaddr_ll sll = { 0 };
     struct msghdr msg = { 0 };
     struct cmsghdr *cmsg;
     char cmbuf[0x100];
     struct iovec iov;
+    struct ifi *ifi;
     ssize_t len;
     int vid = 0;
 
@@ -132,7 +158,7 @@ static void sock_read(int sd, void *arg)
 	if (errno == EINTR)
 	    continue;
 
-	warn("failed recvmsg() on %s", ifi->ifi_name);
+	warn("failed recvmsg() on ifindex %d", sock->ifindex);
 	return;
     }
 
@@ -146,53 +172,118 @@ static void sock_read(int sd, void *arg)
     if ((size_t)len < sizeof(struct ether_header))
 	return;
 
-    if (ifi->ifi_family == AF_INET6)
+    if (vid == 0 && sock->ifi)
+	ifi = sock->ifi;
+    else
+	ifi = config_find_iface(sock->ifindex, vid, sock->family);
+    if (!ifi)
+	return;
+
+    if (sock->family == AF_INET6)
 	accept_mld(ifi, vid, recv_buf + ETH_HLEN, len - ETH_HLEN);
     else
 	accept_igmp(ifi, vid, recv_buf + ETH_HLEN, len - ETH_HLEN);
 }
 
-void sock_iface_init(struct ifi *ifi)
+static struct sock *sock_find(int ifindex, int family)
+{
+    struct sock *sock;
+
+    TAILQ_FOREACH(sock, &socks, link) {
+	if (sock->ifindex == ifindex && sock->family == family)
+	    return sock;
+    }
+
+    return NULL;
+}
+
+static struct sock *sock_open(const struct ifi *ifi)
 {
     struct sockaddr_ll sll = {
 	.sll_family   = AF_PACKET,
 	.sll_protocol = htons(ifi->ifi_family == AF_INET6 ? ETH_P_IPV6 : ETH_P_IP),
 	.sll_ifindex  = ifi->ifi_index,
     };
+    struct sock *sock;
     int ena = 1;
 
-    ifi->ifi_sock = socket(AF_PACKET, SOCK_RAW, sll.sll_protocol);
-    if (ifi->ifi_sock < 0) {
+    sock = calloc(1, sizeof(*sock));
+    if (!sock) {
+	err("failed allocating packet socket for %s", ifi->ifi_name);
+	exit(EX_OSERR);
+    }
+
+    sock->ifindex = ifi->ifi_index;
+    sock->family  = ifi->ifi_family;
+    sock->sd = socket(AF_PACKET, SOCK_RAW, sll.sll_protocol);
+    if (sock->sd < 0) {
 	err("failed creating raw packet socket");
 	exit(EX_OSERR);
     }
 
-    if (setsockopt(ifi->ifi_sock, SOL_PACKET, PACKET_AUXDATA, &ena, sizeof(ena)) < 0) {
+    if (setsockopt(sock->sd, SOL_PACKET, PACKET_AUXDATA, &ena, sizeof(ena)) < 0) {
 	err("failed enabling PACKET_AUXDATA on packet socket");
 	exit(EX_OSERR);
     }
 
-    if (set_filter(ifi->ifi_sock, ifi->ifi_family)) {
+    if (set_filter(sock->sd, sock->family)) {
 	err("failed setting socket filter");
 	exit(EX_OSERR);
     }
 
-    if (bind(ifi->ifi_sock, (struct sockaddr *)&sll, sizeof(sll))) {
+    if (bind(sock->sd, (struct sockaddr *)&sll, sizeof(sll))) {
 	err("failed binding socket to interface %s", ifi->ifi_name);
 	exit(EX_OSERR);
     }
 
-    ifi->ifi_sockid = pev_sock_add(ifi->ifi_sock, sock_read, ifi);
-    if (ifi->ifi_sockid == -1) {
+    sock->id = pev_sock_add(sock->sd, sock_read, sock);
+    if (sock->id == -1) {
 	err("failed registering packet handler");
 	exit(EX_OSERR);
     }
+
+    TAILQ_INSERT_TAIL(&socks, sock, link);
+
+    return sock;
+}
+
+static void sock_close(struct sock *sock)
+{
+    pev_sock_del(sock->id);
+    close(sock->sd);
+    TAILQ_REMOVE(&socks, sock, link);
+    free(sock);
+}
+
+void sock_iface_init(struct ifi *ifi)
+{
+    struct sock *sock;
+
+    sock = sock_find(ifi->ifi_index, ifi->ifi_family);
+    if (!sock)
+	sock = sock_open(ifi);
+
+    sock->refs++;
+    if (!ifi->ifi_vlan)
+	sock->ifi = ifi;
+    ifi->ifi_sock = sock;
 }
 
 void sock_iface_exit(struct ifi *ifi)
 {
-    pev_sock_del(ifi->ifi_sockid);
-    close(ifi->ifi_sock);
+    struct sock *sock = ifi->ifi_sock;
+
+    if (!sock)
+	return;
+
+    if (sock->ifi == ifi)
+	sock->ifi = NULL;
+    ifi->ifi_sock = NULL;
+
+    if (--sock->refs > 0 || reloading)
+	return;
+
+    sock_close(sock);
 }
 
 /*
@@ -233,7 +324,7 @@ int sock_send(const struct ifi *ifi, size_t len)
 	.sll_ifindex  = ifi->ifi_index,
     };
 
-    if (sendto(ifi->ifi_sock, send_buf, len, 0, (struct sockaddr *)&sll, sizeof(sll)) >= 0)
+    if (sendto(ifi->ifi_sock->sd, send_buf, len, 0, (struct sockaddr *)&sll, sizeof(sll)) >= 0)
 	return 0;
 
     if (errno == ENETDOWN) {
@@ -303,26 +394,38 @@ int mcast_join(const struct ifi *ifi, const inet_addr_t *group)
     return 0;
 }
 
-/* Reload: mark all memberships, joins clear the mark, the rest are left */
+/*
+ * Reload: memberships are marked, joins clear the mark, the rest are
+ * left afterwards.  Packet sockets stay open until the new config is
+ * in place, those nobody took up again are closed.
+ */
 void sock_reload_begin(void)
 {
     struct member *m;
 
     TAILQ_FOREACH(m, &members, link)
 	m->stale = 1;
+
+    reloading = 1;
 }
 
 void sock_reload_end(void)
 {
-    struct member *m, *tmp;
+    struct member *m, *mtmp;
+    struct sock *sock, *stmp;
 
-    TAILQ_FOREACH_SAFE(m, &members, link, tmp) {
+    reloading = 0;
+    TAILQ_FOREACH_SAFE(sock, &socks, link, stmp) {
+	if (sock->refs == 0)
+	    sock_close(sock);
+    }
+
+    TAILQ_FOREACH_SAFE(m, &members, link, mtmp) {
 	if (!m->stale)
 	    continue;
 
 	mcast_member(m->ifindex, &m->group, 0);
-	TAILQ_REMOVE(&members, m, link);
-	free(m);
+	member_del(m);
     }
 }
 
