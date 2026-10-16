@@ -47,6 +47,7 @@ extern const struct in6_addr *inet_addr_get6(const inet_addr_t *);
 extern int		inet_addr_is_any(const inet_addr_t *);
 extern int		inet_addr_is_group(const inet_addr_t *);
 extern int		inet_addr_is_lanscope(const inet_addr_t *);
+extern void		inet_addr_any(inet_addr_t *, int);
 extern int		inet_valid_group(uint32_t);
 extern int		inet_valid_host(uint32_t);
 extern int		inet_valid_mask(uint32_t);

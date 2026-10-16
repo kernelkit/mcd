@@ -122,7 +122,14 @@ const struct in6_addr *inet_addr_get6(const inet_addr_t *addr)
     return &((const struct sockaddr_in6 *)addr)->sin6_addr;
 }
 
-/* Unset, 0.0.0.0 or :: */
+/* The family's any-address, 0.0.0.0 or ::, what a proxy querier sends from */
+void inet_addr_any(inet_addr_t *addr, int family)
+{
+    memset(addr, 0, sizeof(*addr));
+    addr->ss_family = family;
+}
+
+/* 0.0.0.0 or :: */
 int inet_addr_is_any(const inet_addr_t *addr)
 {
     switch (addr->ss_family) {
@@ -176,8 +183,9 @@ char *inet_addr_fmt(const inet_addr_t *addr, char *s, size_t len)
 	break;
 #endif
 
-    default:			/* unset, IPv4 only until MLD lands */
-	return inet_fmt(INADDR_ANY, s, len);
+    default:
+	strlcpy(s, "unspec", len);
+	return s;
     }
 
     if (!inet_ntop(addr->ss_family, src, s, len))

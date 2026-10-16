@@ -88,7 +88,7 @@ void iface_zero(struct ifi *ifi)
     ifi->ifi_flags	= IFIF_DISABLED;
     ifi->ifi_family	= AF_INET;
     ifi->ifi_compat	= GEN_V3;
-    memset(&ifi->ifi_inaddr, 0, sizeof(ifi->ifi_inaddr));
+    inet_addr_any(&ifi->ifi_inaddr, ifi->ifi_family);
     ifi->ifi_vlan	= 0;
     ifi->ifi_name[0]	= '\0';
     iface_lists_init(ifi);
@@ -152,8 +152,10 @@ static void group_del(struct ifi *ifi, struct listaddr *g)
  */
 void iface_check_election(struct ifi *ifi)
 {
-    inet_addr_t curr = { 0 };
+    inet_addr_t curr;
     struct phaddr *pa;
+
+    inet_addr_any(&curr, ifi->ifi_family);
 
     if (is_igmp_proxy(ifi)) {
 	dbg("%s is proxy", ifi->ifi_name);
@@ -176,10 +178,10 @@ void iface_check_election(struct ifi *ifi)
 	if (ifi->ifi_family == AF_INET6) {
 	    if (!inet_addr_linklocal(cand))
 		continue;
-	} else if (curr.ss_family && inet_addr_linklocal(cand))
+	} else if (!inet_addr_is_any(&curr) && inet_addr_linklocal(cand))
 	    continue;
 
-	if (curr.ss_family && inet_addr_cmp(cand, &curr) >= 0)
+	if (!inet_addr_is_any(&curr) && inet_addr_cmp(cand, &curr) >= 0)
 	    continue;
 
 	curr = *cand;
@@ -190,7 +192,7 @@ void iface_check_election(struct ifi *ifi)
 	ifi->ifi_inaddr = curr;
     }
 
-    if (curr.ss_family && ifi->ifi_querier) {
+    if (!inet_addr_is_any(&curr) && ifi->ifi_querier) {
 	if (inet_addr_cmp(&ifi->ifi_inaddr, &ifi->ifi_querier->al_addr) < 0) {
 	    dbg("New local querier on %s, was %s", ifi->ifi_name,
 		inet_addr_fmt(&ifi->ifi_querier->al_addr, s1, sizeof(s1)));
@@ -263,7 +265,7 @@ void iface_del(int ifindex, int flags)
 	    free(pa);
 	}
 
-	memset(&ifi->ifi_inaddr, 0, sizeof(ifi->ifi_inaddr));
+	inet_addr_any(&ifi->ifi_inaddr, ifi->ifi_family);
 	ifi->ifi_index = 0;
 	ifi->ifi_flags |= IFIF_DOWN;
     }

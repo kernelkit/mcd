@@ -140,6 +140,7 @@ static struct ifi *iface_clone(const struct ifi *ifi, int family, struct ifi *af
 
     *clone = *ifi;
     clone->ifi_family = family;
+    inet_addr_any(&clone->ifi_inaddr, family);
     iface_lists_init(clone);
     TAILQ_INSERT_AFTER(&ifaces, after, clone, ifi_link);
 
