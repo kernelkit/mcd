@@ -251,10 +251,10 @@ static int get_width(void)
 	if (!ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws)) {
 		if (ws.ws_col > 0)
 			return ws.ws_col;
-	} else if (!isatty(STDOUT_FILENO)) {
+	} else if (!isatty(STDIN_FILENO) || !isatty(STDERR_FILENO)) {
 		char *columns;
 
-		/* we may be running under watch(1) */
+		/* the probe below needs both, we may be running under watch(1) */
 		columns = getenv("COLUMNS");
 		if (columns)
 			cols = atoi(columns);
