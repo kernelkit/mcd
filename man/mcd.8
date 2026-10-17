@@ -20,10 +20,13 @@ MLD querier on every interface enabled in
 .Xr mcd.conf 5 ,
 either the bridge itself or a VLAN interface on top of it.
 .Pp
-The bridge has a querier of its own, but it can only send proxy
-queries, from 0.0.0.0 or ::, and has no version fallback.  Some end
-devices ignore proxy queries, and without a querier IGMP and MLD
-snooping times out and multicast floods the LAN.
+Snooping in the bridge only works while there is a querier on the LAN.
+Without one, the bridge floods all multicast to every port.  The bridge
+has a querier of its own, but it runs one fixed protocol version, sends
+IGMP queries from 0.0.0.0 unless set to use its own address, and then
+uses one address for all VLANs.  Some end devices ignore queries from
+0.0.0.0.  When they do, their memberships expire and they lose their
+stream.
 .Nm
 fills that gap:
 .Bl -bullet -offset indent

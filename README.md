@@ -22,37 +22,45 @@ Why?
 ----
 
 The Linux bridge has IGMP/MLD snooping, with per-VLAN settings and a
-built-in querier.  So why run another one?
+built-in querier.
 
-Because the bridge querier only sends queries from source address
-`0.0.0.0`, or `::` for IPv6.  The bridge lives below your VLAN interfaces,
-so it cannot know which address to use, or even what the interfaces are
-called (`br0.1` or `vlan1`?).  Proxy queries like that are allowed by
-the RFCs, but some PLCs and other industrial devices silently drop them.
-Good luck getting the vendor to fix a ten year old firmware.
+– So why do we need `mcd`?
 
-Many of these networks have no multicast router either.  They are just
-switches, doing their best to keep multicast off low-capacity links.
-Without a querier, snooping times out and multicast turns into
-broadcast, which is what takes these sites down.
+Because snooping only works while there is a querier on the LAN.
+Without one, the bridge does not trust what it has learned and floods
+all multicast to every port.  Many industrial networks have no
+multicast router to be the querier, only switches doing their best to
+keep multicast off low-capacity links.  And when the querier they do
+have goes away, the bridge starts flooding four minutes and fifteen
+seconds later, once its other querier present timer runs out.
 
 ![Two panels of the same bridge.  Without a querier, a camera stream on eth2 floods every other port.  With mcd, it reaches only eth3, where the operator PC joined the group](doc/why.svg)
 
-The bridge also lacks version fallback.  Per RFC, a LAN should run
-IGMPv3 until a v2 host appears, then drop to v2 for as long as that
-host keeps talking, and the same goes for MLDv2 and MLDv1.  The bridge
-has no such fallback.
+The bridge's own querier can stand in, but it has limits:
 
-`mcd` fills that gap.  It queries from the bridge's own addresses,
-follows the election rules, and keeps snooping armed on LANs that have
-no multicast router.
+- It runs one fixed protocol version, IGMPv2 and MLDv1 by default.  Per
+  RFC, a LAN should run the newest version and drop to an older one
+  only while a host that needs it keeps talking.
+- Its IGMP queries come from `0.0.0.0` unless it is set to use its own
+  address.  Some PLCs and other industrial devices ignore such proxy
+  queries.  Their memberships then expire, and they quietly lose their
+  stream while everyone else keeps theirs.  Good luck getting the
+  vendor to fix a ten year old firmware.
+- When it does use its own address on a VLAN filtering bridge, it picks
+  one address for all VLANs.  With an address on both `vlan10` and
+  `vlan20`, the queries on VLAN 20 come from the VLAN 10 subnet.
+
+`mcd` fills that gap.  It queries from the right address on each
+interface, follows the election rules, falls back and returns as hosts
+come and go, and keeps snooping armed on LANs that have no multicast
+router.
 
 
 Features
 --------
 
-- Queries go out with the interface address as source, so even picky
-  end devices answer them.
+- Queries go out from the address of each interface, the right one on
+  every VLAN, so devices that ignore proxy queries keep answering.
 - One querier per address family on every interface: IGMP from the
   interface address, MLD from its link-local address, each with its
   own election.

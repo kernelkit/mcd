@@ -122,13 +122,13 @@
   <!-- Side panel -->
   <rect class="card" x="724" y="24" width="206" height="304" rx="10"/>
   <text class="txt" x="740" y="48" font-weight="700">Bridge alone</text>
-  <text class="dim" x="740" y="70">proxy queries only,</text>
-  <text class="dim" x="740" y="88">from 0.0.0.0 or ::</text>
-  <text class="dim" x="740" y="106">no version fallback</text>
-  <text class="dim" x="740" y="124">unaware of vlanN on top</text>
+  <text class="dim" x="740" y="70">floods with no querier</text>
+  <text class="dim" x="740" y="88">fixed protocol version</text>
+  <text class="dim" x="740" y="106">0.0.0.0 source by default</text>
+  <text class="dim" x="740" y="124">one address for all VLANs</text>
 
   <text class="txt" x="740" y="162" font-weight="700">With mcd</text>
-  <text class="dim" x="740" y="184">real source addresses</text>
+  <text class="dim" x="740" y="184">right address per VLAN</text>
   <text class="dim" x="740" y="202">IGMP and MLD elections</text>
   <text class="dim" x="740" y="220">startup query burst</text>
   <text class="dim" x="740" y="238">version fallback, both</text>

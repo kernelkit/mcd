@@ -62,8 +62,8 @@
   <text class="txt" x="376" y="284" text-anchor="middle" font-weight="600" font-size="12">Operator PC</text>
   <text class="dim" x="376" y="302" text-anchor="middle" font-size="11">joined 239.1.1.1</text>
   <path class="s" d="M392,154 L392,256" marker-end="url(#as)"/>
-  <text class="dim" x="36" y="340" font-size="12">Snooping entries age out, so the bridge</text>
-  <text class="dim" x="36" y="358" font-size="12">floods the stream to every port.</text>
+  <text class="dim" x="36" y="340" font-size="12">With no querier, the bridge ignores what</text>
+  <text class="dim" x="36" y="358" font-size="12">it has learned and floods every port.</text>
   <rect class="card" x="460" y="20" width="420" height="360" rx="10"/>
   <text class="txt" x="476" y="46" font-weight="700" font-size="15">With mcd</text>
   <rect class="box" x="472" y="66" width="396" height="100" rx="8"/>
