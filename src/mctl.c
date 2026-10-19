@@ -89,6 +89,11 @@ static void add_cmd(char *cmd, char *opt, char *desc)
 		if (strlen(token) < 1)
 			continue;
 
+		if (c->argc >= MAXARGS) {
+			warnx("too many words in command, ignoring '%s' and on", token);
+			break;
+		}
+
 		c->argv[c->argc++] = token;
 	}
 
