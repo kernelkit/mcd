@@ -675,7 +675,9 @@ static void ipc_handle(int sd, void *arg)
 		break;
 
 	case IPC_ERR:
+		rc = errno;	/* for ipc_err(), past warn() */
 		warn("Failed reading command from client");
+		errno = rc;
 		rc = IPC_ERR;
 		break;
 
@@ -685,7 +687,7 @@ static void ipc_handle(int sd, void *arg)
 	}
 
 	if (rc == IPC_ERR)
-		ipc_err(sd, cmd, sizeof(cmd));
+		ipc_err(client, cmd, sizeof(cmd));
 
 	ipc_close(client);
 }

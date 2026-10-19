@@ -1,4 +1,4 @@
-EXTRA_DIST         = lib.sh basic.sh sleepy.sh two.sh ipc.sh late.sh router-ports.sh static-group.sh mld.sh
+EXTRA_DIST         = lib.sh basic.sh sleepy.sh two.sh ipc.sh ipc-errors.sh late.sh router-ports.sh static-group.sh mld.sh
 CLEANFILES         = *~ *.trs *.log
 
 TEST_EXTENSIONS    = .sh
@@ -7,6 +7,7 @@ TESTS_ENVIRONMENT  = unshare -mrun --map-auto
 TESTS              = sleepy.sh
 TESTS             += basic.sh
 TESTS             += ipc.sh
+TESTS             += ipc-errors.sh
 TESTS             += late.sh
 TESTS             += two.sh
 TESTS             += router-ports.sh
