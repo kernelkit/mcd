@@ -1,7 +1,9 @@
 # nix/targets.nix
 #
-# The flake targets mcd-help lists: the help text is generated from this
-# list.
+# The flake targets mcd-help lists, one place for both: the help text is
+# generated from this list, and checks.help-targets fails if a `target`
+# here is not a flake output or is not mentioned (as .#<target>) in
+# nix/README.md.
 #
 # Each section: { title; rows = [ { cmd; desc; target ? null; } ]; }, with
 # `target` the package or app name the row runs (null: no single one).
@@ -48,7 +50,7 @@
     ];
   }
   {
-    title = "Analysis";
+    title = "Analysis (see nix/README.md)";
     rows = [
       {
         cmd = "nix build .#analysis-quick";

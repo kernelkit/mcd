@@ -1,7 +1,8 @@
 # nix/commands/help.nix
 #
 # mcd-help, a writeShellApplication printing the dev-shell commands and the
-# flake targets, from nix/targets.nix.
+# flake targets. The targets come from nix/targets.nix, which
+# checks.help-targets keeps in step with the flake and nix/README.md.
 #
 # Usage:
 #   mcd-help = import ./commands/help.nix { inherit pkgs lib targets; };

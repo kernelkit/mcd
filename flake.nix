@@ -4,7 +4,7 @@
 # A reproducible development environment, hermetic native and cross builds,
 # and OCI images for the mcd IGMP/MLD querier. The design is modular: this
 # slim flake.nix wires together small single-purpose modules under nix/,
-# all sharing one context built in nix/context.nix.
+# all sharing one context built in nix/context.nix (see nix/README.md).
 # mcd is one callPackage function (nix/package.nix); every variant is an
 # .override of it and every cross build a pkgsCross.<target>.callPackage.
 #
@@ -17,7 +17,7 @@
 # Cross-compile (from an x86_64-linux host):
 #   nix build .#mcd-aarch64     # also: -armv7l, -riscv64, -ppc64le
 #
-# Run the static analysis:
+# Run the static analysis (nix/README.md lists every target):
 #   nix build .#analysis-deep && cat result/summary.txt
 #
 # Fuzz the packet, config and IPC parsers (libFuzzer):
@@ -125,9 +125,28 @@
               // lib.concatMapAttrs (arch: r: mkOciPair r.pkgs.callPackage r.mcd "-${arch}") cross
               // microvms.packages;
             inherit (microvms) apps;
-            inherit (microvms) checks;
+            checks = microvms.checks // {
+              help-targets = helpTargets;
+            };
           }
         );
+
+        # mcd-help's targets (nix/targets.nix) are flake outputs and are
+        # in nix/README.md. On x86_64, where every target exists.
+        targetNames = lib.concatMap (s: lib.filter (t: t != null) (map (r: r.target or null) s.rows)) (
+          import ./nix/targets.nix
+        );
+        helpTargetsCheck = pkgs.writeShellApplication {
+          name = "mcd-help-targets";
+          runtimeInputs = [ pkgs.gnugrep ];
+          text = builtins.readFile ./nix/help-targets.sh;
+        };
+        helpTargets = pkgs.runCommand "mcd-help-targets" { } ''
+          ${lib.getExe helpTargetsCheck} ${./nix/README.md} \
+            ${lib.escapeShellArg (toString (lib.attrNames (packages // (x86_64.apps or { }))))} \
+            ${lib.escapeShellArgs targetNames}
+          touch $out
+        '';
 
         packages = {
           inherit mcd mcd-clang mcd-werror;
