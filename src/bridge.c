@@ -87,7 +87,6 @@ static int populate(void)
 	struct mdb *e;
 	FILE *fp;
 	char buf[80];
-	int num = 0;
 
 	fp = popen("bridge mdb show", "r");
 	if (!fp)
@@ -144,7 +143,6 @@ static int populate(void)
 		strlcpy(e->br, br, sizeof(e->br));
 		strlcpy(e->group, group, sizeof(e->group));
 		e->vid = vid;
-		num++;
 	}
 
 	return pclose(fp);
