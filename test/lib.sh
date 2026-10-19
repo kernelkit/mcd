@@ -71,7 +71,7 @@ tenacious()
     shift
 
     while [ $timeout -gt 0 ]; do
-	$@ && return
+	"$@" && return
 	timeout=$((timeout - 1))
 	sleep 1
     done
@@ -93,7 +93,7 @@ capture()
 {
     tshark -lni "$1" -w "$2" 2>"$2.log" &
     echo $! >> "/tmp/$NM/PIDs"
-    tenacious 10 grep -q "Capturing on" "$2.log"
+    tenacious 30 grep -q "Capturing on" "$2.log"
 }
 
 collect()
