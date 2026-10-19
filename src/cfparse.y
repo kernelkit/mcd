@@ -387,6 +387,10 @@ void config_init(void)
 	err("cannot open %s", config_file);
 	exit(EX_DATAERR);
     }
+
+    /* Unless set, follows the intervals and robustness just read */
+    if (!router_timeout)
+	router_timeout = IGMP_OTHER_QUERIER_PRESENT_INTERVAL;
 }
 
 int config_parse(const char *file)
