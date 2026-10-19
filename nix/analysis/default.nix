@@ -51,7 +51,8 @@ let
   gccTargets = import ./gcc.nix { inherit ctx; };
   clang-analyzer = import ./clang-analyzer.nix { inherit ctx; };
 
-  # ── Unit tests ──────────────────────────────────────────────────
+  # ── Fuzzing ─────────────────────────────────────────────────────
+  fuzzTargets = import ./fuzz.nix { inherit ctx; };
   unit = import ./unit.nix { inherit ctx; };
 
   # ── Aggregates ──────────────────────────────────────────────────
@@ -182,4 +183,10 @@ in
   };
   inherit compileDb runnerTests unit;
   semgrepRuleTests = semgrepTargets.ruleTests;
+  inherit (fuzzTargets)
+    fuzzers
+    fuzzRuns
+    fuzz-run
+    fuzz-replay
+    ;
 }

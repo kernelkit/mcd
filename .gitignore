@@ -22,3 +22,8 @@ result-*
 .direnv/
 compile_commands.json
 __pycache__/
+# libFuzzer artifacts
+crash-*
+leak-*
+timeout-*
+oom-*

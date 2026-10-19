@@ -65,6 +65,16 @@
         desc = "+ gcc -fanalyzer, semgrep";
         target = "analysis-deep";
       }
+      {
+        cmd = "nix build .#fuzz";
+        desc = "libFuzzer harnesses; ./result/bin/run-fuzzers";
+        target = "fuzz";
+      }
+      {
+        cmd = "nix build .#fuzz-run";
+        desc = "20 s per harness, crashes + repro";
+        target = "fuzz-run";
+      }
     ];
   }
 ]

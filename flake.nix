@@ -20,6 +20,10 @@
 # Run the static analysis (nix/README.md lists every target):
 #   nix build .#analysis-deep && cat result/summary.txt
 #
+# Fuzz the packet, config and IPC parsers (libFuzzer):
+#   nix build .#fuzz && FUZZ_TIME=60 ./result/bin/run-fuzzers
+#   nix build .#fuzz-run        # 20 s per harness; also: fuzz-run-<harness>
+#
 # Build an OCI image (streamLayeredImage: the result is a loader script):
 #   nix build .#oci && ./result | docker load   # also: oci-debug, oci-<arch>[-debug]
 #
@@ -114,7 +118,12 @@
 
           # Compilation database (consumed by clang-tidy / cppcheck).
           compile-db = analysis.compileDb;
+
+          # Fuzzing.
+          fuzz = analysis.fuzzers; # harnesses + seed corpora + run-fuzzers
+          fuzz-run = analysis.fuzz-run; # bounded run, collect crashes
         }
+        // lib.mapAttrs' (n: lib.nameValuePair "fuzz-run-${n}") analysis.fuzzRuns
         // analysisPackages
         // mkOciPair pkgs.callPackage mcd ""
         // x86_64.packages or { };
@@ -128,6 +137,7 @@
           build-werror = mcd-werror;
           analysis-runners = analysis.runnerTests;
           semgrep-rules = analysis.semgrepRuleTests;
+          fuzz-replay = analysis.fuzz-replay;
           unit = analysis.unit;
         };
 
