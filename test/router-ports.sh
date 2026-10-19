@@ -40,17 +40,17 @@ echo $! >> "/tmp/$NM/PIDs"
 sleep 2
 
 print "Querying IPC: help ..."
-echo "help" | socat - UNIX-CONNECT:"/tmp/$NM/sock" | tee "/tmp/$NM/help.txt"
+echo "help" | socat -t 10 - UNIX-CONNECT:"/tmp/$NM/sock" | tee "/tmp/$NM/help.txt"
 
 print "Querying IPC: show router-ports ..."
-echo "show router-ports" | socat - UNIX-CONNECT:"/tmp/$NM/sock" | tee "/tmp/$NM/rp.txt"
+echo "show router-ports" | socat -t 10 - UNIX-CONNECT:"/tmp/$NM/sock" | tee "/tmp/$NM/rp.txt"
 
 print "Querying IPC: show router-ports json ..."
-echo "show router-ports json" | socat - UNIX-CONNECT:"/tmp/$NM/sock" | tee "/tmp/$NM/rp.json"
+echo "show router-ports json" | socat -t 10 - UNIX-CONNECT:"/tmp/$NM/sock" | tee "/tmp/$NM/rp.json"
 echo
 
 print "Querying IPC: show igmp json ..."
-echo "show igmp json" | socat - UNIX-CONNECT:"/tmp/$NM/sock" | tee "/tmp/$NM/igmp.json"
+echo "show igmp json" | socat -t 10 - UNIX-CONNECT:"/tmp/$NM/sock" | tee "/tmp/$NM/igmp.json"
 echo
 
 kill_pids
