@@ -4,7 +4,7 @@
 # A reproducible development environment, hermetic native and cross builds,
 # and OCI images for the mcd IGMP/MLD querier. The design is modular: this
 # slim flake.nix wires together small single-purpose modules under nix/,
-# all sharing one context built in nix/context.nix.
+# all sharing one context built in nix/context.nix (see nix/README.md).
 # mcd is one callPackage function (nix/package.nix); every variant is an
 # .override of it and every cross build a pkgsCross.<target>.callPackage.
 #
@@ -16,6 +16,9 @@
 #
 # Cross-compile (from an x86_64-linux host):
 #   nix build .#mcd-aarch64     # also: -armv7l, -riscv64, -ppc64le
+#
+# Run the static analysis (nix/README.md lists every target):
+#   nix build .#analysis-deep && cat result/summary.txt
 #
 # Build an OCI image (streamLayeredImage: the result is a loader script):
 #   nix build .#oci && ./result | docker load   # also: oci-debug, oci-<arch>[-debug]
@@ -67,6 +70,12 @@
 
         devshell = import ./nix/devshell.nix { inherit ctx; };
 
+        # Static analysis (nix/analysis/default.nix): per-tool reports,
+        # quick/standard/deep aggregates with triage, and their checks.
+        # Every report is a package analysis-<name>.
+        analysis = import ./nix/analysis { inherit ctx; };
+        analysisPackages = lib.mapAttrs' (n: lib.nameValuePair "analysis-${n}") analysis.reports;
+
         # OCI images (nix/oci.nix, a callPackage function), minimal and
         # debug: oci[-debug] for the native arch, oci-<arch>[-debug] per
         # cross arch, the tag suffixed with the arch so they don't collide.
@@ -102,7 +111,11 @@
         packages = {
           inherit mcd mcd-clang mcd-werror;
           default = mcd;
+
+          # Compilation database (consumed by clang-tidy / cppcheck).
+          compile-db = analysis.compileDb;
         }
+        // analysisPackages
         // mkOciPair pkgs.callPackage mcd ""
         // x86_64.packages or { };
       in
@@ -113,6 +126,9 @@
           build-gcc = mcd;
           build-clang = mcd-clang;
           build-werror = mcd-werror;
+          analysis-runners = analysis.runnerTests;
+          semgrep-rules = analysis.semgrepRuleTests;
+          unit = analysis.unit;
         };
 
         devShells.default = devshell;

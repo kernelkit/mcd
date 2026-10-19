@@ -47,4 +47,24 @@
       }
     ];
   }
+  {
+    title = "Analysis";
+    rows = [
+      {
+        cmd = "nix build .#analysis-quick";
+        desc = "clang-tidy + cppcheck + triage";
+        target = "analysis-quick";
+      }
+      {
+        cmd = "nix build .#analysis-standard";
+        desc = "+ flawfinder, scan-build, gcc-warnings";
+        target = "analysis-standard";
+      }
+      {
+        cmd = "nix build .#analysis-deep";
+        desc = "+ gcc -fanalyzer, semgrep";
+        target = "analysis-deep";
+      }
+    ];
+  }
 ]

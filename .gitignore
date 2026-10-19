@@ -20,3 +20,5 @@ stamp-h1
 result
 result-*
 .direnv/
+compile_commands.json
+__pycache__/

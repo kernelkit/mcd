@@ -1,0 +1,332 @@
+rules:
+  # ── Category 1: Unsafe C String/Memory Functions ──────────────
+  - id: dangerous-system-call
+    pattern: system($ARG)
+    message: Use of system() is dangerous — consider execve() or posix_spawn()
+    languages: [c, cpp]
+    severity: WARNING
+  - id: unsafe-sprintf
+    pattern: sprintf($BUF, ...)
+    message: sprintf() has no bounds checking — use snprintf() instead
+    languages: [c, cpp]
+    severity: WARNING
+  - id: unsafe-strcpy
+    pattern: strcpy($DST, $SRC)
+    message: strcpy() has no bounds checking — use strncpy() or strlcpy()
+    languages: [c, cpp]
+    severity: WARNING
+  - id: unsafe-strcat
+    pattern: strcat($DST, $SRC)
+    message: strcat() has no bounds checking — use strncat() or strlcat()
+    languages: [c, cpp]
+    severity: WARNING
+  - id: potential-format-string
+    patterns:
+      - pattern: printf($FMT)
+      - pattern-not: printf("...")
+    message: Potential format string vulnerability — ensure format string is a literal
+    languages: [c, cpp]
+    severity: WARNING
+  - id: unsafe-vsprintf
+    pattern: vsprintf($BUF, ...)
+    message: vsprintf() has no bounds checking — use vsnprintf() instead
+    languages: [c, cpp]
+    severity: WARNING
+  - id: unsafe-gets
+    pattern: gets($BUF)
+    message: gets() is always unsafe (unbounded read) — use fgets() instead
+    languages: [c, cpp]
+    severity: ERROR
+  - id: unsafe-strncpy-strlen
+    pattern: strncpy($D, $S, strlen($S))
+    message: strncpy with strlen(src) as length defeats the purpose of bounds checking
+    languages: [c, cpp]
+    severity: WARNING
+
+  # ── Category 2: Memory Management (C-specific) ─────────────────
+  - id: memset-zero-length
+    pattern: memset($B, $V, 0)
+    message: memset with length 0 is a no-op — check arguments
+    languages: [c, cpp]
+    severity: WARNING
+  - id: memcpy-sizeof-pointer
+    pattern: memcpy($D, $S, sizeof($PTR))
+    message: memcpy with sizeof(pointer) likely copies only pointer size, not data
+    languages: [c, cpp]
+    severity: WARNING
+  # A use (*p, p->f, p[i]) of the pointer malloc() returned, unless a NULL
+  # guard or a non-NULL branch has checked it first. The rule follows the
+  # pointer's data flow (taint mode), so a guard covers only the allocation
+  # it checks: assigning p another malloc() result needs a guard of its own.
+  # Fixtures: semgrep-tests/malloc-no-null-check.c
+  - id: malloc-no-null-check
+    mode: taint
+    pattern-sources:
+      # exact: only the call's result is tainted. Otherwise its arguments
+      # are too, and u->size in malloc(u->size) would be reported.
+      - exact: true
+        pattern: malloc(...)
+    pattern-sanitizers:
+      # A guard: `if (!p)` or `if (p == NULL)` whose body, braced or not,
+      # ends in return, goto, exit() or abort(). It clears p from there on
+      # (by-side-effect). Each body is listed unbraced and braced, since
+      # `{ ... X; }` doesn't match an unbraced body.
+      - by-side-effect: true
+        patterns:
+          - pattern-either:
+              - pattern: if ($COND) return ...;
+              - pattern: if ($COND) { ... return ...; }
+              - pattern: if ($COND) goto $LABEL;
+              - pattern: if ($COND) { ... goto $LABEL; }
+              - pattern: if ($COND) exit(...);
+              - pattern: if ($COND) { ... exit(...); }
+              - pattern: if ($COND) abort();
+              - pattern: if ($COND) { ... abort(); }
+          - metavariable-pattern:
+              metavariable: $COND
+              pattern-either:
+                - pattern: "!$PTR"
+                - pattern: $PTR == NULL
+          - focus-metavariable: $PTR
+      # A use inside `if (p)` or `if (p != NULL)`. $PTR is limited to a
+      # variable or member access: `if ($PTR)` also matches `if (!p)` with
+      # $PTR bound to `!p`, and clearing that expression keeps the guard
+      # above from clearing the p inside it. Unlike a guard, this clears p
+      # only inside the branch, and the else branch too, which semgrep
+      # can't tell apart from it.
+      - patterns:
+          - pattern-either:
+              - pattern-inside: if ($PTR) { ... }
+              - pattern-inside: if ($PTR != NULL) { ... }
+          - pattern: $PTR
+          - metavariable-regex:
+              metavariable: $PTR
+              regex: ^\w+(\s*(->|\.)\s*\w+)*$
+    pattern-sinks:
+      - patterns:
+          # sizeof(*p) doesn't dereference p.
+          - pattern-not-inside: sizeof(...)
+          - pattern-either:
+              - pattern: "*$PTR"
+              - pattern: $PTR->$F
+              - pattern: $PTR[$I]
+          - focus-metavariable: $PTR
+    message: malloc() result used without NULL check
+    languages: [c]
+    severity: WARNING
+  - id: realloc-self-assign
+    pattern: $PTR = realloc($PTR, $SIZE)
+    message: realloc self-assignment leaks memory on failure — use a temporary pointer
+    languages: [c, cpp]
+    severity: WARNING
+
+  # ── Category 3: Race Conditions / TOCTOU ─────────────────────
+  - id: toctou-access
+    pattern: access($PATH, ...)
+    message: access() is prone to TOCTOU races — use faccessat() or open-then-check
+    languages: [c, cpp]
+    severity: WARNING
+  - id: chmod-on-pathname
+    pattern: chmod($PATH, $MODE)
+    message: chmod on pathname is TOCTOU-prone — prefer fchmod() on an open fd
+    languages: [c, cpp]
+    severity: INFO
+  - id: chown-on-pathname
+    patterns:
+      - pattern-either:
+          - pattern: chown($PATH, $UID, $GID)
+          - pattern: lchown($PATH, $UID, $GID)
+    message: chown/lchown on pathname is TOCTOU-prone — prefer fchown() on an open fd
+    languages: [c, cpp]
+    severity: INFO
+  - id: insecure-rand
+    patterns:
+      - pattern-either:
+          - pattern: rand()
+          - pattern: srand(...)
+    message: rand()/srand() are not cryptographically secure — use getrandom()
+    languages: [c, cpp]
+    severity: WARNING
+  - id: toctou-stat
+    patterns:
+      - pattern-either:
+          - pattern: stat($PATH, $BUF)
+          - pattern: lstat($PATH, $BUF)
+    message: stat/lstat on pathname is TOCTOU-prone — prefer fstat() on an open fd
+    languages: [c, cpp]
+    severity: INFO
+
+  # ── Category 5: Error Handling (C-specific) ────────────────────
+  - id: strerror-thread-unsafe
+    pattern: strerror($E)
+    message: strerror() is not thread-safe — use strerror_r()
+    languages: [c, cpp]
+    severity: INFO
+
+  # ── Category 6: Resource Management (C-specific) ──────────────
+  - id: fopen-no-close-check
+    pattern: fopen($P, $M)
+    message: Raw FILE* from fopen — ensure fclose() is called on all paths
+    languages: [c]
+    severity: INFO
+  - id: signal-not-sigaction
+    pattern: signal($SIG, $H)
+    message: signal() has portability issues — prefer sigaction()
+    languages: [c, cpp]
+    severity: WARNING
+  - id: vfork-usage
+    pattern: vfork()
+    message: vfork() shares address space with parent — prefer posix_spawn() or fork()
+    languages: [c, cpp]
+    severity: WARNING
+  - id: popen-usage
+    pattern: popen($CMD, $MODE)
+    message: popen() invokes shell — risk of command injection, prefer posix_spawn()
+    languages: [c, cpp]
+    severity: WARNING
+
+  # ── Category 7: Privilege and Command Execution ───────────────
+  - id: setuid-setgid
+    patterns:
+      - pattern-either:
+          - pattern: setuid(...)
+          - pattern: setgid(...)
+    message: setuid/setgid changes process privileges — ensure proper error checking
+    languages: [c, cpp]
+    severity: WARNING
+  - id: chroot-usage
+    pattern: chroot($PATH)
+    message: chroot alone is not a security boundary — ensure chdir+drop privileges
+    languages: [c, cpp]
+    severity: WARNING
+  - id: getenv-unchecked
+    pattern: getenv($VAR)
+    message: getenv() returns nullable pointer — check for NULL before use
+    languages: [c, cpp]
+    severity: INFO
+  - id: exec-family
+    patterns:
+      - pattern-either:
+          - pattern: execvp(...)
+          - pattern: execv(...)
+          - pattern: execve(...)
+    message: exec-family call — ensure arguments are validated and paths are absolute
+    languages: [c, cpp]
+    severity: INFO
+
+  # ── Category 9: Code Quality / Defensive Programming ─────────
+  # Fixtures: semgrep-tests/goto-usage.c
+  - id: goto-usage
+    pattern: goto $LABEL;
+    message: goto usage — consider structured control flow alternatives
+    languages: [c, cpp]
+    severity: INFO
+  - id: assert-side-effect
+    patterns:
+      - pattern-either:
+          - pattern: assert($X = $Y)
+          - pattern: assert($X++)
+    message: Side effect in assert() — expression is removed in release builds (NDEBUG)
+    languages: [c, cpp]
+    severity: ERROR
+  - id: fprintf-stderr
+    pattern: fprintf(stderr, ...)
+    message: Direct stderr output — consider using the project logging infrastructure
+    languages: [c, cpp]
+    severity: INFO
+  - id: atoi-atol-usage
+    patterns:
+      - pattern-either:
+          - pattern: atoi(...)
+          - pattern: atol(...)
+          - pattern: atof(...)
+    message: atoi/atol/atof have no error checking — use strtol/strtod instead
+    languages: [c, cpp]
+    severity: WARNING
+  - id: alloca-usage
+    pattern: alloca($SIZE)
+    message: alloca() allocates on stack with no overflow check — prefer heap allocation
+    languages: [c, cpp]
+    severity: WARNING
+
+  # ── Category 10: mcd-specific ────────────────────────────────
+  # strtok() returns NULL when the input runs out of tokens. mcd tokenises
+  # external command output (`bridge mdb show`, src/bridge.c) and IPC
+  # commands, where a truncated or hostile line ends right after a keyword
+  # and the follow-up strtok(NULL, ...) yields NULL, which then reaches a
+  # libc string function. A guard is `if (!tok)` / `if (tok == NULL)` that
+  # leaves the block (return, goto, break, continue, exit), or a use inside
+  # `if (tok)` / a loop whose condition is `tok`.
+  # Fixtures: semgrep-tests/strtok-result-unchecked.c
+  - id: strtok-result-unchecked
+    mode: taint
+    pattern-sources:
+      - exact: true
+        pattern: strtok(...)
+    pattern-sanitizers:
+      - by-side-effect: true
+        patterns:
+          - pattern-either:
+              - pattern: if ($COND) return ...;
+              - pattern: if ($COND) { ... return ...; }
+              - pattern: if ($COND) goto $LABEL;
+              - pattern: if ($COND) { ... goto $LABEL; }
+              - pattern: if ($COND) break;
+              - pattern: if ($COND) { ... break; }
+              - pattern: if ($COND) continue;
+              - pattern: if ($COND) { ... continue; }
+              - pattern: if ($COND) exit(...);
+              - pattern: if ($COND) { ... exit(...); }
+          # Only `!tok`, not `!strcmp(tok, ...)`, which would clear the
+          # very use being checked.
+          - metavariable-pattern:
+              metavariable: $COND
+              patterns:
+                - pattern-either:
+                    - pattern: "!$PTR"
+                    - pattern: $PTR == NULL
+                - metavariable-regex:
+                    metavariable: $PTR
+                    regex: ^\w+$
+          - focus-metavariable: $PTR
+      - patterns:
+          - pattern-either:
+              - pattern-inside: if ($PTR) { ... }
+              - pattern-inside: if ($PTR != NULL) { ... }
+              - pattern-inside: if ($PTR && ...) { ... }
+          - pattern: $PTR
+          - metavariable-regex:
+              metavariable: $PTR
+              regex: ^\w+$
+      # The loop condition `for (...; tok; ...)` checks the value the body
+      # starts with. by-side-effect so a reassignment inside the body is
+      # tainted again.
+      - by-side-effect: true
+        patterns:
+          - pattern-either:
+              - pattern: for ($I; $PTR; $U) { ... }
+              - pattern: while ($PTR) { ... }
+          - metavariable-regex:
+              metavariable: $PTR
+              regex: ^\w+$
+          - focus-metavariable: $PTR
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: strtol($PTR, ...)
+              - pattern: strtoul($PTR, ...)
+              - pattern: strtonum($PTR, ...)
+              - pattern: atoi($PTR)
+              - pattern: strlen($PTR)
+              - pattern: strcmp($PTR, ...)
+              - pattern: strcmp($X, $PTR)
+              - pattern: strncmp($PTR, ...)
+              - pattern: strncmp($X, $PTR, ...)
+              - pattern: strcpy($D, $PTR)
+              - pattern: strlcpy($D, $PTR, ...)
+              - pattern: strdup($PTR)
+              - pattern: inet_pton($AF, $PTR, ...)
+          - focus-metavariable: $PTR
+    message: strtok() result may be NULL here (input ran out of tokens) — check it before use
+    languages: [c]
+    severity: WARNING
