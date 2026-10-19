@@ -313,6 +313,7 @@ static int yylex(void)
     struct keyword *w;
     uint32_t addr, n;
     struct in6_addr in6;
+    char dq[INET_ADDRSTRLEN];
     char *q;
 
     q = yytoken();
@@ -340,11 +341,12 @@ static int yylex(void)
 	    return GROUP;
     }
 
-    if (sscanf(q, "%[.0-9]/%u%c", s1, &n, s2) == 2) {
-	addr = inet_parse(s1, 1);
+    /* dq holds "255.255.255.255" at most; longer is no address anyway */
+    if (sscanf(q, "%15[.0-9]/%u%c", dq, &n, s2) == 2) {
+	addr = inet_parse(dq, 1);
         /* fall through to returning STRING */
-    } else if (sscanf(q, "%[.0-9]%c", s1, s2) == 1) {
-	addr = inet_parse(s1, 4);
+    } else if (sscanf(q, "%15[.0-9]%c", dq, s2) == 1) {
+	addr = inet_parse(dq, 4);
         if (addr != 0xffffffff) {
 	    if (inet_valid_host(addr)) {
 		yylval.addr = addr;
