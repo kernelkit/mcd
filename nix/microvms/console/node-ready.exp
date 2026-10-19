@@ -1,0 +1,59 @@
+#!/usr/bin/env expect
+###############################################################################
+# node-ready.exp - poll readiness steps over a guest's serial console
+#
+# Usage: node-ready.exp <port> <budget-sec> <description> <command> ...
+#
+# Attaches to one node's serial console, waits for a shell that actually
+# executes commands (vmlib::connect), then polls each <command> in order
+# until it exits 0. Everything shares one deadline: <budget-sec> from start.
+#
+# stdout carries one line per finished step, for the lifecycle's timing:
+#   MCD_STEP console
+#   MCD_STEP <description>
+# and nothing else; vmlib logs go to stderr.
+#
+# Exit codes (vmlib's): 0 all steps passed, 1 a step never passed (its last
+# output is on stderr), 2 no console or the console closed.
+###############################################################################
+
+source [file dirname [info script]]/vm-lib.exp
+
+if {$argc < 2 || $argc % 2 != 0} {
+    puts stderr "usage: node-ready.exp <port> <budget-sec> \[<description> <command>\]..."
+    exit 2
+}
+set port [lindex $argv 0]
+set budget [lindex $argv 1]
+set deadline [expr {[clock seconds] + $budget}]
+
+vmlib::init
+vmlib::connect $port $budget
+puts "MCD_STEP console"
+
+# Kernel messages still reach the journal; on the console they would only
+# interleave with command output. Wide columns stop systemctl ellipsizing.
+vmlib::must "dmesg -n 1; stty cols 250; export SYSTEMD_PAGER= SYSTEMD_COLORS=0 COLUMNS=250" 10
+
+foreach {description cmd} [lrange $argv 2 end] {
+    set out ""
+    while 1 {
+        set left [expr {$deadline - [clock seconds]}]
+        if {$left <= 0} {
+            vmlib::log "FAIL: '$description' did not pass within ${budget}s: $cmd"
+            if {$out ne ""} {
+                send_error "$out\n"
+            }
+            exit 1
+        }
+        # A step is one quick probe, so cap each attempt well below the
+        # budget; a probe that hangs then counts as one failed attempt.
+        lassign [vmlib::run_out $cmd [expr {min($left, 20)}] 1] rc out
+        if {$rc == 0} {
+            break
+        }
+        after 2000
+    }
+    puts "MCD_STEP $description"
+}
+exit 0

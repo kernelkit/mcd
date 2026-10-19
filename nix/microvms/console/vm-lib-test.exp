@@ -1,0 +1,247 @@
+#!/usr/bin/env expect
+###############################################################################
+# vm-lib-test.exp - table-driven test for vm-lib.exp, with no microVM involved
+#
+# Usage: vm-lib-test.exp <port>
+#
+# The caller must already have a shell listening on <port>, which
+# nix/microvms/console/default.nix (checks.vm-lib-exp) arranges with:
+#
+#   socat TCP-LISTEN:<port>,reuseaddr,fork \
+#     EXEC:'bash --norc --noprofile -i',pty,setsid,ctty,stderr
+#
+# WHY A LOCAL SHELL AND NOT A GUEST
+#
+# vm-lib.exp's job is to turn a byte stream carrying a shell session into
+# {exit status, output}. Nothing in that job is specific to a microVM: the
+# guest side of the console is a bash on a pty, and so is this. Testing it
+# against a local pty means the library is covered by a hermetic check that
+# needs no /dev/kvm, no root and no boot, so a regression in the marker
+# protocol fails in seconds instead of surfacing as a mysterious
+# lifecycle timeout twenty minutes into a VM run.
+#
+# What this therefore does NOT cover, stated so nobody reads more into a green
+# result than is there: qemu's serial console, the guest's autologin, boot
+# timing. Those need the VM (nix run .#vm-check).
+#
+# Rows are table-driven with a description, a class and an expected outcome,
+# per the repo's test standard, and the class prefix makes the output read as
+# a checklist.
+###############################################################################
+
+source [file dirname [info script]]/vm-lib.exp
+
+if {$argc < 1} {
+    puts "usage: vm-lib-test.exp <port>"
+    exit 2
+}
+set port [lindex $argv 0]
+
+vmlib::init
+set con1 [vmlib::connect $port 60]
+
+set pass 0
+set fail 0
+
+###############################################################################
+# check - one row of the table.
+#
+#   description  class-prefixed, printed verbatim so -v output is a checklist
+#   cmd          the command to hand vmlib::run_out
+#   want_rc      expected exit status, or -1 for "the marker never arrived"
+#   want_re      regexp the captured output must match ("" = do not check)
+#   want_len     exact expected length of the captured output (-1 = skip)
+#   timeout      per-row timeout, "" for the library default
+#   quiet        pass 1 to suppress the library's timeout log line
+#
+# want_len exists because Tcl's regexp caps a bounded repetition at 255, so
+# `x{4000}` is a compile error rather than a long match. Asserting the length
+# separately is both legal and a stronger statement than a regexp anyway.
+###############################################################################
+proc check {description cmd want_rc want_re {want_len -1} {row_timeout ""} {quiet 0}} {
+    global pass fail
+
+    lassign [vmlib::run_out $cmd $row_timeout $quiet] rc out
+
+    set ok 1
+    set why ""
+
+    if {$rc != $want_rc} {
+        set ok 0
+        append why " rc=$rc want=$want_rc"
+    }
+    if {$want_re ne "" && ![regexp $want_re $out]} {
+        set ok 0
+        append why " output did not match /$want_re/"
+    }
+    if {$want_len >= 0 && [string length $out] != $want_len} {
+        set ok 0
+        append why " length=[string length $out] want=$want_len"
+    }
+
+    if {$ok} {
+        puts "PASS: $description"
+        incr pass
+    } else {
+        puts "FAIL: $description -$why"
+        puts "      cmd: $cmd"
+        puts "      out: \[$out\]"
+        incr fail
+    }
+}
+
+###############################################################################
+# positive - the ordinary path
+###############################################################################
+
+check "positive: a successful command reports rc 0 and its stdout" \
+    {echo hello-from-the-shell} 0 {hello-from-the-shell}
+
+check "positive: multi-line output is returned whole, not just the last line" \
+    {printf 'alpha\nbeta\ngamma\n'} 0 {alpha\nbeta\ngamma}
+
+check "positive: stderr is interleaved into the captured output" \
+    {echo to-stderr >&2} 0 {to-stderr}
+
+check "positive: a 400-line output survives line-by-line accumulation" \
+    {seq 1 400} 0 {(?n)^400$}
+
+###############################################################################
+# negative - failures must be reported as failures, not silently swallowed
+###############################################################################
+
+check "negative: a failing command reports its real exit status" \
+    {false} 1 {}
+
+# A subshell, not a bare `exit 42`: the console IS the shell, so `exit` ends
+# the session and every later row fails with "console closed". The same trap
+# exists in the real guest, which is why this is worth saying out loud.
+check "negative: a specific non-zero status is preserved, not normalized to 1" \
+    {(exit 42)} 42 {}
+
+check "negative: a command that does not exist reports rc 127" \
+    {this-command-does-not-exist-mcd} 127 {}
+
+# The marker is what proves a command finished. A command that outlives its
+# timeout must report -1 rather than inventing a status, and - the part that
+# actually matters - must not let the NEXT row match its leftovers.
+check "negative: a command that outruns its timeout reports rc -1" \
+    {sleep 30} -1 {} -1 2
+
+check "negative: the row after a timeout is not satisfied by the stale marker" \
+    {echo recovered} 0 {recovered} -1 45
+
+# `quiet` is what connect's readiness probe uses, where a timeout per attempt
+# is the expected case. It must suppress only the log line: if it also changed
+# the returned status, connect would read a still-booting guest as ready, which
+# is the exact failure it was written to remove.
+check "negative: quiet suppresses the log line but not the -1 status" \
+    {sleep 30} -1 {} -1 2 1
+
+check "negative: the row after a quiet timeout also recovers cleanly" \
+    {echo recovered-after-quiet} 0 {recovered-after-quiet} -1 45
+
+###############################################################################
+# boundary - the edges of the marker protocol
+###############################################################################
+
+check "boundary: a command with no output at all still yields its status" \
+    {true} 0 {}
+
+check "boundary: output with no trailing newline is still captured" \
+    {printf 'no-trailing-newline'} 0 {no-trailing-newline}
+
+check "boundary: a single 4000-byte line exceeds the default match buffer" \
+    {printf 'x%.0s' $(seq 1 4000); echo} 0 {^x+$} 4000
+
+check "boundary: an empty command is a no-op with status 0" \
+    {:} 0 {}
+
+# The front of the output is where the old positional framing went wrong: it
+# dropped "the first line" as the command echo, so a command whose real output
+# opened with a blank line lost it. Assert the length, because a regexp cannot
+# distinguish "kept the blank" from "did not".
+check "boundary: output that begins with a blank line keeps that line" \
+    {printf '\nfirst-real-line\n'} 0 {first-real-line} 16
+
+###############################################################################
+# corner - things that look like the protocol but are not
+###############################################################################
+
+# A command whose own output spells a marker for a DIFFERENT sequence number
+# must not terminate this call. This is the failure mode prompt matching has
+# and the counter exists to remove; assert it directly.
+check "corner: output containing another call's marker does not end the call" \
+    {echo MCD_RC_1=0; echo after-the-decoy} 0 {after-the-decoy}
+
+# ANSI escapes are stripped, so a colorized guest does not corrupt the text a
+# caller compares against a committed sidecar.
+# The brackets are NOT backslash-escaped: this is a Tcl braced string, so it
+# is passed through verbatim, and `\[` would reach printf as a literal
+# backslash-bracket - producing ESC followed by `\[`, which is not a CSI
+# sequence and so would not be stripped. The row would then fail for a reason
+# that has nothing to do with the library.
+check "corner: ANSI color escapes are stripped from captured output" \
+    {printf '\033[1;31mred-text\033[0m\n'} 0 {^red-text$}
+
+check "corner: a CR-LF line ending leaves no stray carriage return" \
+    {printf 'crlf-line\r\n'} 0 {^crlf-line$}
+
+check "corner: quoting survives the round trip to the shell" \
+    {echo "a b  c"} 0 {a b  c}
+
+# The command we send CONTAINS the text of its own BEGIN marker, inside the
+# printf that emits it, and the guest echoes that line back before running
+# anything. If framing searched for the marker rather than comparing whole
+# lines, the echo would open the output and the captured result would start
+# with the prompt and the command. The exact length is the assertion; a regexp
+# would pass either way.
+check "corner: the echoed command line is not mistaken for output" \
+    {echo only-this-line} 0 {^only-this-line$} 14
+
+# The mirror image: once framing HAS opened, a line that happens to equal a
+# BEGIN marker is ordinary output and must be kept. Nothing may treat a second
+# marker-shaped line as a reason to restart or truncate.
+check "corner: a marker-shaped line inside the output is kept, not swallowed" \
+    {echo MCD_BEGIN_1; echo after-the-decoy} 0 {after-the-decoy} 27
+
+###############################################################################
+# several consoles - connect returns an id and `use` switches. The check's
+# socat forks one bash per connection, so two connects are two shells.
+###############################################################################
+
+vmlib::must {export MCD_WHO=first} 10
+set con2 [vmlib::connect $port 60]
+
+check "positive: a second connect returns a distinct id and becomes current" \
+    "test [list $con1] != [list $con2] && echo \${MCD_WHO:-unset}" 0 {^unset$}
+
+vmlib::must {export MCD_WHO=second} 10
+vmlib::use $con1
+check "positive: use switches back to the first console's shell" \
+    {echo $MCD_WHO} 0 {^first$}
+
+vmlib::use $con2
+check "positive: use switches to the second console's shell" \
+    {echo $MCD_WHO} 0 {^second$}
+
+# A timeout on one console leaves its marker in flight; the next call on
+# the OTHER console must not be satisfied or disturbed by it.
+check "corner: a timeout on one console does not leak into the other" \
+    {sleep 30} -1 {} -1 2 1
+vmlib::use $con1
+check "corner: the other console answers normally after it" \
+    {echo still-first} 0 {^still-first$}
+
+###############################################################################
+# summary
+###############################################################################
+
+puts ""
+puts "=== vm-lib.exp: $pass passed, $fail failed ==="
+if {$fail > 0} {
+    puts "VMLIB_TEST_FAIL"
+    exit 1
+}
+puts "VMLIB_TEST_PASS"
+exit 0

@@ -77,4 +77,29 @@
       }
     ];
   }
+  {
+    title = "MicroVM tests (x86_64, needs /dev/kvm)";
+    rows = [
+      {
+        cmd = "nix run .#vm-check";
+        desc = "the network test suite as root in a VM";
+        target = "vm-check";
+      }
+      {
+        cmd = "nix run .#vm-check-asan";
+        desc = "against an ASan + UBSan build";
+        target = "vm-check-asan";
+      }
+      {
+        cmd = "nix run .#vm-check-valgrind";
+        desc = "with mcd under valgrind";
+        target = "vm-check-valgrind";
+      }
+      {
+        cmd = "nix run .#vm-topo";
+        desc = "three-VM querier election and snooping";
+        target = "vm-topo";
+      }
+    ];
+  }
 ]

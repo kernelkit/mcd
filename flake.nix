@@ -4,7 +4,7 @@
 # A reproducible development environment, hermetic native and cross builds,
 # and OCI images for the mcd IGMP/MLD querier. The design is modular: this
 # slim flake.nix wires together small single-purpose modules under nix/,
-# all sharing one context built in nix/context.nix (see nix/README.md).
+# all sharing one context built in nix/context.nix.
 # mcd is one callPackage function (nix/package.nix); every variant is an
 # .override of it and every cross build a pkgsCross.<target>.callPackage.
 #
@@ -17,12 +17,15 @@
 # Cross-compile (from an x86_64-linux host):
 #   nix build .#mcd-aarch64     # also: -armv7l, -riscv64, -ppc64le
 #
-# Run the static analysis (nix/README.md lists every target):
+# Run the static analysis:
 #   nix build .#analysis-deep && cat result/summary.txt
 #
 # Fuzz the packet, config and IPC parsers (libFuzzer):
 #   nix build .#fuzz && FUZZ_TIME=60 ./result/bin/run-fuzzers
 #   nix build .#fuzz-run        # 20 s per harness; also: fuzz-run-<harness>
+#
+# Run the network test suite in a KVM microVM (needs /dev/kvm):
+#   nix run .#vm-check          # also: vm-check-asan, vm-check-valgrind
 #
 # Build an OCI image (streamLayeredImage: the result is a loader script):
 #   nix build .#oci && ./result | docker load   # also: oci-debug, oci-<arch>[-debug]
@@ -40,6 +43,13 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
+
+    # microvm.nix: the KVM guest that runs the network test suite
+    # (nix/microvms/).
+    microvm = {
+      url = "github:microvm-nix/microvm.nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   # Linux-only: mcd uses AF_PACKET and netlink. eachSystem (not
@@ -50,6 +60,7 @@
       self,
       nixpkgs,
       flake-utils,
+      microvm,
     }:
     flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-linux" ] (
       system:
@@ -100,15 +111,21 @@
         # Only from an x86_64-linux host:
         #   cross     mcd per arch ({ pkgs, mcd }); on a native aarch64
         #             host the default package already covers arm64
+        #   microvms  the network test suite as root on a real kernel
+        #             under KVM (nix/microvms/): packages, apps, checks
         isX86_64 = system == "x86_64-linux";
         x86_64 = lib.optionalAttrs isX86_64 (
           let
             cross = import ./nix/cross.nix { inherit ctx; };
+            microvms = import ./nix/microvms { inherit ctx nixpkgs microvm; };
           in
           {
             packages =
               lib.mapAttrs' (arch: r: lib.nameValuePair "mcd-${arch}" r.mcd) cross
-              // lib.concatMapAttrs (arch: r: mkOciPair r.pkgs.callPackage r.mcd "-${arch}") cross;
+              // lib.concatMapAttrs (arch: r: mkOciPair r.pkgs.callPackage r.mcd "-${arch}") cross
+              // microvms.packages;
+            inherit (microvms) apps;
+            inherit (microvms) checks;
           }
         );
 
@@ -130,6 +147,7 @@
       in
       {
         inherit packages;
+        apps = x86_64.apps or { };
 
         checks = {
           build-gcc = mcd;
@@ -139,7 +157,8 @@
           semgrep-rules = analysis.semgrepRuleTests;
           fuzz-replay = analysis.fuzz-replay;
           unit = analysis.unit;
-        };
+        }
+        // x86_64.checks or { };
 
         devShells.default = devshell;
 

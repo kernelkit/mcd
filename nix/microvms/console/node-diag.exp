@@ -1,0 +1,42 @@
+#!/usr/bin/env expect
+###############################################################################
+# node-diag.exp - collect diagnostics from a node over its serial console
+#
+# Usage: node-diag.exp <port> <budget-sec> <command> ...
+#
+# The mcd runners run this on the guest when a test fails. The
+# console works when the network does not (a test that wedged it, a crash-looping
+# unit holding the boot), so this is the one place a failure report can
+# always come from. Each command's output goes to stdout under a
+# `--- $ <command>` header, followed by its exit status if non-zero.
+#
+# Exit codes: 0 diagnostics collected (whatever the commands returned),
+# 2 no console. A command that times out is reported and skipped.
+###############################################################################
+
+source [file dirname [info script]]/vm-lib.exp
+
+if {$argc < 2} {
+    puts stderr "usage: node-diag.exp <port> <budget-sec> <command>..."
+    exit 2
+}
+set port [lindex $argv 0]
+set budget [lindex $argv 1]
+
+vmlib::init
+vmlib::connect $port $budget
+vmlib::run "dmesg -n 1; stty cols 250; export SYSTEMD_PAGER= SYSTEMD_COLORS=0 COLUMNS=250" 10
+
+foreach cmd [lrange $argv 2 end] {
+    puts "--- \$ $cmd"
+    lassign [vmlib::run_out $cmd 30] rc out
+    if {$out ne ""} {
+        puts $out
+    }
+    if {$rc == -1} {
+        puts "(timed out)"
+    } elseif {$rc != 0} {
+        puts "(exit $rc)"
+    }
+}
+exit 0
