@@ -191,7 +191,7 @@ static int ipc_write(int sd, char *msg, size_t sz)
 
 //	dbg("IPC rpl: '%s'", msg);
 
-	while ((len = write(sd, msg, sz))) {
+	while ((len = send(sd, msg, sz, MSG_NOSIGNAL))) {
 		if (-1 == len) {
 			switch (errno) {
 			case EINTR:
@@ -595,7 +595,7 @@ static void ipc_help(int sd, char *buf, size_t len)
 		int sz;
 
 		sz = snprintf(buf, len, "Cannot create tempfile: %s", strerror(errno));
-		if (write(sd, buf, sz) != sz)
+		if (ipc_write(sd, buf, sz))
 			warn("Client closed connection");
 		return;
 	}
