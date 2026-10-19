@@ -311,7 +311,7 @@ void bridge_prop(FILE *fp, const char *brname, const char *prop)
 
 	jsmn_init(&parser);
 
-	data = malloc(BUFSIZ);
+	data = malloc(BUFSIZ + 1);	/* + NUL */
 	if (!data) {
 		err("failed allocating json data buffer");
 		exit(EX_OSERR);
