@@ -258,7 +258,8 @@ static char *yytoken(void)
         q = p;
         while (*p && *p != ' ' && *p != '\t' && *p != '\n')
             p++;		/* find next whitespace */
-        *p++ = '\0';	/* null-terminate string */
+        if (*p)		/* not at the end of buf */
+            *p++ = '\0';	/* null-terminate string */
 
         if (!*q) {
             p = NULL;
