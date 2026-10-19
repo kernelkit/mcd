@@ -341,7 +341,7 @@ void bridge_prop(FILE *fp, const char *brname, const char *prop)
 			continue;
 
 		/* Skip top-level element, it is always an array '[' or start of object '{' */
-		for (int j = i + 1; j < i + tokens[i].size * 2 + 1; j += 2) {
+		for (int j = i + 1; j < i + tokens[i].size * 2 + 1 && j + 1 < rc; j += 2) {
 			jsmntok_t *key = &tokens[j];
 			jsmntok_t *val = &tokens[j + 1];
 
