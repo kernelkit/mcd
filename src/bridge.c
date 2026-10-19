@@ -416,19 +416,41 @@ void bridge_router_ports_all(FILE *fp)
 	pclose(pp);
 }
 
+/* Quote src as one shell word, len must be 4 * strlen(src) + 3 */
+static char *shquote(char *dst, size_t len, const char *src)
+{
+	size_t i = 0;
+
+	dst[i++] = '\'';
+	for (; *src && i + 5 < len; src++) {
+		if (*src == '\'') {
+			memcpy(&dst[i], "'\\''", 4);
+			i += 4;
+		} else
+			dst[i++] = *src;
+	}
+	dst[i++] = '\'';
+	dst[i] = 0;
+
+	return dst;
+}
+
 /*
  * Standardized way of reading out routers ports is now 'bridge -d mdb show'
  */
 void bridge_router_ports(FILE *fp, const char *brname)
 {
-	const char *fmt = "(bridge -d -j mdb show | jq -r '.[] .router%s%s | .[] .port';"
+	const char *fmt = "(bridge -d -j mdb show | jq -r --arg br %s '.[] .router%s | .[] .port';"
 		"bridge -j -d vlan global show %s%s | jq -r '.[].vlans[].router_ports[].port')"
 		"| sort -uV | tr '\n' ' '";
-	char cmd[strlen(fmt) + 64], buf[128 * (IFNAMSIZ + 2)]; /* 128 ports should be enough */
+	char qbr[4 * IFNAMSIZ + 3], buf[128 * (IFNAMSIZ + 2)]; /* 128 ports should be enough */
+	char cmd[strlen(fmt) + 2 * sizeof(qbr) + 16];
 	FILE *pp;
 
+	shquote(qbr, sizeof(qbr), brname ?: "");
+
 	/* Read mrouter ports from brname, or all bridges. */
-	snprintf(cmd, sizeof(cmd), fmt, brname ? "." : "", brname ?: "[]", brname ? "dev " : "", brname ?: "");
+	snprintf(cmd, sizeof(cmd), fmt, qbr, brname ? "[$br]" : "[]", brname ? "dev " : "", brname ? qbr : "");
 	pp = popen(cmd, "r");
 	if (!pp) {
 		warn("popen to query bridge router ports | jq");
