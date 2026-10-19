@@ -111,6 +111,8 @@ static int populate(void)
 				len = sizeof(group);
 			} else if (!strcmp(tok, "vid")) {
 				tok = strtok(NULL, " \t");
+				if (!tok)
+					break;
 				vid = strtol(tok, NULL, 10);
 				continue;
 			} else {
@@ -118,6 +120,8 @@ static int populate(void)
 			}
 
 			tok = strtok(NULL, " \t");
+			if (!tok)
+				break;
 			strlcpy(dst, tok, len);
 		}
 
