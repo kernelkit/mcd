@@ -95,6 +95,7 @@ static int populate(void)
 
 	while (fgets(buf, sizeof(buf), fp)) {
 		char br[IFNAMSIZ + 1] = { 0 }, port[IFNAMSIZ + 3] = { 0 }, group[64] = { 0 };
+		char item[sizeof(port) + 4];
 		char *tok, *dst;
 		int vid = 0;
 		size_t len;
@@ -134,13 +135,12 @@ static int populate(void)
 			}
 		}
 
-		if (e->port[0])
-			strcat(e->port, ", ");
-		if (json)
-			strcat(e->port, "\"");
-		strcat(e->port, port);
-		if (json)
-			strcat(e->port, "\"");
+		snprintf(item, sizeof(item), "%s%s%s%s", e->port[0] ? ", " : "",
+			 json ? "\"" : "", port, json ? "\"" : "");
+		if (strlen(e->port) + strlen(item) < sizeof(e->port))
+			strcat(e->port, item);
+		else
+			warnx("too many ports in group %s, skipping %s", group, port);
 		strlcpy(e->br, br, sizeof(e->br));
 		strlcpy(e->group, group, sizeof(e->group));
 		e->vid = vid;
