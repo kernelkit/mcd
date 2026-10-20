@@ -12,6 +12,8 @@
 
 uint8_t	   *recv_buf;			/* input packet buffer  */
 uint8_t	   *send_buf;			/* output packet buffer */
+static uint8_t *recv_mem;		/* allocations behind them */
+static uint8_t *send_mem;
 static int  join_sd  = -1;		/* IPv4 static group memberships */
 static int  join_sd6 = -1;		/* IPv6 static group memberships */
 static int  reloading;			/* between sock_reload_begin/end */
@@ -83,12 +85,14 @@ static int set_filter(int sd, int family)
 
 void sock_init(void)
 {
-    recv_buf = calloc(1, RECV_BUF_SIZE);
-    send_buf = calloc(1, RECV_BUF_SIZE);
-    if (!recv_buf || !send_buf) {
+    recv_mem = calloc(1, SOCK_BUF_ALIGN + RECV_BUF_SIZE);
+    send_mem = calloc(1, SOCK_BUF_ALIGN + RECV_BUF_SIZE);
+    if (!recv_mem || !send_mem) {
 	err("failed allocating Rx/Tx buffers");
 	exit(EX_OSERR);
     }
+    recv_buf = recv_mem + SOCK_BUF_ALIGN;
+    send_buf = send_mem + SOCK_BUF_ALIGN;
 
     /* Never bound, so they never receive data, only hold memberships */
     join_sd = socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
@@ -124,8 +128,9 @@ void sock_exit(void)
 	close(join_sd6);
     join_sd = join_sd6 = -1;
 
-    free(recv_buf);
-    free(send_buf);
+    free(recv_mem);
+    free(send_mem);
+    recv_buf = send_buf = recv_mem = send_mem = NULL;
 }
 
 /*

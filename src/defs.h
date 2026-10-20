@@ -193,16 +193,16 @@ extern int		pidfile(const char *basename);
 
 static inline char *chomp(char *str)
 {
-	char *p;
+	size_t len;
 
 	if (!str || strlen(str) < 1) {
 		errno = EINVAL;
 		return NULL;
 	}
 
-	p = str + strlen(str) - 1;
-        while (*p == '\n')
-		*p-- = 0;
+	len = strlen(str);
+	while (len > 0 && str[len - 1] == '\n')
+		str[--len] = 0;
 
 	return str;
 }

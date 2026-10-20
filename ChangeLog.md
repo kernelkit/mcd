@@ -3,6 +3,31 @@ Change Log
 
 All relevant, user visible, changes are documented in this file.
 
+[UNRELEASED][]
+--------------
+
+### Fixes
+ - Fix `mctl show router-ports` and `show igmp json` missing the router
+   ports of bridges with a hyphen in their name, e.g. `br-0`
+ - Fix shell command injection through bridge names when listing router
+   ports.  Linux allows characters like `;` and `$` in interface names
+ - Fix IPC error replies, e.g. for an unknown command, never reaching
+   the client
+ - Fix `mcd` dying of `SIGPIPE` when an IPC client hangs up before
+   reading its reply
+ - Fix default router timeout (other querier present interval) ignoring
+   the configured `robustness`, query and response intervals, it was
+   always 255 sec unless `router-timeout` was set
+ - Fix `mcd` exiting 0 when it cannot fork to daemonize
+ - Fix `mctl` crashing on a daemon command of more than 32 words
+ - Fix timers stopping if an expiry landed exactly on a whole second
+ - Fix misaligned IP header access in the packet buffers, a fault on
+   strict-alignment targets
+ - Fix crashes and buffer overruns on malformed input in the `.conf`
+   parser, IPC commands, and `bridge mdb show` / `bridge -j` output, as
+   well as for a group on many bridge ports
+
+
 [v3.0][] - 2026-10-16
 ---------------------
 

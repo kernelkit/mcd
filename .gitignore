@@ -15,3 +15,15 @@ configure
 Makefile
 Makefile.in
 stamp-h1
+
+# Nix
+result
+result-*
+.direnv/
+compile_commands.json
+__pycache__/
+# libFuzzer artifacts
+crash-*
+leak-*
+timeout-*
+oom-*

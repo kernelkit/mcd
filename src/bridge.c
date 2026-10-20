@@ -87,7 +87,6 @@ static int populate(void)
 	struct mdb *e;
 	FILE *fp;
 	char buf[80];
-	int num = 0;
 
 	fp = popen("bridge mdb show", "r");
 	if (!fp)
@@ -95,6 +94,7 @@ static int populate(void)
 
 	while (fgets(buf, sizeof(buf), fp)) {
 		char br[IFNAMSIZ + 1] = { 0 }, port[IFNAMSIZ + 3] = { 0 }, group[64] = { 0 };
+		char item[sizeof(port) + 4];
 		char *tok, *dst;
 		int vid = 0;
 		size_t len;
@@ -111,6 +111,8 @@ static int populate(void)
 				len = sizeof(group);
 			} else if (!strcmp(tok, "vid")) {
 				tok = strtok(NULL, " \t");
+				if (!tok)
+					break;
 				vid = strtol(tok, NULL, 10);
 				continue;
 			} else {
@@ -118,6 +120,8 @@ static int populate(void)
 			}
 
 			tok = strtok(NULL, " \t");
+			if (!tok)
+				break;
 			strlcpy(dst, tok, len);
 		}
 
@@ -130,17 +134,15 @@ static int populate(void)
 			}
 		}
 
-		if (e->port[0])
-			strcat(e->port, ", ");
-		if (json)
-			strcat(e->port, "\"");
-		strcat(e->port, port);
-		if (json)
-			strcat(e->port, "\"");
+		snprintf(item, sizeof(item), "%s%s%s%s", e->port[0] ? ", " : "",
+			 json ? "\"" : "", port, json ? "\"" : "");
+		if (strlen(e->port) + strlen(item) < sizeof(e->port))
+			strcat(e->port, item);
+		else
+			warnx("too many ports in group %s, skipping %s", group, port);
 		strlcpy(e->br, br, sizeof(e->br));
 		strlcpy(e->group, group, sizeof(e->group));
 		e->vid = vid;
-		num++;
 	}
 
 	return pclose(fp);
@@ -309,7 +311,7 @@ void bridge_prop(FILE *fp, const char *brname, const char *prop)
 
 	jsmn_init(&parser);
 
-	data = malloc(BUFSIZ);
+	data = malloc(BUFSIZ + 1);	/* + NUL */
 	if (!data) {
 		err("failed allocating json data buffer");
 		exit(EX_OSERR);
@@ -339,7 +341,7 @@ void bridge_prop(FILE *fp, const char *brname, const char *prop)
 			continue;
 
 		/* Skip top-level element, it is always an array '[' or start of object '{' */
-		for (int j = i + 1; j < i + tokens[i].size * 2 + 1; j += 2) {
+		for (int j = i + 1; j < i + tokens[i].size * 2 + 1 && j + 1 < rc; j += 2) {
 			jsmntok_t *key = &tokens[j];
 			jsmntok_t *val = &tokens[j + 1];
 
@@ -414,19 +416,41 @@ void bridge_router_ports_all(FILE *fp)
 	pclose(pp);
 }
 
+/* Quote src as one shell word, len must be 4 * strlen(src) + 3 */
+static char *shquote(char *dst, size_t len, const char *src)
+{
+	size_t i = 0;
+
+	dst[i++] = '\'';
+	for (; *src && i + 5 < len; src++) {
+		if (*src == '\'') {
+			memcpy(&dst[i], "'\\''", 4);
+			i += 4;
+		} else
+			dst[i++] = *src;
+	}
+	dst[i++] = '\'';
+	dst[i] = 0;
+
+	return dst;
+}
+
 /*
  * Standardized way of reading out routers ports is now 'bridge -d mdb show'
  */
 void bridge_router_ports(FILE *fp, const char *brname)
 {
-	const char *fmt = "(bridge -d -j mdb show | jq -r '.[] .router%s%s | .[] .port';"
+	const char *fmt = "(bridge -d -j mdb show | jq -r --arg br %s '.[] .router%s | .[] .port';"
 		"bridge -j -d vlan global show %s%s | jq -r '.[].vlans[].router_ports[].port')"
 		"| sort -uV | tr '\n' ' '";
-	char cmd[strlen(fmt) + 64], buf[128 * (IFNAMSIZ + 2)]; /* 128 ports should be enough */
+	char qbr[4 * IFNAMSIZ + 3], buf[128 * (IFNAMSIZ + 2)]; /* 128 ports should be enough */
+	char cmd[strlen(fmt) + 2 * sizeof(qbr) + 16];
 	FILE *pp;
 
+	shquote(qbr, sizeof(qbr), brname ?: "");
+
 	/* Read mrouter ports from brname, or all bridges. */
-	snprintf(cmd, sizeof(cmd), fmt, brname ? "." : "", brname ?: "[]", brname ? "dev " : "", brname ?: "");
+	snprintf(cmd, sizeof(cmd), fmt, qbr, brname ? "[$br]" : "[]", brname ? "dev " : "", brname ? qbr : "");
 	pp = popen(cmd, "r");
 	if (!pp) {
 		warn("popen to query bridge router ports | jq");

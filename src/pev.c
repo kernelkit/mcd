@@ -345,7 +345,7 @@ static void timer_run(int signo, void *arg)
 		usec = timeout % 1000000;
 		entry->expiry.tv_sec  = now.tv_sec + sec;
 		entry->expiry.tv_nsec = now.tv_nsec + (usec * 1000);
-		if (entry->expiry.tv_nsec > 1000000000) {
+		if (entry->expiry.tv_nsec >= 1000000000) {
 			entry->expiry.tv_sec++;
 			entry->expiry.tv_nsec -= 1000000000;
 		}

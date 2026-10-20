@@ -5,6 +5,9 @@
 
 #define RECV_BUF_SIZE 1536
 
+/* Frame offset in recv_buf/send_buf, 4-byte aligns the IP header */
+#define SOCK_BUF_ALIGN 2
+
 extern uint8_t		*recv_buf;
 extern uint8_t		*send_buf;
 

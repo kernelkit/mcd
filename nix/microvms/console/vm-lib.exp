@@ -1,0 +1,435 @@
+#!/usr/bin/env expect
+###############################################################################
+# vm-lib.exp - expect library for driving a mcd microVM serial console
+#
+# Ported from xtcp2 (nix/microvms/scripts/vm-lib.exp) by way of partybus.
+# Changed: the marker prefix (MCD_), these notes, and `use` with connect
+# returning its spawn id, for drivers of several VMs. Tested hermetically by
+# vm-lib-test.exp (the vm-lib-exp flake check).
+#
+# Source it from a driver script:
+#   source [file dirname [info script]]/vm-lib.exp
+#
+# Environment variables:
+#   EXPECT_DEBUG    non-empty turns on exp_internal (very verbose)
+#   VMLIB_TIMEOUT   default per-command timeout in seconds (default 60)
+#
+# WHY A CONSOLE AT ALL
+#
+# mcd's runners (nix/microvms/runners.nix) drive the guest entirely over its
+# serial console. It answers as soon as getty autologin runs, needs no guest
+# network (the tests build their own bridges and namespaces), and keeps
+# answering when the test under it has wedged the network - exactly when a
+# network-based channel could only time out. Driving it with expect replaces
+# "wait and hope" with "wait until the command exited, and tell me its
+# status".
+#
+# WHY NOT PROMPT MATCHING
+#
+# The obvious expect idiom - and what the xdp2 and pcp versions of this file
+# do - is to match the shell prompt: `root@host:~#`. We deliberately do not.
+#
+#   - The prompt's exact shape is NixOS's `programs.bash.promptInit` default,
+#     which brackets it (`[root@host:~]#`) and wraps it in ANSI color escapes.
+#     Matching it means encoding a distribution default into a test harness.
+#   - A prompt tells you the shell is ready. It does not tell you what the
+#     command's exit status was, and for a readiness step "did it actually
+#     succeed" is the whole question.
+#   - Worst of all, a prompt pattern is not unique in time. If one command
+#     times out and the driver moves on, the NEXT expect can be satisfied by
+#     the PREVIOUS command's prompt, and the driver silently runs ahead of the
+#     guest while reporting success.
+#
+# So every command is instead sent as:
+#
+#     printf '\nMCD_BEGIN_<n>\n'; <cmd>; printf '\nMCD_RC_<n>=%d\n' "$?"
+#
+# where <n> is a counter unique to this session. Output is whatever arrives
+# between those two markers, and the exit status comes out of the second one.
+# Readiness is established with that same machinery rather than by prompt: run
+# a trivial command until one of them reports rc 0.
+#
+# WHY THERE IS A BEGIN MARKER AND NOT JUST "SKIP THE ECHOED COMMAND LINE"
+#
+# The obvious framing is to take everything after the guest's terminal echo of
+# the command, on the grounds that the echo is exactly one line. Measured
+# against a real guest, it is not: after the RC marker the guest emits
+# `ESC[?2004h CR CR LF` - an empty line, from bash turning bracketed paste back
+# on - and that line is still unread when the NEXT call starts. So "skip one
+# line" skips that, and the prompt-plus-echo line lands in the output. Every
+# captured result was shifted by one line, and nothing in a local pty test
+# noticed, because the leak is at the FRONT of the output and the assertions
+# were regex matches over the whole of it.
+#
+# Positional framing is the wrong shape regardless of that particular artifact:
+# it assumes the stream contains nothing but this call's traffic, and a console
+# shared with a booting kernel, a getty and systemd's status escapes does not
+# honor that. A marker the guest PRINTS, alone on its line, is unambiguous.
+# It also survives the echoed command line being wrapped by readline, which a
+# 124-column capture command on an 80-column console would be: a wrapped
+# fragment is not equal to the marker, so it is discarded like any other
+# leftover rather than being mistaken for output.
+###############################################################################
+
+package require Tcl 8.5
+
+namespace eval vmlib {
+    variable console_id ""
+    variable default_timeout 60
+    variable debug 0
+    # Monotonic counter behind the per-command marker. Never reset, so a
+    # marker value is unique for the life of the driver process.
+    variable seq 0
+
+    ###########################################################################
+    # init - read the environment. Call once, first.
+    ###########################################################################
+    proc init {} {
+        variable debug
+        variable default_timeout
+
+        if {[info exists ::env(EXPECT_DEBUG)] && $::env(EXPECT_DEBUG) ne ""} {
+            set debug 1
+            exp_internal 1
+        }
+        if {[info exists ::env(VMLIB_TIMEOUT)] && $::env(VMLIB_TIMEOUT) ne ""} {
+            set default_timeout $::env(VMLIB_TIMEOUT)
+        }
+
+        # Silence expect's own echo of the guest stream unless debugging.
+        # Left on, the raw console - prompts, escapes, partial lines - is
+        # interleaved with the driver's own stdout on the SAME lines, so a
+        # result line arrives as `ESC[?2004hbash-5.3$ PASS: ...` and anything
+        # grepping for `^PASS` sees nothing. Callers that want the console
+        # should read the runner's transcript, which is captured separately.
+        if {!$debug} {
+            log_user 0
+        }
+    }
+
+    ###########################################################################
+    # log - driver-side progress, on stderr so it cannot be confused with
+    # captured guest output on stdout.
+    ###########################################################################
+    proc log {msg} {
+        send_error "vmlib: $msg\n"
+    }
+
+    ###########################################################################
+    # resolve_line - turn one raw console line into what a terminal would have
+    # shown. Shared by run_out and the readiness probe so both agree on what
+    # "a line equal to the marker" means.
+    #
+    # Resolve CRs the way a terminal would rather than deleting them: drop the
+    # CR-LF ending, then keep only what follows the last remaining CR, since a
+    # bare CR returns the cursor to column 0 and what comes after overwrites
+    # what came before. A real guest line is
+    # `ESC[?2004l CR hello-world CR LF`, which yields `hello-world`.
+    #
+    # `\r+$`, not `\r$`: a guest command that itself ends a line with CR sends
+    # CR CR LF through the pty, and stripping only one leaves a trailing CR
+    # that the last-CR rule then reads as "everything was overwritten",
+    # returning an empty line for output that was plainly there.
+    #
+    # Then the escapes. CSI covers the color and cursor sequences; OSC covers
+    # the window title the guest's PROMPT_COMMAND sets, which is terminated by
+    # BEL and would otherwise leave the title text in the line.
+    ###########################################################################
+    proc resolve_line {line} {
+        regsub {\r+$} $line "" line
+        set cr [string last "\r" $line]
+        if {$cr >= 0} {
+            set line [string range $line [expr {$cr + 1}] end]
+        }
+        regsub -all {\x1b\[[0-9;?]*[a-zA-Z]} $line "" line
+        regsub -all {\x1b\][^\x07]*\x07} $line "" line
+        return $line
+    }
+
+    ###########################################################################
+    # connect - attach to the guest's serial console and wait for a shell.
+    #
+    #   port          host TCP port qemu's serial console is bound to
+    #   boot_timeout  total seconds to wait for a responding shell
+    #
+    # A TCP CHANNEL, NOT A SPAWNED PROCESS ON A PTY
+    #
+    # The obvious implementation, and what both xdp2's and pcp's versions do,
+    # is `spawn socat -,rawer tcp:...` (or nc). Measured against a local pty
+    # shell, that does not work here: `spawn` gives socat a pty whose line
+    # discipline echoes, so every command appears in the stream TWICE - once
+    # from the local pty and once from the guest's own terminal echo. run_out
+    # drops exactly one echo line, consumes the second copy as output, and the
+    # marker never matches. The symptom is a timeout on a command that plainly
+    # succeeded, which is a bad way to spend an afternoon.
+    #
+    # `spawn -open` over a Tcl socket has no pty and no local line discipline
+    # at all, so the only echo in the stream is the guest's. It also removes
+    # socat from the runtime inputs.
+    #
+    # The guest autologins root on the serial console
+    # (substrates/microvm.nix: services.getty.autologinUser = "root"), so there is no login
+    # or password step here - unlike pcp's vmlib::login, which this omits on
+    # purpose rather than by oversight.
+    #
+    # THE SOCKET OPEN IS RETRIED, not attempted once
+    #
+    # qemu's serial chardev is `tcp:...,server,nowait` and accepts ONE
+    # connection at a time, so the host runner cannot probe the port with
+    # `nc -z` first: the probe's own connect-and-close would leave a window in
+    # which qemu has not gone back to listening. Failing fast on the first
+    # ECONNREFUSED would then be a coin flip on how quickly qemu got to
+    # opening its listener. Retrying here means the caller hands us a port and
+    # a deadline and nothing else has to know about the race.
+    ###########################################################################
+    proc connect {port {boot_timeout 180}} {
+        variable console_id
+
+        log "connecting to console on 127.0.0.1:$port"
+        # ONE deadline for both phases below - opening the socket and getting a
+        # shell to answer are two halves of the same wait, and boot_timeout is
+        # the caller's budget for the whole of it, not for each.
+        set deadline [expr {[clock seconds] + $boot_timeout}]
+        set sock ""
+        set last_error "no attempt made"
+        while {[clock seconds] < $deadline} {
+            if {![catch {socket 127.0.0.1 $port} result]} {
+                set sock $result
+                break
+            }
+            set last_error $result
+            # A second, not a tight spin: this is waiting on qemu creating a
+            # listening socket, which is not something that gets faster by
+            # being asked more often.
+            after 1000
+        }
+        if {$sock eq ""} {
+            log "ERROR: cannot connect to 127.0.0.1:$port within ${boot_timeout}s: $last_error"
+            exit 2
+        }
+        fconfigure $sock -translation binary -buffering none -blocking 0
+        spawn -open $sock
+        set console_id $spawn_id
+
+        # expect's default match buffer is 2000 bytes, and run_out matches one
+        # WHOLE line at a time. A line longer than the buffer can never match,
+        # so expect discards the oldest half of it and the line is lost - with
+        # no error. `ip -d addr show` on a busy namespace stays well under
+        # this, but a base64 blob does not, which is why the guest side wraps
+        # base64 instead of using `-w0`. Raise the ceiling anyway so a long
+        # line is a performance question rather than a correctness one.
+        match_max -i $console_id 1000000
+
+        # READINESS IS `run_out` REPORTING rc 0, NOT A MARKER COMING BACK
+        #
+        # The previous version of this echoed a marker and waited for a line
+        # equal to it. That is still forgeable, and the guest forged it: a tty
+        # echoes what is typed at it whether or not anything is reading, and
+        # before getty starts the echo can arrive as a line of its own, so the
+        # probe passed at t=0.14s of boot. This proc then returned a shell that
+        # did not exist - after which every command was typed into a tty buffer,
+        # replayed all at once when bash finally started, and the whole session
+        # ran blind, and the driver reported success the entire way (seen in
+        # xtcp2).
+        #
+        # There is no way to make a bare marker unforgeable, because the tty
+        # echoes it verbatim by construction. So probe with the thing that only
+        # a shell can satisfy: the marker protocol itself. run_out sends
+        #
+        #     printf '\nMCD_BEGIN_<n>\n'; :; printf '\nMCD_RC_<n>=%d\n' "$?"
+        #
+        # and accepts only a line matching `^MCD_RC_<n>=([0-9]+)$`. The echo
+        # of that line contains the printf syntax and the literal `%d`, so it
+        # cannot match - the guest has to have EXECUTED the line. Each probe
+        # carries its own sequence number, so a late reply to probe N cannot be
+        # read as the reply to probe N+1 either.
+        #
+        # The queued-input replay is then harmless rather than fatal: the
+        # probes bash replays when it starts are `printf ...; :; printf ...`,
+        # which run, print their markers, and are matched or discarded by
+        # sequence number like any other leftover.
+        while {[clock seconds] < $deadline} {
+            # A bare CR first, to end any partial line already sitting in
+            # readline's buffer from boot-time noise. Without it a leftover
+            # fragment would be prefixed to the probe, bash would reject the
+            # whole line as one bad command, and the printfs would never run.
+            send -i $console_id "\r"
+            # quiet: a failed probe is the expected case while the guest boots,
+            # and one ERROR line per probe would bury the real failure.
+            lassign [run_out ":" 5 1] rc _out
+            if {$rc == 0} {
+                log "console is up"
+                return $console_id
+            }
+        }
+
+        log "ERROR: no shell on port $port within ${boot_timeout}s"
+        exit 2
+    }
+
+    ###########################################################################
+    # use - make an earlier connect's console the current one.
+    #
+    # connect returns its console's spawn id and makes it current; a driver
+    # for several VMs keeps the ids and switches with this. The command
+    # counter is shared, so markers stay unique across consoles, and a
+    # leftover marker from one console can never close a call on another.
+    ###########################################################################
+    proc use {id} {
+        variable console_id
+        set console_id $id
+        return $id
+    }
+
+    ###########################################################################
+    # run_out - run one command, return {rc output}.
+    #
+    # rc is the guest command's real exit status, or -1 if the marker never
+    # arrived within the timeout. output is everything the guest printed
+    # between the two markers, resolved the way a terminal would have shown it
+    # (see resolve_line).
+    #
+    # Output is accumulated line by line rather than in one big `expect`
+    # buffer. That is xdp2's vm-expect.exp trick and it is load-bearing here:
+    # `ip -d link show` on a populated namespace, or a base64 blob, will
+    # exceed expect's default match buffer and the tail would be silently
+    # discarded.
+    #
+    # quiet suppresses the timeout log line only. It exists for connect's
+    # readiness probe, where a timeout is the expected outcome on every attempt
+    # but the last; everywhere else a timeout is the thing you want to read
+    # about, so it defaults to off.
+    ###########################################################################
+    proc run_out {cmd {cmd_timeout ""} {quiet 0}} {
+        variable console_id
+        variable default_timeout
+        variable seq
+
+        if {$console_id eq ""} {
+            error "vmlib::run_out called before vmlib::connect"
+        }
+        if {$cmd_timeout eq ""} {
+            set cmd_timeout $default_timeout
+        }
+
+        incr seq
+        set begin "MCD_BEGIN_$seq"
+
+        # printf, not echo, at both ends: the leading newline guarantees each
+        # marker begins a line of its own, whatever the surrounding output did
+        # or did not write.
+        send -i $console_id \
+            "printf '\\nMCD_BEGIN_$seq\\n'; $cmd; printf '\\nMCD_RC_$seq=%d\\n' \"\$?\"\r"
+
+        set lines {}
+        set rc -1
+        set saw_marker 0
+        set in_output 0
+        set timeout $cmd_timeout
+
+        expect {
+            # Match up to the LINE FEED, not up to a CR-LF pair.
+            #
+            # This looked like it should be `^(\[^\r\n\]*)\r?\n`, and that
+            # version deadlocks. A bash console with bracketed paste on emits
+            # a BARE CR in the middle of a line - the real stream is
+            # `ESC[?2004l CR hello-world CR LF` - so `\[^\r\n\]*` stops at the
+            # inner CR, `\r?\n` then fails on the character after it, and
+            # because expect anchors `^` at the start of the buffer there is
+            # no other position to try. The line never matches, the marker is
+            # never reached, and a command that obviously succeeded reports a
+            # timeout.
+            -i $console_id -re "^(\[^\n\]*)\n" {
+                set line [resolve_line $expect_out(1,string)]
+
+                if {[regexp "^MCD_RC_$seq=(\[0-9\]+)$" $line -> status]} {
+                    set rc $status
+                    set saw_marker 1
+                } elseif {!$in_output} {
+                    # Everything before this call's BEGIN marker is leftover:
+                    # the empty line bash emits after the previous marker, the
+                    # prompt, the echo of the command we just sent, and - on
+                    # the first call - whatever the kernel and getty printed.
+                    # Compared with `eq`, not searched for, so the echoed
+                    # command line (which contains the marker's text as part of
+                    # the printf) cannot be mistaken for the marker itself.
+                    if {$line eq $begin} {
+                        set in_output 1
+                    }
+                    exp_continue -continue_timer
+                } else {
+                    lappend lines $line
+                    exp_continue -continue_timer
+                }
+            }
+            -i $console_id timeout {
+                if {!$quiet} {
+                    log "ERROR: timeout after ${cmd_timeout}s: $cmd"
+                }
+            }
+            -i $console_id eof {
+                log "ERROR: console closed during: $cmd"
+                exit 2
+            }
+        }
+
+        # The marker's printf starts with a newline so it always begins a line
+        # of its own, which costs one empty line at the end of every capture.
+        # Trim trailing empties so a caller can compare captured output
+        # against a committed sidecar without allowing for harness artifacts.
+        while {[llength $lines] > 0 && [lindex $lines end] eq ""} {
+            set lines [lrange $lines 0 end-1]
+        }
+
+        if {!$saw_marker} {
+            return [list -1 [join $lines "\n"]]
+        }
+        return [list $rc [join $lines "\n"]]
+    }
+
+    ###########################################################################
+    # run - run one command, return its exit status, discarding output.
+    ###########################################################################
+    proc run {cmd {cmd_timeout ""}} {
+        lassign [run_out $cmd $cmd_timeout] rc _out
+        return $rc
+    }
+
+    ###########################################################################
+    # must - run one command and abort the driver if it fails.
+    #
+    # For steps with no meaningful partial result: if a node has no
+    # network there is nothing to salvage by continuing.
+    ###########################################################################
+    proc must {cmd {cmd_timeout ""}} {
+        lassign [run_out $cmd $cmd_timeout] rc out
+        if {$rc != 0} {
+            log "FATAL: rc=$rc: $cmd"
+            if {$out ne ""} {
+                send_error "$out\n"
+            }
+            exit 3
+        }
+        return $out
+    }
+
+    ###########################################################################
+    # poweroff - ask the guest to shut down. Best effort; the host runner
+    # kills qemu if this does not take.
+    ###########################################################################
+    proc poweroff {} {
+        variable console_id
+        if {$console_id eq ""} {
+            return
+        }
+        log "powering off"
+        send -i $console_id "systemctl poweroff\r"
+        # Do not wait for a marker: the shell is going away and the marker
+        # would never arrive.
+        set timeout 10
+        expect {
+            -i $console_id eof {}
+            -i $console_id timeout {}
+        }
+    }
+}

@@ -180,9 +180,16 @@ int main(int argc, char *argv[])
 #endif
 
 	/* Detach from the terminal */
-	haveterminal = 0;
-	if (fork())
+	switch (fork()) {
+	case -1:
+	    err("failed daemonizing");
+	    exit(1);
+	case 0:
+	    break;
+	default:
 	    exit(0);
+	}
+	haveterminal = 0;
 
 	(void)close(0);
 	(void)close(1);

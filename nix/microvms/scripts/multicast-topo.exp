@@ -1,0 +1,300 @@
+#!/usr/bin/env expect
+###############################################################################
+# multicast-topo.exp - mcd as querier on a real bridge, between two hosts
+#
+# Usage: multicast-topo.exp <sw-port> <h1-port> <h2-port> <boot-sec>
+#
+# Three VMs on point-to-point dgram links (nix/microvms/constants.nix):
+#
+#   h1 lan0 10.0.0.11 ──link1── p1 ┐
+#                                  sw: br0 10.0.0.10, snooping, mcd
+#   h2 lan0 10.0.0.2  ──link2── p2 ┘
+#
+# h1 captures every IGMP / ICMPv6 packet it sees, as text, for the whole
+# run; the timing assertions are read off that capture with h1's clock.
+# Steps, in order (each needs the ones before it):
+#
+#   links      h1 and h2 reach each other through sw's bridge
+#   querier    mcd on sw is elected and h1 sees IGMPv3 + MLDv2 queries
+#   interval   general queries every global-query-interval (10 s)
+#   join       a socat join on h1 lands in sw's mdb and mcd's groups, on
+#              p1 only
+#   leave      the leave draws a group-specific query; mcd and the bridge
+#              drop the group
+#   election   mcd on h2, with the lower address, wins; sw stops querying
+#   takeover   h2's mcd stops; sw takes over after router-timeout (15 s)
+#
+# A step that fails ends the run: diagnostics from every node, poweroff.
+# A KNOWN step is a recorded mcd bug: it reports XFAIL while the bug is
+# there and XPASS once it is fixed, and neither fails the run.
+#
+# stdout: one line per step, PASS: / FAIL: / XFAIL: / XPASS: <step>, then
+#   MCD_TOPO steps=<n> pass=<n> fail=<n> xfail=<n> xpass=<n>
+#
+# With MCD_VM_KEEP set the guests are left running at the end.
+#
+# Exit codes (vmlib's): 0 no step failed, 1 a step failed, 2 no console,
+# 3 a setup command failed.
+###############################################################################
+
+source [file dirname [info script]]/vm-lib.exp
+
+if {$argc != 5} {
+    puts stderr "usage: multicast-topo.exp <sw-port> <h1-port> <h2-port> <mcd-bin> <boot-sec>"
+    exit 2
+}
+# mcd-bin: the store path of mcd's bin/ (the guest sees the host store), put
+# first on each node's PATH, so a new mcd needs no new guest.
+lassign $argv port(sw) port(h1) port(h2) mcdbin boot
+
+vmlib::init
+
+set nodes {sw h1 h2}
+array set count {steps 0 pass 0 fail 0 xfail 0 xpass 0}
+
+###############################################################################
+# helpers
+###############################################################################
+
+proc on {n} {
+    vmlib::use $::con($n)
+}
+
+# sh - a setup command on node n that must succeed.
+proc sh {n cmd {t 30}} {
+    on $n
+    return [vmlib::must $cmd $t]
+}
+
+# probe - one attempt, {rc output}, timeouts not logged.
+proc probe {n cmd {t 20}} {
+    on $n
+    return [vmlib::run_out $cmd $t 1]
+}
+
+# poll - repeat a probe until it passes or the budget runs out.
+proc poll {n cmd budget} {
+    set deadline [expr {[clock seconds] + $budget}]
+    while 1 {
+        set left [expr {$deadline - [clock seconds]}]
+        if {$left <= 0} {
+            return 0
+        }
+        lassign [probe $n $cmd [expr {min($left, 20)}]] rc out
+        if {$rc == 0} {
+            return 1
+        }
+        after 1000
+    }
+}
+
+proc now_h1 {} {
+    lassign [probe h1 {date +%s.%N} 10] rc out
+    return [string trim $out]
+}
+
+# queries - epochs (h1's clock) of the queries h1 captured from src for
+# group (0.0.0.0 = general) after t, in capture order. tshark prints
+# igmp.type as 0x11 or 17 depending on its version; both are accepted.
+proc queries {src group after {version ""}} {
+    set v [expr {$version eq "" ? "" : " && \$5==\"$version\""}]
+    lassign [probe h1 "awk -F, -v s=$src -v g=$group -v t=$after '\$2==s && (\$4==\"0x11\" || \$4==\"17\") && \$6==g && \$1>t$v {print \$1}' /tmp/cap.txt" 20] rc out
+    set r {}
+    foreach l [split $out "\n"] {
+        set l [string trim $l]
+        if {$l ne ""} {
+            lappend r $l
+        }
+    }
+    return $r
+}
+
+proc wait_query {src group after budget {version ""}} {
+    set deadline [expr {[clock seconds] + $budget}]
+    while {[clock seconds] < $deadline} {
+        set q [queries $src $group $after $version]
+        if {[llength $q] > 0} {
+            return [lindex $q 0]
+        }
+        after 1000
+    }
+    return ""
+}
+
+proc diagnostics {} {
+    puts "=== diagnostics ==="
+    set cmds(sw) {
+        "tail -n 40 /tmp/mcd.log" "mctl -p show igmp" "bridge -d mdb show"
+        "ip -d -br link" "dmesg | tail -n 20"
+    }
+    set cmds(h1) {"tail -n 40 /tmp/cap.txt" "cat /tmp/cap.log" "ip -br addr"}
+    set cmds(h2) {"tail -n 40 /tmp/mcd.log" "ip -br addr"}
+    foreach n $::nodes {
+        foreach cmd $cmds($n) {
+            puts "--- $n \$ $cmd"
+            puts [lindex [probe $n "$cmd 2>&1" 30] 1]
+        }
+    }
+}
+
+proc finish {} {
+    global count
+    puts "MCD_TOPO steps=$count(steps) pass=$count(pass) fail=$count(fail) xfail=$count(xfail) xpass=$count(xpass)"
+    if {![info exists ::env(MCD_VM_KEEP)] || $::env(MCD_VM_KEEP) eq ""} {
+        foreach n $::nodes {
+            on $n
+            vmlib::poweroff
+        }
+    }
+    exit [expr {$count(fail) > 0 ? 1 : 0}]
+}
+
+# result - record a step; a FAIL ends the run.
+proc result {status name {note ""}} {
+    global count
+    incr count(steps)
+    incr count([string tolower $status])
+    puts "$status: $name[expr {$note eq "" ? "" : " ($note)"}]"
+    if {$status eq "FAIL"} {
+        diagnostics
+        finish
+    }
+}
+
+proc step {name n cmd budget} {
+    result [expr {[poll $n $cmd $budget] ? "PASS" : "FAIL"}] $name
+}
+
+proc known {name n cmd budget why} {
+    if {[poll $n $cmd $budget]} {
+        result XPASS $name "fixed? was: $why"
+    } else {
+        result XFAIL $name "known: $why"
+    }
+}
+
+proc check {name ok {note ""}} {
+    result [expr {$ok ? "PASS" : "FAIL"}] $name $note
+}
+
+###############################################################################
+# consoles and links
+###############################################################################
+
+foreach n $nodes {
+    set con($n) [vmlib::connect $port($n) $boot]
+    vmlib::must "dmesg -n 1; stty cols 250; export SYSTEMD_PAGER= SYSTEMD_COLORS=0 COLUMNS=250 PATH=$mcdbin:\$PATH" 10
+    vmlib::must "command -v mcd mctl" 10
+}
+vmlib::log "consoles up: $nodes"
+
+sh sw {ip link show p1 >/dev/null && ip link show p2 >/dev/null}
+sh sw {ip link add br0 type bridge mcast_snooping 1 mcast_querier 0 && for p in p1 p2; do ip link set $p master br0 && ip link set $p up; done && ip addr add 10.0.0.10/24 dev br0 && ip link set br0 up}
+sh h1 {ip addr add 10.0.0.11/24 dev lan0 && ip link set lan0 up}
+sh h2 {ip addr add 10.0.0.2/24 dev lan0 && ip link set lan0 up}
+
+step "links: h1 reaches sw over link1" h1 {ping -c1 -W1 10.0.0.10} 60
+step "links: h2 reaches h1 through the bridge" h2 {ping -c1 -W1 10.0.0.11} 60
+
+# The capture runs for the rest of the scenario. Started before mcd, so
+# the startup queries are in it. MLD rides behind a hop-by-hop (router
+# alert) header, which BPF's `icmp6` does not chase: `ip6 proto 0` it is.
+sh h1 {(tshark -lni lan0 -f 'igmp or icmp6 or ip6 proto 0' -T fields -E separator=, -E occurrence=f -e frame.time_epoch -e ip.src -e ipv6.src -e igmp.type -e igmp.version -e igmp.maddr -e icmpv6.type > /tmp/cap.txt 2>/tmp/cap.log &)}
+if {![poll h1 {grep -q 'Capturing on' /tmp/cap.log} 60]} {
+    vmlib::log "FATAL: tshark did not start on h1"
+    exit 3
+}
+set t0 [now_h1]
+
+###############################################################################
+# querier
+###############################################################################
+
+sh sw {printf 'global-query-interval 10\nrouter-timeout 15\niface br0 enable\n' > /etc/mcd.conf && (mcd -n -l debug > /tmp/mcd.log 2>&1 &)}
+
+step "querier: mcd on sw is elected IGMP querier" sw \
+    {mctl show igmp json | jq -e '.["multicast-queriers"][] | select(.interface=="br0") | .querier=="10.0.0.10"'} 30
+check "querier: h1 sees IGMPv3 general queries from 10.0.0.10" \
+    [expr {[wait_query 10.0.0.10 0.0.0.0 $t0 30 3] ne ""}]
+step "querier: h1 sees MLDv2 queries from sw" h1 \
+    {awk -F, '$7=="130" && $3 ~ /^fe80:/' /tmp/cap.txt | grep -q .} 30
+
+###############################################################################
+# interval: startup queries come robustness (2) times at a quarter of the
+# interval, then every interval. Four general queries cover both.
+###############################################################################
+
+set deadline [expr {[clock seconds] + 45}]
+while {[llength [set q [queries 10.0.0.10 0.0.0.0 $t0]]] < 4 && [clock seconds] < $deadline} {
+    after 2000
+}
+if {[llength $q] >= 4} {
+    set d [expr {[lindex $q end] - [lindex $q end-1]}]
+    check "interval: general queries 10 s apart" [expr {$d >= 8.0 && $d <= 12.0}] [format "%.1f s" $d]
+} else {
+    check "interval: general queries 10 s apart" 0 "[llength $q] queries in 45 s"
+}
+
+###############################################################################
+# join and leave
+###############################################################################
+
+sh h1 {(socat -u UDP4-RECV:5000,ip-add-membership=239.1.2.3:lan0 /dev/null > /dev/null 2>&1 & echo $! > /tmp/join.pid)}
+
+step "join: sw's mdb has 239.1.2.3 on p1 only" sw \
+    {bridge -j mdb show dev br0 | jq -e '[.[].mdb[]? | select(.grp=="239.1.2.3") | .port] == ["p1"]'} 30
+step "join: mcd lists 239.1.2.3 on p1" sw \
+    {mctl show igmp json | jq -e 'any(.["multicast-groups"][]; .group=="239.1.2.3" and .ports==["p1"])'} 30
+
+set tl [now_h1]
+sh h1 {kill $(cat /tmp/join.pid)}
+
+check "leave: draws a group-specific query for 239.1.2.3" \
+    [expr {[wait_query 10.0.0.10 239.1.2.3 $tl 15] ne ""}]
+step "leave: mcd drops 239.1.2.3" sw \
+    {mctl show igmp json | jq -e 'any(.["multicast-groups"][]; .group=="239.1.2.3") | not'} 20
+step "leave: sw's mdb drops 239.1.2.3" sw \
+    {bridge -j mdb show dev br0 | jq -e '[.[].mdb[]? | select(.grp=="239.1.2.3")] == []'} 30
+
+###############################################################################
+# election
+###############################################################################
+
+sh h2 {printf 'global-query-interval 10\niface lan0 enable\n' > /etc/mcd.conf && (mcd -n -l debug > /tmp/mcd.log 2>&1 &)}
+
+step "election: sw sees 10.0.0.2 as querier" sw \
+    {mctl show igmp json | jq -e '.["multicast-queriers"][] | select(.interface=="br0") | .querier=="10.0.0.2"'} 30
+
+# One full interval and some: sw must have gone quiet, h2 must be querying.
+set te [now_h1]
+after 13000
+set from_sw [queries 10.0.0.10 0.0.0.0 [expr {$te + 2}]]
+set from_h2 [queries 10.0.0.2 0.0.0.0 $te]
+check "election: sw stops querying, h2 queries" \
+    [expr {[llength $from_sw] == 0 && [llength $from_h2] > 0}] \
+    "[llength $from_sw] from sw, [llength $from_h2] from h2 in 13 s"
+
+# man mcd.conf(5): when unset, router-timeout is robustness * interval +
+# response-interval / 2. h2 sets no router-timeout.
+step "election: default router-timeout follows the query interval (2*10+10/2 = 25)" h2 \
+    {mctl show igmp json | jq -e '.["router-timeout"] == 25'} 5
+
+###############################################################################
+# takeover: sw's other-querier-present timer (router-timeout 15) runs from
+# h2's last query, which was at most one interval before the kill.
+###############################################################################
+
+# A subshell: a bare `exit` would end the console's shell.
+sh h2 {(pkill -x mcd; for i in $(seq 1 20); do pgrep -x mcd >/dev/null || exit 0; sleep 0.5; done; exit 1)}
+set tk [now_h1]
+set first [wait_query 10.0.0.10 0.0.0.0 $tk 45]
+if {$first ne ""} {
+    set d [expr {$first - $tk}]
+    check "takeover: sw resumes querying within router-timeout" [expr {$d <= 20.0}] [format "after %.1f s" $d]
+} else {
+    check "takeover: sw resumes querying within router-timeout" 0 "no query from sw in 45 s"
+}
+step "takeover: sw is querier again" sw \
+    {mctl show igmp json | jq -e '.["multicast-queriers"][] | select(.interface=="br0") | .querier=="10.0.0.10"'} 15
+
+finish

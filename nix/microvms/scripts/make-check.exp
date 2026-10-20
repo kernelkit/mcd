@@ -1,0 +1,161 @@
+#!/usr/bin/env expect
+###############################################################################
+# make-check.exp - run mcd's network test suite in the microVM
+#
+# Usage: make-check.exp <port> <boot-sec> <suite-sec> <tree> <mode>
+#
+#   <tree>   the configured --enable-test build tree in the store
+#            (package.nix installBuildTree), copied to /tmp/mcd in the guest
+#   <mode>   plain     make check as is
+#            asan      the tree is an ASan/UBSan build; reports land on
+#                      mcd's stderr, i.e. in test/*.log, and are counted
+#                      and printed from there
+#            valgrind  src/mcd is replaced by a valgrind wrapper; reports
+#                      land in /tmp/vg, errors and definite leaks counted
+#
+# The suite runs in the background in the guest and is polled, so each
+# test's PASS/FAIL line is printed as it finishes instead of after the
+# whole run. TESTS_ENVIRONMENT drops the user namespace from the suite's
+# `unshare -mrun --map-auto`: the guest shell is root already, and every
+# test still gets fresh mount, UTS and network namespaces.
+#
+# With MCD_VM_KEEP set the guest is left running at the end.
+#
+# stdout: the suite's progress, then (on failure) test-suite.log and each
+# failing test's log, then the analysis reports, then one summary line
+#   MCD_CHECK tests=<pass|fail> exercise=<clean|incomplete> findings=<n>
+#
+# Exit codes (vmlib's): 0 suite passed with no findings, 1 suite failed,
+# did not finish, or a sanitizer / valgrind finding, 2 no console, 3 a
+# setup step failed.
+###############################################################################
+
+source [file dirname [info script]]/vm-lib.exp
+
+if {$argc != 5} {
+    puts stderr "usage: make-check.exp <port> <boot-sec> <suite-sec> <tree> <mode>"
+    exit 2
+}
+lassign $argv port boot suite tree mode
+if {$mode ni {plain asan valgrind}} {
+    puts stderr "make-check.exp: unknown mode '$mode'"
+    exit 2
+}
+
+vmlib::init
+vmlib::connect $port $boot
+vmlib::must "dmesg -n 1; stty cols 250; export SYSTEMD_PAGER= SYSTEMD_COLORS=0 COLUMNS=250" 10
+vmlib::log "console up; kernel [lindex [vmlib::run_out {uname -r} 10 1] 1]"
+
+# A writable copy of the build tree; cp -a keeps the store's timestamps, so
+# make sees everything as up to date and builds nothing.
+vmlib::must "rm -rf /tmp/mcd /tmp/vg /tmp/check.log /tmp/check.rc && cp -a $tree /tmp/mcd && chmod -R u+w /tmp/mcd && mkdir -p /tmp/vg" 120
+
+# Warm the page cache: every binary the tests run comes over 9p, and a
+# cold first tshark (all its dissector libraries) can miss lib.sh's 10s
+# "Capturing on" wait, more so beside an ASan or valgrind mcd.
+vmlib::must "tshark -G protocols > /dev/null 2>&1; bridge -V > /dev/null; jq --version > /dev/null; socat -V > /dev/null" 180
+
+set runenv ""
+switch $mode {
+    asan {
+        # No log_path: gcc's separate libasan / libubsan runtimes do not
+        # reliably honour it, and the test logs capture stderr anyway.
+        set runenv "ASAN_OPTIONS=detect_leaks=1:abort_on_error=0 UBSAN_OPTIONS=print_stacktrace=1"
+    }
+    valgrind {
+        # mcd-valgrind (mkVm.nix) runs "$0.real" under valgrind.
+        vmlib::must {mv /tmp/mcd/src/mcd /tmp/mcd/src/mcd.real && ln -s "$(command -v mcd-valgrind)" /tmp/mcd/src/mcd} 10
+    }
+}
+
+# Backgrounded inside an outer subshell: run_out appends `; printf <marker>`,
+# and a bare trailing `&` would make that `&;`, a syntax error. The outer
+# subshell also keeps the interactive shell's job control quiet.
+vmlib::must "( (cd /tmp/mcd && $runenv make check TESTS_ENVIRONMENT='unshare -mun' > /tmp/check.log 2>&1; echo \$? > /tmp/check.rc) > /dev/null 2>&1 & )" 10
+vmlib::log "make check started ($mode); polling"
+
+# Poll: print result lines as they appear, until check.rc exists.
+set seen 0
+set deadline [expr {[clock seconds] + $suite}]
+set finished 0
+while {[clock seconds] < $deadline} {
+    lassign [vmlib::run_out "grep -E '^(PASS|FAIL|SKIP|XFAIL|XPASS|ERROR):' /tmp/check.log 2>/dev/null | tail -n +[expr {$seen + 1}]" 20 1] rc out
+    if {$out ne ""} {
+        foreach line [split $out "\n"] {
+            puts $line
+            incr seen
+        }
+    }
+    if {[vmlib::run "test -f /tmp/check.rc" 10] == 0} {
+        set finished 1
+        break
+    }
+    after 3000
+}
+
+# Pick up any lines written between the last poll and the end.
+lassign [vmlib::run_out "grep -E '^(PASS|FAIL|SKIP|XFAIL|XPASS|ERROR):' /tmp/check.log 2>/dev/null | tail -n +[expr {$seen + 1}]" 20 1] rc out
+if {$out ne ""} {
+    puts $out
+}
+
+set tests fail
+if {$finished} {
+    lassign [vmlib::run_out "cat /tmp/check.rc" 10 1] rc status
+    if {[string trim $status] eq "0"} {
+        set tests pass
+    }
+} else {
+    vmlib::log "FAIL: make check did not finish within ${suite}s"
+}
+
+if {$tests ne "pass"} {
+    puts "=== /tmp/check.log (tail) ==="
+    puts [lindex [vmlib::run_out "tail -n 40 /tmp/check.log" 20 1] 1]
+    puts "=== failing test logs ==="
+    puts [lindex [vmlib::run_out {cd /tmp/mcd/test && for t in $(grep -l '^:test-result: \(FAIL\|ERROR\)' *.trs 2>/dev/null); do l=${t%.trs}.log; echo "--- $l"; tail -n 60 "$l"; done} 60 1] 1]
+    # Diagnostics here, while the guest is still up: the runner's
+    # node-diag.exp only runs when this driver died before the summary.
+    puts "=== diagnostics ==="
+    foreach cmd {"dmesg | tail -n 40" "ip -d -br link" "journalctl -b --no-pager -p warning | tail -n 40"} {
+        puts "--- \$ $cmd"
+        puts [lindex [vmlib::run_out $cmd 30 1] 1]
+    }
+}
+
+set findings 0
+switch $mode {
+    asan {
+        # One finding per report header; test-suite.log repeats the
+        # failing tests' logs, so it is left out. /dev/null keeps grep off
+        # stdin (the console) when there are no logs at all.
+        set re {runtime error:|ERROR: [A-Za-z]+Sanitizer}
+        lassign [vmlib::run_out "cd /tmp/mcd/test 2>/dev/null; grep -h -E '$re' /dev/null \$(ls *.log 2>/dev/null | grep -v '^test-suite.log\$') | wc -l" 30 1] rc n
+        set findings [string trim $n]
+        if {![string is integer -strict $findings]} { set findings 0 }
+        if {$findings > 0} {
+            puts "=== sanitizer reports (test/*.log) ==="
+            puts [lindex [vmlib::run_out "cd /tmp/mcd/test && for l in \$(grep -l -E '$re' *.log | grep -v '^test-suite.log\$'); do echo \"--- \$l\"; grep -A30 -E '$re' \"\$l\" | head -n 200; done" 60 1] 1]
+        }
+    }
+    valgrind {
+        lassign [vmlib::run_out {grep -l -E 'ERROR SUMMARY: [1-9]|definitely lost: [1-9]' /tmp/vg/* 2>/dev/null | wc -l} 10 1] rc n
+        set findings [string trim $n]
+        if {$findings > 0} {
+            puts "=== valgrind reports with errors (/tmp/vg) ==="
+            puts [lindex [vmlib::run_out {for f in $(grep -l -E 'ERROR SUMMARY: [1-9]|definitely lost: [1-9]' /tmp/vg/*); do echo "--- $f"; cat "$f"; done} 60 1] 1]
+        }
+        lassign [vmlib::run_out {ls /tmp/vg | wc -l} 10 1] rc runs
+        vmlib::log "valgrind: [string trim $runs] mcd run(s), $findings with errors"
+    }
+}
+
+set exercise [expr {$finished ? "clean" : "incomplete"}]
+puts "MCD_CHECK tests=$tests exercise=$exercise findings=$findings"
+
+if {![info exists ::env(MCD_VM_KEEP)] || $::env(MCD_VM_KEEP) eq ""} {
+    vmlib::poweroff
+}
+
+exit [expr {$tests eq "pass" && $findings == 0 ? 0 : 1}]
