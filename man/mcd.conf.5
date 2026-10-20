@@ -94,6 +94,18 @@ falls back to older versions on its own when such hosts are heard.
 MLD version to start with, default
 .Cm mldv2 ,
 with the same fallback.
+.It Cm mrd on | off
+Multicast Router Discovery, RFC 4286, off by default.  Advertises
+.Nm mcd
+as a multicast router to the snooping switches on the LAN, so they
+forward membership reports, and all multicast, towards it.  For
+switches that learn their router ports from MRD rather than from
+queries.  Three advertisements go out shortly after the interface comes
+up, then one every 20 seconds, and one in answer to a solicitation.  A
+termination is sent when the interface goes down or
+.Nm mcd
+exits.  An interface in proxy mode has no address to advertise and
+sends nothing.
 .It Cm proxy-mode
 Send proxy queries, from 0.0.0.0 or ::, which never win an election.
 This makes

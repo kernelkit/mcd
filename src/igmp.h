@@ -207,6 +207,8 @@ static inline uint16_t igmp_code_time(uint8_t code)
     return (mant | 0x10) << (exp + 3);
 }
 
+extern size_t build_ipv4(uint8_t *, uint32_t, uint32_t, short unsigned int);
+
 #endif /* MCD_IGMP_H_ */
 
 /**

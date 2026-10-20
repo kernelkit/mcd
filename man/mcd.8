@@ -66,6 +66,13 @@ VLAN interface on top.
 .It
 Static groups, joined in the kernel so the bridge always forwards them
 to itself.
+.It
+Multicast Router Discovery, RFC 4286, for switches that learn their
+router ports from MRD advertisements rather than from queries.  Off by
+default, see
+.Cm mrd
+in
+.Xr mcd.conf 5 .
 .El
 .Pp
 Interfaces, links and addresses are followed with netlink, so an

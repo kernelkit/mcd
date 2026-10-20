@@ -129,11 +129,11 @@ build time, see
 .Sh EXAMPLES
 .Bd -literal -offset indent
 $ mctl show interfaces
-Interface       VID  Proto  Querier                      State  Interval  Timeout  Ver
-vlan1                IGMP   192.168.1.1                     Up       125     None    3
-vlan1                MLD    fe80::7a4c:9bff:fe12:3456       Up       125     None    2
-br0              42  IGMP   0.0.0.0                         Up       125     None    3
-br0              42  MLD    ::                              Up       125     None    2
+Interface       VID  Proto  Querier                      State  Interval  Timeout  MRD  Ver
+vlan1                IGMP   192.168.1.1                     Up       125     None   on    3
+vlan1                MLD    fe80::7a4c:9bff:fe12:3456       Up       125     None   on    2
+br0              42  IGMP   0.0.0.0                         Up       125     None  off    3
+br0              42  MLD    ::                              Up       125     None  off    2
 .Ed
 .Pp
 The IPC protocol is plain text, one command per connection, so other

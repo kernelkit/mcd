@@ -84,6 +84,9 @@ Features
 - Raw VLAN mode.  Run a querier directly on a VLAN of a filtering
   bridge, no `vlanN` interface required.
 - Static groups, joined in the kernel so they never time out.
+- Multicast Router Discovery, RFC 4286.  With `mrd on`, `mcd` advertises
+  itself to the snooping switches on the LAN, for the ones that learn
+  their router ports from MRD rather than from queries.
 - `mctl` shows interface and querier status, group memberships, router
   ports per bridge, and the bridge MDB in a readable form.  JSON output
   for scripts, a watch mode for humans.
@@ -212,13 +215,13 @@ arguments for an overview:
     Router Ports            : eth3
     Flood Ports             :
 
-    Interface       VID  Proto  Querier                      State  Interval  Timeout  Ver
-    vlan1                IGMP   192.168.1.1                     Up       125     None    3
-    vlan1                MLD    fe80::7a4c:9bff:fe12:3456       Up       125     None    2
-    vlan2                IGMP   192.168.2.1                     Up       125     None    3
-    vlan2                MLD    fe80::7a4c:9bff:fe12:3456       Up       125     None    2
-    br0              42  IGMP   0.0.0.0                         Up       125     None    3
-    br0              42  MLD    ::                              Up       125     None    2
+    Interface       VID  Proto  Querier                      State  Interval  Timeout  MRD  Ver
+    vlan1                IGMP   192.168.1.1                     Up       125     None   on    3
+    vlan1                MLD    fe80::7a4c:9bff:fe12:3456       Up       125     None   on    2
+    vlan2                IGMP   192.168.2.1                     Up       125     None   on    3
+    vlan2                MLD    fe80::7a4c:9bff:fe12:3456       Up       125     None   on    2
+    br0              42  IGMP   0.0.0.0                         Up       125     None  off    3
+    br0              42  MLD    ::                              Up       125     None  off    2
 
     Bridge          VID  Multicast Group       Ports
     br0               2  239.1.1.1             eth3

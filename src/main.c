@@ -229,6 +229,7 @@ int main(int argc, char *argv[])
 	setlinebuf(stderr);
 
     dbg("%s starting, config %s", versionstring, config_file);
+    srand(time(NULL) ^ getpid());
 
     pev_init();
     sock_init();

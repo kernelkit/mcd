@@ -27,3 +27,7 @@ crash-*
 leak-*
 timeout-*
 oom-*
+
+# Test helper
+test/solicit
+test/.deps/

@@ -32,6 +32,9 @@ struct ifi {
     int		     ifi_startup_timerid;/* startup query burst timer         */
     int		     ifi_topo_timerid;	 /* hold-off after a topology query   */
     int		     ifi_topo_pending;	 /* port change during the hold-off   */
+    int		     ifi_mrd_timerid;	 /* next MRD advertisement            */
+    int		     ifi_mrd_init;	 /* initial advertisements sent       */
+    int		     ifi_mrd_pending;	 /* advertisement already on its way  */
     int		     ifi_igmpv1_warn;    /* To rate-limit IGMPv1 warnings     */
     uint8_t	     ifi_hwaddr[6];	 /* MAC address of this interface     */
 };
@@ -40,6 +43,7 @@ struct ifi {
 #define IFIF_DISABLED		0x000200 /* administratively disabled */
 #define IFIF_IGMP_QUERIER	0x000400 /* I am the subnet's querier */
 #define IFIF_PROXY_QUERIER	0x002000 /* Act as proxy querier      */
+#define IFIF_MRD		0x004000 /* Multicast Router Discovery */
 
 /*
  * Protocol generations shared by IGMP and MLD, per interface compat

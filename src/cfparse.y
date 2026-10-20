@@ -59,7 +59,7 @@ static void ifset(uint32_t set, uint32_t clr)
 %token IGMP_ROBUSTNESS ROUTER_TIMEOUT ROUTER_ALERT TOPOLOGY_QUERY INCLUDE
 %token NO PHYINT
 %token DISABLE ENABLE IGMPV1 IGMPV2 IGMPV3 STATIC_GROUP PROXY_QUERIER
-%token MLDV1 MLDV2 IGMP MLD
+%token MLDV1 MLDV2 IGMP MLD MRD
 %token VLAN
 %token <num> BOOLEAN
 %token <num> NUMBER
@@ -171,6 +171,7 @@ ifmod	: DISABLE		{ ifset(IFIF_DISABLED, 0); }
 	| MLDV2		{ if (twin) twin->ifi_compat = GEN_V3; }
 	| IGMP BOOLEAN	{ off4 = !$2; }
 	| MLD BOOLEAN	{ off6 = !$2; }
+	| MRD BOOLEAN	{ ifset($2 ? IFIF_MRD : 0, $2 ? 0 : IFIF_MRD); }
 	| STATIC_GROUP GROUP
 	{
 	    struct listaddr *a;
@@ -311,6 +312,7 @@ static struct keyword {
 	{ "mldv2",		MLDV2, 0 },
 	{ "igmp",		IGMP, 0 },
 	{ "mld",		MLD, 0 },
+	{ "mrd",		MRD, 0 },
 	{ "static-group",	STATIC_GROUP, 0 },
 	{ "proxy-queries",	PROXY_QUERIER, 0}, /* compat */
 	{ "proxy-mode",		PROXY_QUERIER, 0},

@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: ISC */
 
 #include "defs.h"
+#include "mrd.h"
 #include "inet.h"
 
 /*
@@ -97,6 +98,9 @@ void iface_zero(struct ifi *ifi)
     ifi->ifi_query_interval = igmp_query_interval;
     ifi->ifi_timerid	= 0;
     ifi->ifi_startup_timerid = 0;
+    ifi->ifi_mrd_timerid = 0;
+    ifi->ifi_mrd_init = 0;
+    ifi->ifi_mrd_pending = 0;
     ifi->ifi_igmpv1_warn = 0;
 }
 
@@ -403,12 +407,16 @@ static void start_iface(struct ifi *ifi)
     if (!(ifi->ifi_flags & IFIF_DISABLED))
         iface_check_election(ifi);
 
+    mrd_start(ifi);
+
     info("Interface %s now in service", ifi->ifi_name);
 }
 
 static void stop_iface(struct ifi *ifi)
 {
     struct listaddr *a, *tmp;
+
+    mrd_stop(ifi);
 
     /*
      * Stop query timers (periodic, startup burst and topology hold-off)

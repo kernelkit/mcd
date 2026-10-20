@@ -102,6 +102,9 @@ extern int		did_final_init;
 
 #ifndef INADDR_ALLRPTS_GROUP
 #define INADDR_ALLRPTS_GROUP    ((in_addr_t)0xe0000016) /* 224.0.0.22, IGMPv3 */
+#ifndef INADDR_ALLSNOOPERS_GROUP
+#define INADDR_ALLSNOOPERS_GROUP	0xe000006aU	/* 224.0.0.106, RFC 4286 */
+#endif
 #endif
 
 #ifndef INADDR_MAX_LOCAL_GROUP

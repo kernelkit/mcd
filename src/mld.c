@@ -6,6 +6,7 @@
 #include "defs.h"
 #include "inet.h"
 #include "mld.h"
+#include "mrd.h"
 
 static const struct in6_addr mld_allnodes = { { { 0xff, 0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 } } };
 
@@ -51,8 +52,8 @@ static unsigned int mld_mrc_time(uint16_t code)
  * One's complement sums are associative, so the two parts are summed
  * separately and folded together.
  */
-static uint16_t icmp6_cksum(const struct in6_addr *src, const struct in6_addr *dst,
-			    const void *msg, size_t len)
+uint16_t icmp6_cksum(const struct in6_addr *src, const struct in6_addr *dst,
+		     const void *msg, size_t len)
 {
     struct {
 	struct in6_addr src;
@@ -83,6 +84,9 @@ static const char *mld_packet_kind(uint8_t type)
     case MLD_LISTENER_REPORT:	 return "v1 listener report";
     case MLD_LISTENER_REDUCTION: return "listener done     ";
     case MLDV2_LISTENER_REPORT:	 return "v2 listener report";
+    case ICMP6_MRD_ADVERT:	 return "mrd advertisement ";
+    case ICMP6_MRD_ADVERT + 1:	 return "mrd solicitation  ";
+    case ICMP6_MRD_ADVERT + 2:	 return "mrd termination   ";
     default:			 return NULL;
     }
 }
@@ -99,6 +103,7 @@ void accept_mld(struct ifi *ifi, int vid, uint8_t *buf, size_t len)
     const char *kind;
     size_t off, plen;
     uint8_t nxt;
+    int msg;
 
     if (len < sizeof(*ip6)) {
 	info("received packet too short (%zu bytes) for IPv6 header", len);
@@ -149,6 +154,15 @@ void accept_mld(struct ifi *ifi, int vid, uint8_t *buf, size_t len)
     dbg("RECV %s from %s ifi %-2d.%d to %s", kind, s1, ifi->ifi_index, vid,
 	inet_ntop(AF_INET6, &ip6->ip6_dst, s2, sizeof(s2)));
 
+    msg = mrd_msg(ifi, mld->mld_type);
+    if (msg >= 0) {
+	inet_addr_t dst;
+
+	inet_addr_set6(&dst, &ip6->ip6_dst);
+	mrd_accept(ifi, msg, &src, &dst);
+	return;
+    }
+
     if (mld->mld_type == MLDV2_LISTENER_REPORT) {
 	accept_v3_report(ifi, &src, (uint8_t *)mld, plen);
 	return;
@@ -184,6 +198,32 @@ void accept_mld(struct ifi *ifi, int vid, uint8_t *buf, size_t len)
 }
 
 /*
+ * IPv6 header and the hop-by-hop header with the Router Alert option,
+ * RFC 2711, for an ICMPv6 message of datalen bytes.
+ */
+size_t build_ipv6(uint8_t *buf, const struct in6_addr *src, const struct in6_addr *dst, size_t datalen)
+{
+    struct ip6_hdr *ip6 = (struct ip6_hdr *)buf;
+    struct mld_hbh *hbh = (struct mld_hbh *)(ip6 + 1);
+
+    memset(hbh, 0, sizeof(*hbh));
+    hbh->hdr.ip6h_nxt  = IPPROTO_ICMPV6;
+    hbh->ra.ip6or_type = IP6OPT_ROUTER_ALERT;
+    hbh->ra.ip6or_len  = sizeof(hbh->ra.ip6or_value);
+    hbh->pad[0]        = IP6OPT_PADN;
+
+    memset(ip6, 0, sizeof(*ip6));
+    ip6->ip6_flow = htonl(6U << 28);
+    ip6->ip6_plen = htons(sizeof(*hbh) + datalen);
+    ip6->ip6_nxt  = IPPROTO_HOPOPTS;
+    ip6->ip6_hlim = 1;
+    ip6->ip6_src  = *src;
+    ip6->ip6_dst  = *dst;
+
+    return sizeof(*ip6) + sizeof(*hbh);
+}
+
+/*
  * Send a General Query, or a Group-Specific one when group is set, as
  * MLDv1 or MLDv2 depending on the interface compatibility mode.
  */
@@ -193,24 +233,15 @@ void send_mld_query(const struct ifi *ifi, int qri, const inet_addr_t *group)
     const struct in6_addr *src = inet_addr_get6(&ifi->ifi_inaddr);
     uint8_t dmac[ETH_ALEN] = { 0x33, 0x33 };
     struct mldv2_query *query;
-    struct ip6_hdr *ip6;
-    struct mld_hbh *hbh;
     size_t len, qlen;
 
     memcpy(&dmac[2], &dst->s6_addr[12], 4);
-    len = build_ether(send_buf, ifi, dmac, ETH_P_IPV6);
-
-    ip6   = (struct ip6_hdr *)(send_buf + len);
-    hbh   = (struct mld_hbh *)(ip6 + 1);
-    query = (struct mldv2_query *)(hbh + 1);
-
-    memset(hbh, 0, sizeof(*hbh));
-    hbh->hdr.ip6h_nxt  = IPPROTO_ICMPV6;
-    hbh->ra.ip6or_type = IP6OPT_ROUTER_ALERT;
-    hbh->ra.ip6or_len  = sizeof(hbh->ra.ip6or_value);
-    hbh->pad[0]        = IP6OPT_PADN;
-
     qlen = ifi->ifi_compat == GEN_V2 ? sizeof(struct mld_hdr) : sizeof(*query);
+
+    len  = build_ether(send_buf, ifi, dmac, ETH_P_IPV6);
+    len += build_ipv6(send_buf + len, src, dst, qlen);
+    query = (struct mldv2_query *)(send_buf + len);
+
     memset(query, 0, qlen);
     query->type = MLD_LISTENER_QUERY;
     if (group)
@@ -224,15 +255,7 @@ void send_mld_query(const struct ifi *ifi, int qri, const inet_addr_t *group)
 	query->qqic = igmp_floating_point(ifi->ifi_query_interval);
     }
     query->csum = icmp6_cksum(src, dst, query, qlen);
-
-    memset(ip6, 0, sizeof(*ip6));
-    ip6->ip6_flow = htonl(6U << 28);
-    ip6->ip6_plen = htons(sizeof(*hbh) + qlen);
-    ip6->ip6_nxt  = IPPROTO_HOPOPTS;
-    ip6->ip6_hlim = 1;
-    ip6->ip6_src  = *src;
-    ip6->ip6_dst  = *dst;
-    len += sizeof(*ip6) + sizeof(*hbh) + qlen;
+    len += qlen;
 
     inet_ntop(AF_INET6, src, s1, sizeof(s1));
     inet_ntop(AF_INET6, dst, s2, sizeof(s2));

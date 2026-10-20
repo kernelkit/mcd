@@ -20,6 +20,8 @@ struct mldv2_query {
     struct in6_addr srcs[0];
 };
 
+extern uint16_t		icmp6_cksum(const struct in6_addr *, const struct in6_addr *, const void *, size_t);
+extern size_t		build_ipv6(uint8_t *, const struct in6_addr *, const struct in6_addr *, size_t);
 extern void		accept_mld(struct ifi *, int, uint8_t *, size_t);
 extern void		send_mld_query(const struct ifi *, int, const inet_addr_t *);
 

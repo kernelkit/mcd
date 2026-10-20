@@ -13,6 +13,7 @@ sbin_PROGRAMS    = mcd mctl
 mcd_SOURCES      = main.c cfparse.y config.c defs.h	\
 		   iface.c iface.h netlink.c		\
 		   igmp.c igmp.h mld.c mld.h		\
+		   mrd.c mrd.h				\
 		   sock.c sock.h			\
 		   inet.c inet.h			\
 		   ipc.c  ipc.h				\
