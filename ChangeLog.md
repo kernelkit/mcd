@@ -7,6 +7,12 @@ All relevant, user visible, changes are documented in this file.
 --------------
 
 ### Changes
+ - General query when a bridge port starts forwarding, RFC 4541 §2.1.1,
+   so hosts behind the port are back in the MDB within the response
+   interval instead of at the next periodic query.  Link up, STP
+   settling and a port added to the bridge all count, for the bridge
+   itself and VLAN interfaces on top of it.  On by default, see
+   `topology-query` in mcd.conf(5)
  - New `mcd -t` option to check a configuration file and exit, like
    `nginx -t`.  Errors are reported as `FILE:LINE: message`, and it
    runs as a normal user

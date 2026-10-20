@@ -30,6 +30,7 @@ static void startup_query_cb   (int timeout, void *arg);
 static void startup_query_timer(struct ifi *ifi);
 
 static void router_timeout_cb  (int timeout, void *arg);
+static void querier_start      (struct ifi *ifi);
 
 static void delete_group_cb    (int timeout, void *arg);
 static int  delete_group_timer (struct ifi *ifi, struct listaddr *g, int tmo);
@@ -211,8 +212,7 @@ void iface_check_election(struct ifi *ifi)
     ifi->ifi_flags |= IFIF_IGMP_QUERIER;
     dbg("Assuming %squerier duties on interface %s",
           is_igmp_proxy(ifi) ? "proxy " : "", ifi->ifi_name);
-    send_query(ifi, igmp_response_interval, NULL);
-    startup_query_timer(ifi);	/* RFC3376 §8.6, §8.7 startup query burst */
+    querier_start(ifi);
 }
 
 /*
@@ -411,12 +411,14 @@ static void stop_iface(struct ifi *ifi)
     struct listaddr *a, *tmp;
 
     /*
-     * Stop query timers (periodic and startup burst)
+     * Stop query timers (periodic, startup burst and topology hold-off)
      */
     if (ifi->ifi_startup_timerid > 0) {
 	pev_timer_del(ifi->ifi_startup_timerid);
 	ifi->ifi_startup_timerid = 0;
     }
+    ifi->ifi_topo_timerid = pev_timer_del(ifi->ifi_topo_timerid);
+    ifi->ifi_topo_pending = 0;
     if (ifi->ifi_timerid > 0)
         pev_timer_del(ifi->ifi_timerid);
     ifi->ifi_timerid = 0;
@@ -905,6 +907,78 @@ static void startup_query_timer(struct ifi *ifi)
 }
 
 /*
+ * Become querier: first general query and the RFC 3376 §8.6, §8.7
+ * startup query burst.
+ */
+static void querier_start(struct ifi *ifi)
+{
+    send_query(ifi, igmp_response_interval, NULL);
+    startup_query_timer(ifi);
+}
+
+static void topo_holdoff_cb(int timeout, void *arg);
+
+/*
+ * Topology query, then one second of hold-off so a flapping port
+ * gets one query per second.
+ */
+static void topo_query(struct ifi *ifi)
+{
+    ifi->ifi_topo_pending = 0;
+    querier_start(ifi);
+
+    if (ifi->ifi_topo_timerid > 0)
+	pev_timer_set(ifi->ifi_topo_timerid, 1000000);
+    else
+	ifi->ifi_topo_timerid = pev_timer_add(1000000, 0, topo_holdoff_cb, ifi);
+}
+
+static void topo_holdoff_cb(int timeout, void *arg)
+{
+    struct ifi *ifi = (struct ifi *)arg;
+
+    if (ifi->ifi_topo_pending && (ifi->ifi_flags & IFIF_IGMP_QUERIER))
+	topo_query(ifi);
+    else
+	ifi->ifi_topo_timerid = pev_timer_del(ifi->ifi_topo_timerid);
+}
+
+/*
+ * A port of the bridge started forwarding: link up, STP settled or
+ * port added.  Hosts behind it are not in the MDB until they answer
+ * a query, so send one now rather than at the next query interval,
+ * RFC 4541 section 2.1.1.  Our interface is the bridge itself or a
+ * vlan interface on top of it.
+ */
+void iface_topology_change(int bridge, int port)
+{
+    struct ifi *ifi;
+
+    if (!topology_query)
+	return;
+
+    TAILQ_FOREACH(ifi, &ifaces, ifi_link) {
+	char ifname[IFNAMSIZ];
+
+	if (ifi->ifi_index != bridge && ifi->ifi_lower != bridge)
+	    continue;
+	if (ifi->ifi_flags & (IFIF_DOWN | IFIF_DISABLED))
+	    continue;
+	if (!(ifi->ifi_flags & IFIF_IGMP_QUERIER))
+	    continue;
+
+	if (ifi->ifi_topo_timerid > 0) {
+	    ifi->ifi_topo_pending = 1;
+	    continue;
+	}
+
+	info("Port %s forwarding, sending query on %s",
+	     if_indextoname(port, ifname) ?: "?", ifi->ifi_name);
+	topo_query(ifi);
+    }
+}
+
+/*
  * When an active querier times out we assume the role here.
  */
 static void router_timeout_cb(int timeout, void *arg)
@@ -915,8 +989,7 @@ static void router_timeout_cb(int timeout, void *arg)
     querier_del(ifi);
 
     ifi->ifi_flags |= IFIF_IGMP_QUERIER;
-    send_query(ifi, igmp_response_interval, NULL);
-    startup_query_timer(ifi);	/* RFC3376 §8.6, §8.7 startup query burst */
+    querier_start(ifi);
 }
 
 /*

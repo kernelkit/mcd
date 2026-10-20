@@ -22,6 +22,7 @@ struct ifi {
     int		     ifi_vlan;	         /* Raw VLAN ID for send and accept   */
     char	     ifi_name[IFNAMSIZ]; /* interface name                    */
     int		     ifi_index;          /* Primarily for Linux systems       */
+    int		     ifi_lower;          /* Bridge below a vlan interface     */
     int		     ifi_family;         /* AF_INET or AF_INET6, one querier each */
     int		     ifi_compat;         /* Protocol generation, GEN_V1 .. GEN_V3 */
     inet_addr_t      ifi_inaddr;         /* Current address of this interface */
@@ -29,6 +30,8 @@ struct ifi {
     struct listaddr *ifi_querier;        /* IGMP querier (one or none)        */
     int		     ifi_timerid;	 /* IGMP query timer           	      */
     int		     ifi_startup_timerid;/* startup query burst timer         */
+    int		     ifi_topo_timerid;	 /* hold-off after a topology query   */
+    int		     ifi_topo_pending;	 /* port change during the hold-off   */
     int		     ifi_igmpv1_warn;    /* To rate-limit IGMPv1 warnings     */
     uint8_t	     ifi_hwaddr[6];	 /* MAC address of this interface     */
 };

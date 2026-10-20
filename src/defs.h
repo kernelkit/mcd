@@ -60,6 +60,7 @@ TAILQ_HEAD(ifaces, ifi);
  * External declarations for global variables and functions.
  */
 extern int		router_alert;
+extern int		topology_query;
 extern uint32_t		router_timeout;
 extern uint32_t		allhosts_group;
 extern uint32_t		allrtrs_group;
@@ -131,6 +132,7 @@ extern void             iface_add(int, int);
 extern void             iface_del(int, int);
 extern void             iface_check_election(struct ifi *);
 extern void             iface_check(int, unsigned int);
+extern void             iface_topology_change(int, int);
 extern void		iface_check_state(void);
 extern void		iface_exit(void);
 extern const char      *iface_proto(const struct ifi *);
@@ -144,6 +146,7 @@ extern void		accept_membership_query(struct ifi *, const inet_addr_t *, const in
 /* netlink.c */
 extern void             netlink_init(void);
 extern void             netlink_exit(void);
+extern int              netlink_link_lower(int);
 
 /* config.c */
 extern int              config_init(void);

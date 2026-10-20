@@ -51,6 +51,16 @@ Set it only to interoperate with devices that do not follow the RFC.
 IP Router Alert option in IGMP queries, on by default for stacks that
 hard-code the IP header length.  MLD queries always carry the IPv6
 Router Alert option.
+.It Cm topology-query on | off , no topology-query
+General query when a port of the bridge starts forwarding, on by
+default.  Link up, STP settling and a port added to the bridge all
+count.  Hosts behind the port are back in the MDB within the response
+interval instead of at the next periodic query, RFC 4541 \(sc2.1.1.
+Sent only while
+.Nm mcd
+is the querier, at most one per second per interface, followed by the
+startup burst.  Applies to the bridge itself and to VLAN interfaces on
+top of it.
 .It Cm include Ar PATH
 Read another file, or every file matching a
 .Xr glob 3

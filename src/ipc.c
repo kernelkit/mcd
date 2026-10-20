@@ -310,6 +310,7 @@ static int show_status(FILE *fp)
 		jprinti(fp, "robustness", igmp_robustness, &first);
 		jprinti(fp, "router-timeout", router_timeout, &first);
 		jprintb(fp, "router-alert", router_alert, &first);
+		jprintb(fp, "topology-query", topology_query, &first);
 
 		if (!nested) {
 			prefix -= 2;
@@ -325,8 +326,10 @@ static int show_status(FILE *fp)
 			fprintf(fp, "Robustness Value        : %d\n", igmp_robustness);
 		}
 		fprintf(fp, "Router Timeout          : %d\n", router_timeout);
-		if (detail)
+		if (detail) {
 			fprintf(fp, "Router Alert            : %s\n", ENABLED(router_alert));
+			fprintf(fp, "Topology Query          : %s\n", ENABLED(topology_query));
+		}
 	}
 
 	return 0;

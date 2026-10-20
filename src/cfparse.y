@@ -56,7 +56,7 @@ static void ifset(uint32_t set, uint32_t clr)
 
 %token GLOBAL_QUERY_INTERVAL GLOBAL_QUERY_LAST_MEMBER_INTERVAL GLOBAL_QUERY_RESPONSE_INTERVAL
 %token QUERY_INTERVAL
-%token IGMP_ROBUSTNESS ROUTER_TIMEOUT ROUTER_ALERT INCLUDE
+%token IGMP_ROBUSTNESS ROUTER_TIMEOUT ROUTER_ALERT TOPOLOGY_QUERY INCLUDE
 %token NO PHYINT
 %token DISABLE ENABLE IGMPV1 IGMPV2 IGMPV3 STATIC_GROUP PROXY_QUERIER
 %token MLDV1 MLDV2 IGMP MLD
@@ -116,6 +116,14 @@ stmt	: error
 	| ROUTER_ALERT BOOLEAN
 	{
 	    router_alert = $2;
+	}
+	| NO TOPOLOGY_QUERY
+	{
+	    topology_query = 0;
+	}
+	| TOPOLOGY_QUERY BOOLEAN
+	{
+	    topology_query = $2;
 	}
 	| ROUTER_TIMEOUT NUMBER
 	{
@@ -295,6 +303,7 @@ static struct keyword {
 	{ "disable",		DISABLE, 0 },
 	{ "enable",		ENABLE, 0 },
 	{ "router-alert",	ROUTER_ALERT, 0 },
+	{ "topology-query",	TOPOLOGY_QUERY, 0 },
 	{ "igmpv1",		IGMPV1, 0 },
 	{ "igmpv2",		IGMPV2, 0 },
 	{ "igmpv3",		IGMPV3, 0 },

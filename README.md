@@ -71,6 +71,11 @@ Features
   `robustness` queries spaced `query-interval / 4` apart, per RFC 3376
   §8.6 and §8.7.  A host that missed the first query gets another one
   within half a minute instead of waiting a full query interval.
+- Topology query.  When a bridge port starts forwarding, after link
+  up, STP settling or being added to the bridge, `mcd` sends a general
+  query at once, per RFC 4541 §2.1.1.  Hosts behind the port are back
+  in the MDB within the response interval instead of at the next
+  periodic query, up to two minutes later with the defaults.
 - Version fallback.  Starts at IGMPv3 and MLDv2, drops to the older
   versions when such hosts appear, and returns when they go quiet.
 - Proxy mode, a backup querier that sends from `0.0.0.0` or `::` and can
