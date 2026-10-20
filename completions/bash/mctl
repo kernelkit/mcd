@@ -1,0 +1,36 @@
+# bash completion for mctl(8)
+#
+# The commands come from the running mcd, via mctl -C, so there is
+# nothing to complete when it is down, apart from the options.
+
+_mctl()
+{
+    local cur=${COMP_WORDS[COMP_CWORD]}
+    local prev=${COMP_WORDS[COMP_CWORD-1]}
+    local word
+
+    case $prev in
+	-u|--ipc)
+	    COMPREPLY=($(compgen -f -- "$cur"))
+	    return
+	    ;;
+	-i|--ident)
+	    return
+	    ;;
+    esac
+
+    if [[ $cur == -* ]]; then
+	COMPREPLY=($(compgen -W '-h --help -i --ident -m --monitor -p --plain
+				 -t --no-heading -u --ipc -v --version' -- "$cur"))
+	return
+    fi
+
+    # All words so far, options included, so -i NAME and -u FILE reach
+    # the same daemon the command will.  The last word is the partial.
+    COMPREPLY=()
+    while IFS=$'\t' read -r word _; do
+	COMPREPLY+=("$word")
+    done < <(mctl -C "${COMP_WORDS[@]:1:COMP_CWORD}" 2>/dev/null)
+}
+
+complete -F _mctl mctl

@@ -268,6 +268,7 @@ Options worth knowing:
 |------------------------|------------------------------------------------------------|
 | `--with-group=NAME`    | Group owner of `/run/mcd.sock`, default `root`.  Use e.g. `wheel` to let admins run `mctl` without `sudo` |
 | `--enable-test`        | Build the test suite, see [Testing](#testing)              |
+| `--with-bash-completion-dir=DIR`, `--with-zsh-completion-dir=DIR` | Where to install the `mctl` completion scripts, default under `DATADIR`, `no` to skip |
 | `--prefix=`, `--sysconfdir=` | The usual, defaults are `/usr/local` and `/etc`      |
 
 Configure prints a summary at the end, check it before running `make`.

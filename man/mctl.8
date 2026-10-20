@@ -12,6 +12,8 @@
 .Op Fl i Ar NAME
 .Op Fl u Ar FILE
 .Op Ar COMMAND
+.Nm
+.Fl C Ar WORD...
 .Sh DESCRIPTION
 .Nm
 queries a running
@@ -54,9 +56,22 @@ IPC socket, default derived from the identity.  Also settable with the
 environment variable.
 .It Fl v , -version
 Show version and exit.
+.It Fl C , -complete Ar WORD...
+Used by the shell completion scripts.  Prints the candidates for the
+last word, which may be partial, from the running daemon's command
+list, one per line.  Prints nothing when no daemon is running.
 .El
 .Pp
 Output width follows the terminal.
+.Pp
+Completion scripts for
+.Xr bash 1
+and
+.Xr zsh 1
+are installed with
+.Nm .
+The commands come from the running daemon, so they are not completed
+while it is down.
 .Sh COMMANDS
 Commands can be abbreviated, e.g.\&
 .Cm s i

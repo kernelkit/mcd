@@ -10,6 +10,10 @@ All relevant, user visible, changes are documented in this file.
  - New `mcd -t` option to check a configuration file and exit, like
    `nginx -t`.  Errors are reported as `FILE:LINE: message`, and it
    runs as a normal user
+ - Shell completion for `mctl`, bash and zsh.  The commands come from
+   the running daemon, via the new `mctl -C` option.  Installed with
+   `make install`, see `--with-bash-completion-dir` and
+   `--with-zsh-completion-dir`
 
 ### Fixes
  - Fix `mctl show router-ports` and `show igmp json` missing the router

@@ -1,10 +1,19 @@
 doc_DATA         = README.md ChangeLog.md LICENSE mcd.conf
 EXTRA_DIST       = README.md ChangeLog.md LICENSE mcd.conf doc/overview.svg doc/querier-timeline.svg doc/why.svg
+EXTRA_DIST      += completions/bash/mctl completions/zsh/_mctl
 DISTCLEANFILES   = *~ DEADJOE semantic.cache *.gdb *.elf core core.* *.d
 SUBDIRS          = man src
 
 if ENABLE_TEST
 SUBDIRS         += test
+endif
+
+if BASHCOMP
+bashcomp_DATA    = completions/bash/mctl
+endif
+
+if ZSHCOMP
+zshcomp_DATA     = completions/zsh/_mctl
 endif
 
 ## Check if tagged in git

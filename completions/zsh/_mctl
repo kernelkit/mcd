@@ -1,0 +1,34 @@
+#compdef mctl
+#
+# zsh completion for mctl(8).  The commands come from the running
+# mcd, via mctl -C, with their descriptions.
+
+_mctl() {
+    # The line as typed, _arguments rewrites $words for the command
+    local -a typed=("${words[@]}") cands
+    local cur=$CURRENT line
+
+    _arguments -s \
+	'(-h --help)'{-h,--help}'[Show usage and the available commands]' \
+	'(-i --ident)'{-i,--ident}'[Talk to the mcd started with this identity]:name' \
+	'(-m --monitor)'{-m,--monitor}'[Run the command every two seconds]' \
+	'(-p --plain)'{-p,--plain}'[Plain table headings]' \
+	'(-t --no-heading)'{-t,--no-heading}'[Skip table headings]' \
+	'(-u --ipc)'{-u,--ipc}'[IPC socket]:file:_files' \
+	'(-v --version)'{-v,--version}'[Show version and exit]' \
+	'*::command:->command' && return
+
+    case $state in
+	command)
+	    # All words so far, options included, so -i NAME and -u FILE
+	    # reach the same daemon the command will.  word<TAB>desc
+	    # becomes word:desc for _describe
+	    for line in ${(f)"$(mctl -C "${typed[@]:1:cur-1}" 2>/dev/null)"}; do
+		cands+=("${line/$'\t'/:}")
+	    done
+	    _describe -t commands 'mctl command' cands
+	    ;;
+    esac
+}
+
+_mctl "$@"
