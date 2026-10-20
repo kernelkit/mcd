@@ -227,7 +227,8 @@ arguments for an overview:
     br0               2  239.1.1.1             eth3
 
 The parts are also available on their own, as `show interfaces`,
-`show groups`, `show router-ports` and `show mdb`.  Add `json` to any
+`show groups`, `show router-ports` and `show mdb`.  `show routers`
+lists the multicast routers heard through MRD.  Add `json` to any
 `show` command for machine readable output, and `-m` to keep it
 updating like `watch(1)`.  All commands and options are in
 [mctl(8)][].

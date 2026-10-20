@@ -145,12 +145,88 @@ void mrd_stop(struct ifi *ifi)
     ifi->ifi_mrd_pending = 0;
 }
 
+static void router_del(struct ifi *ifi, struct mrd_router *r)
+{
+    TAILQ_REMOVE(&ifi->ifi_mrd_routers, r, link);
+    free(r);
+}
+
+/* Forget the routers heard, the interface stops */
+void mrd_flush(struct ifi *ifi)
+{
+    struct mrd_router *r;
+
+    while ((r = TAILQ_FIRST(&ifi->ifi_mrd_routers)))
+	router_del(ifi, r);
+}
+
+/*
+ * Add or refresh a router from its advertisement.  One pass drops the
+ * ones not heard from in time, finds this one and counts the rest.
+ * It is dead after 3 * (interval + 2.5 % jitter), RFC 4286 section 3.5.
+ */
+static void router_seen(struct ifi *ifi, const inet_addr_t *src, const void *buf, size_t len)
+{
+    const struct mrd_msg *m = buf;
+    struct mrd_router *r, *tmp, *found = NULL;
+    time_t now = time(NULL);
+    int n = 0, dead;
+
+    if (len < sizeof(*m) || !m->interval)
+	return;
+
+    TAILQ_FOREACH_SAFE(r, &ifi->ifi_mrd_routers, link, tmp) {
+	if (r->expires <= now) {
+	    dbg("MRD router %s on %s timed out", inet_addr_fmt(&r->addr, s2, sizeof(s2)), ifi->ifi_name);
+	    router_del(ifi, r);
+	} else if (!inet_addr_cmp(&r->addr, src))
+	    found = r;
+	else
+	    n++;
+    }
+
+    r = found;
+    if (!r) {
+	if (n >= MRD_MAX_ROUTERS)
+	    return;
+
+	r = calloc(1, sizeof(*r));
+	if (!r)
+	    return;
+
+	r->addr = *src;
+	TAILQ_INSERT_TAIL(&ifi->ifi_mrd_routers, r, link);
+	info("MRD router %s on %s", s1, ifi->ifi_name);
+    }
+
+    dead = 3 * m->interval;
+    r->interval = m->interval;
+    r->qqi      = ntohs(m->qqi);
+    r->qrv      = ntohs(m->qrv);
+    r->expires  = now + dead + (dead + 39) / 40;
+}
+
+static void router_gone(struct ifi *ifi, const inet_addr_t *src)
+{
+    struct mrd_router *r;
+
+    TAILQ_FOREACH(r, &ifi->ifi_mrd_routers, link) {
+	if (inet_addr_cmp(&r->addr, src))
+	    continue;
+
+	info("MRD router %s on %s terminated", s1, ifi->ifi_name);
+	router_del(ifi, r);
+	return;
+    }
+}
+
 /*
  * Checksum and length are already validated, s1 holds the source.  A
  * solicitation is answered within MaxResponseDelay, unless an
  * advertisement is already on its way, RFC 4286 section 3.4.
  */
-void mrd_accept(struct ifi *ifi, int msg, const inet_addr_t *src, const inet_addr_t *dst)
+void mrd_accept(struct ifi *ifi, int msg, const inet_addr_t *src, const inet_addr_t *dst,
+		const void *buf, size_t len)
 {
     inet_addr_t expect;
 
@@ -164,17 +240,26 @@ void mrd_accept(struct ifi *ifi, int msg, const inet_addr_t *src, const inet_add
     if (inet_addr_cmp(dst, &expect))
 	return;
 
-    if (msg != MRD_SOLICIT) {
-	dbg("MRD %s from router %s on %s", mrd_msg_name[msg], s1, ifi->ifi_name);
-	return;
+    switch (msg) {
+    case MRD_ADVERT:
+	if (!inet_addr_cmp(src, &ifi->ifi_inaddr))
+	    return;		/* our own */
+	router_seen(ifi, src, buf, len);
+	break;
+
+    case MRD_TERM:
+	router_gone(ifi, src);
+	break;
+
+    case MRD_SOLICIT:
+	if (ifi->ifi_mrd_timerid <= 0 || ifi->ifi_mrd_pending)
+	    return;
+
+	dbg("MRD solicitation from %s on %s, advertising", s1, ifi->ifi_name);
+	ifi->ifi_mrd_pending = 1;
+	pev_timer_set(ifi->ifi_mrd_timerid, jitter(1, MRD_MAX_RESPONSE_DELAY * 1000000));
+	break;
     }
-
-    if (ifi->ifi_mrd_timerid <= 0 || ifi->ifi_mrd_pending)
-	return;
-
-    dbg("MRD solicitation from %s on %s, advertising", s1, ifi->ifi_name);
-    ifi->ifi_mrd_pending = 1;
-    pev_timer_set(ifi->ifi_mrd_timerid, jitter(1, MRD_MAX_RESPONSE_DELAY * 1000000));
 }
 
 /**

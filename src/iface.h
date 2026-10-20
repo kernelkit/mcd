@@ -17,6 +17,7 @@ struct ifi {
     TAILQ_HEAD(,listaddr) ifi_static;    /* list of static groups (phyints)   */
     TAILQ_HEAD(,listaddr) ifi_groups;    /* list of local groups  (phyints)   */
     TAILQ_HEAD(,phaddr) ifi_addrs;	 /* Secondary addresses               */
+    TAILQ_HEAD(,mrd_router) ifi_mrd_routers; /* MRD routers heard     */
     struct sock     *ifi_sock;		 /* Packet socket, shared per family  */
     uint32_t	     ifi_flags;	         /* IFIF_ flags defined below         */
     int		     ifi_vlan;	         /* Raw VLAN ID for send and accept   */
@@ -73,6 +74,16 @@ struct listaddr {
 };
 
 #define	NBRF_STATIC_GROUP	0x4000	/* Static group entry		    */
+
+/* A multicast router heard on the LAN, RFC 4286 */
+struct mrd_router {
+    TAILQ_ENTRY(mrd_router) link;
+    inet_addr_t      addr;
+    time_t	     expires;		/* NeighborDeadInterval from last   */
+    int		     interval;		/* its advertisement interval, sec  */
+    int		     qqi;		/* its query interval, sec          */
+    int		     qrv;		/* its robustness variable          */
+};
 
 #endif /* MCD_IFACE_H_ */
 

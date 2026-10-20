@@ -159,7 +159,7 @@ void accept_mld(struct ifi *ifi, int vid, uint8_t *buf, size_t len)
 	inet_addr_t dst;
 
 	inet_addr_set6(&dst, &ip6->ip6_dst);
-	mrd_accept(ifi, msg, &src, &dst);
+	mrd_accept(ifi, msg, &src, &dst, mld, plen);
 	return;
     }
 

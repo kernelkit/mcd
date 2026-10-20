@@ -102,7 +102,7 @@ void accept_igmp(struct ifi *ifi, int vid, uint8_t *buf, size_t len)
 	inet_addr_t dst;
 
 	inet_addr_set4(&dst, ip->ip_dst.s_addr);
-	mrd_accept(ifi, msg, &src, &dst);
+	mrd_accept(ifi, msg, &src, &dst, igmp, ipdatalen);
 	return;
     }
 

@@ -83,6 +83,7 @@ void iface_lists_init(struct ifi *ifi)
     TAILQ_INIT(&ifi->ifi_static);
     TAILQ_INIT(&ifi->ifi_groups);
     TAILQ_INIT(&ifi->ifi_addrs);
+    TAILQ_INIT(&ifi->ifi_mrd_routers);
 }
 
 void iface_zero(struct ifi *ifi)
@@ -434,6 +435,7 @@ static void stop_iface(struct ifi *ifi)
     TAILQ_FOREACH_SAFE(a, &ifi->ifi_groups, al_link, tmp)
 	group_del(ifi, a);
     querier_del(ifi);
+    mrd_flush(ifi);
 
     dbg("Releasing querier duties on interface %s", ifi->ifi_name);
     ifi->ifi_flags &= ~IFIF_IGMP_QUERIER;

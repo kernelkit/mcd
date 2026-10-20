@@ -49,6 +49,7 @@ enum {
 	IPC_STATUS,
 	IPC_MDB,
 	IPC_ROUTER_PORTS,
+	IPC_MRD_ROUTERS,
 };
 
 struct ipcmd {
@@ -63,6 +64,7 @@ struct ipcmd {
 	{ IPC_IGMP_GRP,     "show groups", "[json]", "Show IGMP/MLD group memberships" },
 	{ IPC_IGMP_IFACE,   "show interfaces", "[json]", "Show IGMP/MLD interface status" },
 	{ IPC_ROUTER_PORTS, "show router-ports", "[json]", "Show multicast router ports per bridge" },
+	{ IPC_MRD_ROUTERS,  "show routers", "[json]", "Show multicast routers heard, RFC 4286" },
 	{ IPC_STATUS,       "show status", "[json]", "Show daemon status (default)" },
 	{ IPC_IGMP,         "show igmp", "[json]", "Show interfaces and group memberships" },
 	{ IPC_MDB,          "show mdb", NULL, "Show multicast forwarding database" },
@@ -422,6 +424,64 @@ static int show_igmp_ifaces(FILE *fp)
 	return show_igmp_iface(fp, AF_UNSPEC);
 }
 
+static int show_mrd_routers(FILE *fp)
+{
+	time_t now = time(NULL);
+	struct ifi *ifi;
+	int first = 1;
+
+	if (json) {
+		fprintf(fp, "[\n");
+		prefix += 2;
+	} else
+		fprintf(fp, "%-15s%4s  %-5s  %-27s  %8s  %5s  %3s  %7s=\n", "Interface", "VID",
+			"Proto", "Router", "Interval", "Query", "QRV", "Expires");
+
+	for (ifi = config_iface_iter(1); ifi; ifi = config_iface_iter(0)) {
+		struct mrd_router *r;
+
+		TAILQ_FOREACH(r, &ifi->ifi_mrd_routers, link) {
+			int expires = (int)(r->expires - now);
+
+			if (expires <= 0)
+				continue;
+			inet_addr_fmt(&r->addr, s1, sizeof(s1));
+			if (json) {
+				int once = 1;
+
+				fprintf(fp, "%s%*s{\n", first ? "" : ",\n", prefix, "");
+				prefix += 2;
+				jprint(fp, "interface", ifi->ifi_name, &once);
+				jprint(fp, "family", ifi->ifi_family == AF_INET6 ? "ipv6" : "ipv4", &once);
+				if (ifi->ifi_vlan)
+					jprinti(fp, "vid", ifi->ifi_vlan, &once);
+				jprint(fp, "router", s1, &once);
+				jprinti(fp, "interval", r->interval, &once);
+				jprinti(fp, "query-interval", r->qqi, &once);
+				jprinti(fp, "robustness", r->qrv, &once);
+				jprinti(fp, "expires", expires, &once);
+				prefix -= 2;
+				fprintf(fp, "\n%*s}", prefix, "");
+			} else {
+				char vlan[5] = { 0 };
+
+				if (ifi->ifi_vlan)
+					snprintf(vlan, sizeof(vlan), "%4d", ifi->ifi_vlan);
+				fprintf(fp, "%-15s%4s  %-5s  %-27s  %8d  %5d  %3d  %7d\n", ifi->ifi_name,
+					vlan, iface_proto(ifi), s1, r->interval, r->qqi, r->qrv, expires);
+			}
+			first = 0;
+		}
+	}
+
+	if (json) {
+		prefix -= 2;
+		fprintf(fp, "\n%*s]", prefix, "");
+	}
+
+	return 0;
+}
+
 static int show_igmp(FILE *fp)
 {
 	int rc = 0;
@@ -667,6 +727,10 @@ static void ipc_handle(int sd, void *arg)
 
 	case IPC_ROUTER_PORTS:
 		ipc_show(client, show_router_ports, cmd, sizeof(cmd));
+		break;
+
+	case IPC_MRD_ROUTERS:
+		ipc_show(client, show_mrd_routers, cmd, sizeof(cmd));
 		break;
 
 	case IPC_COMPAT:

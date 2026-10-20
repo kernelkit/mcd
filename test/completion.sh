@@ -66,7 +66,7 @@ done <<EOF
 first word|''|check help show version
 no word at all||check help show version
 partial first word|sh|show
-after show, json is the hidden show's option|show ''|compat groups igmp interfaces json mdb router-ports status
+after show, json is the hidden show's option|show ''|compat groups igmp interfaces json mdb router-ports routers status
 partial second word|show i|igmp interfaces
 option of a command|show igmp ''|json
 partial option|show router-ports j|json
@@ -91,7 +91,7 @@ while IFS='|' read -r desc words expect; do
 done <<EOF
 first word|''|check help show version
 partial first word|sh|show
-after show|show ''|compat groups igmp interfaces json mdb router-ports status
+after show|show ''|compat groups igmp interfaces json mdb router-ports routers status
 option of a command|show igmp ''|json
 options|-|--help --ident --ipc --monitor --no-heading --plain --version -h -i -m -p -t -u -v
 long options|--|--help --ident --ipc --monitor --no-heading --plain --version

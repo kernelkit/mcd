@@ -14,10 +14,13 @@ enum { MRD_ADVERT, MRD_SOLICIT, MRD_TERM };
 #define MRD_MAX_INITIAL_INTERVAL 2	/* MaxInitialAdvertisementInterval   */
 #define MRD_MAX_INITIAL_ADVERTS	3	/* MaxInitialAdvertisements          */
 #define MRD_MAX_RESPONSE_DELAY	2	/* Reply to a solicitation within    */
+#define MRD_MAX_ROUTERS		32	/* Routers kept per interface        */
 
 extern int		mrd_msg(const struct ifi *, int);
 extern void		mrd_start(struct ifi *);
 extern void		mrd_stop(struct ifi *);
-extern void		mrd_accept(struct ifi *, int, const inet_addr_t *, const inet_addr_t *);
+extern void		mrd_flush(struct ifi *);
+extern void		mrd_accept(struct ifi *, int, const inet_addr_t *, const inet_addr_t *,
+				   const void *, size_t);
 
 #endif /* MCD_MRD_H_ */

@@ -99,6 +99,14 @@ state, query interval, querier timeout and protocol version.
 IGMP and MLD group memberships, as seen by the bridge.
 .It Cm show router-ports Op Cm json
 Multicast router ports, grouped per bridge.
+.It Cm show routers Op Cm json
+Multicast routers heard through Multicast Router Discovery, RFC 4286,
+per interface and protocol: address, advertisement interval, query
+interval, robustness and seconds until the entry expires.  An entry
+goes when its router sends a termination, or after three advertisement
+intervals of silence.  Routers are heard whether or not
+.Cm mrd
+is on for the interface.
 .It Cm show mdb
 The bridge multicast forwarding database, as
 .Ql bridge mdb show

@@ -18,7 +18,8 @@ All relevant, user visible, changes are documented in this file.
    snooping switches on the LAN, answers their solicitations, and sends
    a termination on the way down.  Off by default.  `mrd-interval`
    sets the advertisement interval.  `mctl show interfaces` has a new
-   MRD column
+   MRD column, and `mctl show routers` lists the multicast routers
+   heard on each interface, with their advertised intervals
  - New `mcd -t` option to check a configuration file and exit, like
    `nginx -t`.  Errors are reported as `FILE:LINE: message`, and it
    runs as a normal user
