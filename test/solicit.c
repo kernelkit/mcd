@@ -1,7 +1,8 @@
 /* SPDX-License-Identifier: ISC */
 /*
  * Send one Multicast Router Solicitation, RFC 4286, on an interface.
- * From https://github.com/troglobit/mrdisc, for the test suite.
+ * From https://github.com/troglobit/mrdisc, for the test suite.  The
+ * 4 byte message is sent at header size, see struct mrd_msg in mrd.c.
  *
  *   solicit [-4|-6] IFNAME
  */
@@ -68,7 +69,7 @@ static int solicit4(const char *ifname)
 	igmp.igmp_cksum = in_cksum((uint16_t *)&igmp, sizeof(igmp) / 2);
 
 	dest.sin_addr.s_addr = inet_addr(MC_ALL_ROUTERS);
-	if (sendto(sd, &igmp, 4, 0, (struct sockaddr *)&dest, sizeof(dest)) < 0)
+	if (sendto(sd, &igmp, sizeof(igmp), 0, (struct sockaddr *)&dest, sizeof(dest)) < 0)
 		err(1, "Cannot send IGMP solicitation");
 
 	return close(sd);
@@ -96,7 +97,7 @@ static int solicit6(const char *ifname)
 	icmp6.icmp6_type = ICMP6_MRD_SOLICIT;	/* checksum by the kernel */
 
 	inet_pton(AF_INET6, MC6_ALL_ROUTERS, &dest.sin6_addr);
-	if (sendto(sd, &icmp6, 4, 0, (struct sockaddr *)&dest, sizeof(dest)) < 0)
+	if (sendto(sd, &icmp6, sizeof(icmp6), 0, (struct sockaddr *)&dest, sizeof(dest)) < 0)
 		err(1, "Cannot send ICMPv6 solicitation");
 
 	return close(sd);

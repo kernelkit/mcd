@@ -10,7 +10,11 @@
 #include "mld.h"
 #include "mrd.h"
 
-/* Advertisement, a solicitation or termination is the first 4 bytes */
+/*
+ * Advertisement.  A solicitation or termination is the first 4 bytes
+ * but sent at this size, the Linux bridge drops IGMP shorter than its
+ * 8 byte header.
+ */
 struct mrd_msg {
     uint8_t  type;
     uint8_t  interval;		/* AdvertisementInterval, sec            */
@@ -46,7 +50,6 @@ int mrd_msg(const struct ifi *ifi, int type)
 
 static void send_mrd(const struct ifi *ifi, int msg)
 {
-    size_t mlen = msg == MRD_ADVERT ? sizeof(struct mrd_msg) : 4;
     uint8_t dmac[ETH_ALEN] = { 0x33, 0x33 };
     struct mrd_msg body = { 0 }, *m;
     inet_addr_t dst;
@@ -69,9 +72,9 @@ static void send_mrd(const struct ifi *ifi, int msg)
 	inet_addr_set6(&dst, &mrd6_allsnoopers);
 	memcpy(&dmac[2], &mrd6_allsnoopers.s6_addr[12], 4);
 	len  = build_ether(send_buf, ifi, dmac, ETH_P_IPV6);
-	len += build_ipv6(send_buf + len, src, &mrd6_allsnoopers, mlen);
-	m = memcpy(send_buf + len, &body, mlen);
-	m->csum = icmp6_cksum(src, &mrd6_allsnoopers, m, mlen);
+	len += build_ipv6(send_buf + len, src, &mrd6_allsnoopers, sizeof(body));
+	m = memcpy(send_buf + len, &body, sizeof(body));
+	m->csum = icmp6_cksum(src, &mrd6_allsnoopers, m, sizeof(body));
     } else {
 	uint32_t src = inet_addr_get4(&ifi->ifi_inaddr);
 	uint32_t grp = htonl(INADDR_ALLSNOOPERS_GROUP);
@@ -79,11 +82,11 @@ static void send_mrd(const struct ifi *ifi, int msg)
 	inet_addr_set4(&dst, grp);
 	ETHER_MAP_IP_MULTICAST(&grp, dmac);
 	len  = build_ether(send_buf, ifi, dmac, ETH_P_IP);
-	len += build_ipv4(send_buf + len, src, grp, mlen);
-	m = memcpy(send_buf + len, &body, mlen);
-	m->csum = inet_cksum((uint16_t *)m, mlen);
+	len += build_ipv4(send_buf + len, src, grp, sizeof(body));
+	m = memcpy(send_buf + len, &body, sizeof(body));
+	m->csum = inet_cksum((uint16_t *)m, sizeof(body));
     }
-    len += mlen;
+    len += sizeof(body);
 
     inet_addr_fmt(&ifi->ifi_inaddr, s1, sizeof(s1));
     inet_addr_fmt(&dst, s2, sizeof(s2));

@@ -1,4 +1,4 @@
-EXTRA_DIST         = lib.sh config-check.sh completion.sh topology.sh mrd.sh basic.sh sleepy.sh two.sh ipc.sh ipc-errors.sh ipc-disconnect.sh router-timeout.sh late.sh router-ports.sh static-group.sh mld.sh bridge-names.sh mctl-help.sh
+EXTRA_DIST         = lib.sh config-check.sh completion.sh topology.sh mrd.sh mrd-bridge.sh basic.sh sleepy.sh two.sh ipc.sh ipc-errors.sh ipc-disconnect.sh router-timeout.sh late.sh router-ports.sh static-group.sh mld.sh bridge-names.sh mctl-help.sh
 CLEANFILES         = *~ *.trs *.log
 
 TEST_EXTENSIONS    = .sh
@@ -24,3 +24,4 @@ TESTS             += mctl-help.sh
 TESTS             += completion.sh
 TESTS             += topology.sh
 TESTS             += mrd.sh
+TESTS             += mrd-bridge.sh
