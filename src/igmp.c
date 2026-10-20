@@ -13,6 +13,7 @@
  */
 int             router_alert;		     /* IP option Router Alert      */
 int             topology_query;		     /* Query when a port comes up  */
+int             mrd_interval;		     /* MRD advertisement interval  */
 uint32_t        router_timeout;		     /* Other querier present intv. */
 uint32_t	igmp_query_interval;	     /* Default: 125 sec            */
 uint32_t	igmp_response_interval;	     /* Default: 10 sec             */
@@ -35,6 +36,7 @@ void igmp_init(void)
     router_timeout            = 0; /* unset, see config_init() */
     router_alert              = 1;
     topology_query            = 1;
+    mrd_interval              = MRD_ADV_INTERVAL;
 }
 
 static const char *igmp_packet_kind(uint8_t type)

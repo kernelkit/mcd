@@ -34,6 +34,7 @@ static int jitter(int base, int spread)
     return base + rand() % spread;
 }
 
+
 /* The first MRD type of the family, the messages follow in order */
 static int mrd_base(const struct ifi *ifi)
 {
@@ -61,7 +62,7 @@ static void send_mrd(const struct ifi *ifi, int msg)
 
     body.type = mrd_base(ifi) + msg;
     if (msg == MRD_ADVERT) {
-	body.interval = MRD_ADV_INTERVAL;
+	body.interval = mrd_interval;
 	body.qqi = htons(ifi->ifi_query_interval);
 	body.qrv = htons(ifi->ifi_compat == GEN_V1 ? 0 : igmp_robustness);
     }
@@ -115,7 +116,7 @@ static void mrd_advert_cb(int timeout, void *arg)
     if (++ifi->ifi_mrd_init < MRD_MAX_INITIAL_ADVERTS)
 	next = jitter(1, MRD_MAX_INITIAL_INTERVAL * 1000000);
     else
-	next = jitter(MRD_ADV_INTERVAL * 1000000 - MRD_ADV_JITTER, 2 * MRD_ADV_JITTER);
+	next = jitter(mrd_interval * 1000000 - MRD_ADV_JITTER, 2 * MRD_ADV_JITTER);
 
     pev_timer_set(ifi->ifi_mrd_timerid, next);
 }

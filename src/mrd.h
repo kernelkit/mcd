@@ -10,7 +10,7 @@
 enum { MRD_ADVERT, MRD_SOLICIT, MRD_TERM };
 
 #define MRD_ADV_INTERVAL	20	/* AdvertisementInterval, sec        */
-#define MRD_ADV_JITTER		(MRD_ADV_INTERVAL * 25000) /* 2.5 %, us  */
+#define MRD_ADV_JITTER		(mrd_interval * 25000)	/* 2.5 %, us */
 #define MRD_MAX_INITIAL_INTERVAL 2	/* MaxInitialAdvertisementInterval   */
 #define MRD_MAX_INITIAL_ADVERTS	3	/* MaxInitialAdvertisements          */
 #define MRD_MAX_RESPONSE_DELAY	2	/* Reply to a solicitation within    */

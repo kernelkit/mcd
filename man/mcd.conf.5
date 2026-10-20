@@ -61,6 +61,11 @@ Sent only while
 is the querier, at most one per second per interface, followed by the
 startup burst.  Applies to the bridge itself and to VLAN interfaces on
 top of it.
+.It Cm mrd-interval Ar SEC
+Multicast Router Discovery advertisement interval, 4 to 180, default
+20.  For interfaces with
+.Cm mrd on ,
+see below.
 .It Cm include Ar PATH
 Read another file, or every file matching a
 .Xr glob 3
@@ -101,7 +106,9 @@ as a multicast router to the snooping switches on the LAN, so they
 forward membership reports, and all multicast, towards it.  For
 switches that learn their router ports from MRD rather than from
 queries.  Three advertisements go out shortly after the interface comes
-up, then one every 20 seconds, and one in answer to a solicitation.  A
+up, then one every
+.Cm mrd-interval
+seconds, and one in answer to a solicitation.  A
 termination is sent when the interface goes down or
 .Nm mcd
 exits.  An interface in proxy mode has no address to advertise and

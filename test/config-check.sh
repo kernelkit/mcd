@@ -40,6 +40,8 @@ globals|global-query-interval 10;robustness 3;iface eth0 enable|0|is ok
 interface not in the system is only a warning|iface nosuch0 enable|0|is ok
 include with no match|include /tmp/$NM/nosuch/*.conf;iface eth0 enable|0|is ok
 bad value, on line 2|# comment;global-query-interval 0|65|$CONF:2:
+mrd interval|mrd-interval 4;iface eth0 enable|0|is ok
+mrd interval out of range|mrd-interval 3|65|$CONF:1:
 unknown keyword|bogus 1|65|$CONF:1:
 vlan out of range|iface eth0 vlan 5000 enable|65|$CONF:1:
 missing file|MISSING|66|cannot open

@@ -16,8 +16,9 @@ All relevant, user visible, changes are documented in this file.
  - Multicast Router Discovery, RFC 4286, IGMP and MLD.  New `iface`
    keyword `mrd on` advertises `mcd` as a multicast router to the
    snooping switches on the LAN, answers their solicitations, and sends
-   a termination on the way down.  Off by default.  `mctl show
-   interfaces` has a new MRD column
+   a termination on the way down.  Off by default.  `mrd-interval`
+   sets the advertisement interval.  `mctl show interfaces` has a new
+   MRD column
  - New `mcd -t` option to check a configuration file and exit, like
    `nginx -t`.  Errors are reported as `FILE:LINE: message`, and it
    runs as a normal user

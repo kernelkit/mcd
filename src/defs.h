@@ -61,6 +61,7 @@ TAILQ_HEAD(ifaces, ifi);
  */
 extern int		router_alert;
 extern int		topology_query;
+extern int		mrd_interval;
 extern uint32_t		router_timeout;
 extern uint32_t		allhosts_group;
 extern uint32_t		allrtrs_group;

@@ -311,6 +311,7 @@ static int show_status(FILE *fp)
 		jprinti(fp, "router-timeout", router_timeout, &first);
 		jprintb(fp, "router-alert", router_alert, &first);
 		jprintb(fp, "topology-query", topology_query, &first);
+		jprinti(fp, "mrd-interval", mrd_interval, &first);
 
 		if (!nested) {
 			prefix -= 2;
@@ -329,6 +330,7 @@ static int show_status(FILE *fp)
 		if (detail) {
 			fprintf(fp, "Router Alert            : %s\n", ENABLED(router_alert));
 			fprintf(fp, "Topology Query          : %s\n", ENABLED(topology_query));
+			fprintf(fp, "MRD Interval            : %d\n", mrd_interval);
 		}
 	}
 
