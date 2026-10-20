@@ -146,7 +146,7 @@ extern void             netlink_init(void);
 extern void             netlink_exit(void);
 
 /* config.c */
-extern void             config_init(void);
+extern int              config_init(void);
 extern void		config_set_ifflag(uint32_t);
 extern struct ifi      *config_iface_iter(int);
 extern struct ifi      *config_iface_add(char *);

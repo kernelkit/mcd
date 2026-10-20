@@ -375,22 +375,27 @@ static int yylex(void)
     return STRING;
 }
 
-void config_init(void)
+int config_init(void)
 {
     TAILQ_INIT(&scrap.ifi_static);
     TAILQ_INIT(&scrap.ifi_groups);
 
     lineno = 0;
 
-    dbg("Parsing file %s ...", config_file);
-    if (config_parse(config_file) && errno != ENOENT) {
+    if (config_parse(config_file)) {
+	int rc = errno;
+
 	err("cannot open %s", config_file);
-	exit(EX_DATAERR);
+	if (rc != ENOENT)
+	    exit(EX_DATAERR);
+	return -1;	/* may be created later, wait for SIGHUP */
     }
 
     /* Unless set, follows the intervals and robustness just read */
     if (!router_timeout)
 	router_timeout = IGMP_OTHER_QUERIER_PRESENT_INTERVAL;
+
+    return 0;
 }
 
 int config_parse(const char *file)

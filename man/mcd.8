@@ -7,7 +7,7 @@
 .Nd IGMP and MLD querier for the Linux bridge
 .Sh SYNOPSIS
 .Nm
-.Op Fl hnsv
+.Op Fl hnstv
 .Op Fl f Ar FILE
 .Op Fl i Ar NAME
 .Op Fl l Ar LEVEL
@@ -101,6 +101,11 @@ a reload completes.
 Log to syslog, the default unless
 .Fl n
 is given.
+.It Fl t , -check-config
+Check the configuration file and exit without starting the daemon.
+Errors are reported as
+.Ar FILE:LINE: message
+with a non-zero exit status.  Runs as a normal user.
 .It Fl u , -ipc Ns = Ns Ar FILE
 IPC socket used by
 .Xr mctl 8 ,

@@ -243,10 +243,11 @@ it in the foreground with more logging:
     sudo mcd -n -l info
 
 `SIGHUP` reloads the configuration and probes the interfaces again.
-To run several instances, give each its own identity with `-i NAME`,
-which also names its configuration file, PID file and IPC socket, and
-point `mctl -i NAME` at the one you want.  The options, signals and
-files are in [mcd(8)][].
+To check a configuration file before loading it, run `mcd -t -f FILE`
+as any user.  To run several instances, give each its own identity
+with `-i NAME`, which also names its configuration file, PID file and
+IPC socket, and point `mctl -i NAME` at the one you want.  The
+options, signals and files are in [mcd(8)][].
 
 
 Building

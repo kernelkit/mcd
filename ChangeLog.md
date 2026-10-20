@@ -6,6 +6,11 @@ All relevant, user visible, changes are documented in this file.
 [UNRELEASED][]
 --------------
 
+### Changes
+ - New `mcd -t` option to check a configuration file and exit, like
+   `nginx -t`.  Errors are reported as `FILE:LINE: message`, and it
+   runs as a normal user
+
 ### Fixes
  - Fix `mctl show router-ports` and `show igmp json` missing the router
    ports of bridges with a hyphen in their name, e.g. `br-0`
