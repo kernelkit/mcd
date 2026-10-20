@@ -27,6 +27,8 @@ All relevant, user visible, changes are documented in this file.
    `--with-zsh-completion-dir`
 
 ### Fixes
+ - Fix `-l LEVEL` having no effect in the foreground, `mcd -n` printed
+   every message, debug included, whatever the level
  - Fix `mctl show router-ports` and `show igmp json` missing the router
    ports of bridges with a hyphen in their name, e.g. `br-0`
  - Fix shell command injection through bridge names when listing router

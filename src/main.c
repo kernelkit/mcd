@@ -183,7 +183,7 @@ int main(int argc, char *argv[])
 	if (config_init())
 	    return EX_NOINPUT;
 
-	note("config file %s is ok", config_file);
+	prinl(0, "config file %s is ok", config_file);	/* whatever -l says */
 	return 0;
     }
 

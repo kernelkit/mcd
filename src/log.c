@@ -102,43 +102,19 @@ void prinl(int syserr, const char *fmt, ...)
 }
 
 /*
- * Log errors and other messages to the system log daemon and to stderr,
- * according to the severity of the message and the current debug level.
- * For errors of severity LOG_ERR or worse, terminate the program.
+ * Log to the system log daemon, the level is checked by logit().
+ * Messages to stderr go through prinl().
  */
 void logger(int severity, int syserr, const char *format, ...)
 {
     va_list ap;
     static char fmt[211] = "warning - ";
     char *msg;
-    struct timeval now;
-    time_t now_sec;
-    struct tm *thyme;
 
     va_start(ap, format);
     vsnprintf(&fmt[10], sizeof(fmt) - 10, format, ap);
     va_end(ap);
     msg = (severity == LOG_WARNING) ? fmt : &fmt[10];
-
-    if (!logging) {
-	if (severity > loglevel)
-	    return;
-
-	/* Only OK use-case for unsafe gettimeofday(), logging. */
-	gettimeofday(&now, NULL);
-	now_sec = now.tv_sec;
-	thyme = localtime(&now_sec);
-//	if (!debug)
-	    fprintf(stderr, "%s: ", log_name);
-	fprintf(stderr, "%02d:%02d:%02d.%03ld %s", thyme->tm_hour,
-		thyme->tm_min, thyme->tm_sec, now.tv_usec / 1000, msg);
-	if (syserr == 0)
-	    fprintf(stderr, "\n");
-	else
-	    fprintf(stderr, ": %s\n", strerror(syserr));
-
-	return;
-    }
 
     if (syserr != 0)
 	syslog(severity, "%s: %s", msg, strerror(syserr));

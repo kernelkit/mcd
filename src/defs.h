@@ -70,7 +70,6 @@ extern uint32_t		igmp_query_interval;
 extern uint32_t		igmp_last_member_interval;
 extern uint32_t		igmp_robustness;
 
-extern int		loglevel;
 extern int		use_syslog;
 extern int		running;
 extern int		haveterminal;
