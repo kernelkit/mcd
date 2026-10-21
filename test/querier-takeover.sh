@@ -75,6 +75,8 @@ for t in $(echo "$q" | tr ',' '\n' | awk '{ print $3 }'); do
     [ "$t" -le 13 ] && [ "$t" -gt 0 ] || { echo "FAIL: timeout $t, expected 1..13"; fail=1; }
 done
 [ "$fail" -eq 0 ] && echo "ok:   timeouts from the interface's query interval"
+rt=$(../src/mctl -u "/tmp/$NM/b.sock" show interfaces json | jq -r '[.[]."router-timeout"] | join(",")')
+check "router-timeout in show interfaces is the interface's, $rt" "$([ "$rt" = "13,13" ] && echo y)"
 
 print "Stopping A, B takes over within 13 s ..."
 kill -9 "$(cat "/tmp/$NM/a.pid")"

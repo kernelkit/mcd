@@ -210,7 +210,7 @@ arguments for an overview:
     $ mctl
     Multicast Overview
     Query Interval (default): 125 sec
-    Router Timeout          : 255
+    Router Timeout (default): 255 sec
     Fast Leave Ports        :
     Router Ports            : eth3
     Flood Ports             :

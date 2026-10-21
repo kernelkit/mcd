@@ -42,7 +42,9 @@ All relevant, user visible, changes are documented in this file.
  - Fix default router timeout (other querier present interval) ignoring
    the configured `robustness`, query and response intervals, it was
    always 255 sec unless `router-timeout` was set.  It is now per
-   interface, from the interface's own `query-interval` when set
+   interface, from the interface's own `query-interval` when set.
+   `mctl show interfaces json` has it per interface as
+   `router-timeout`, `mctl show` labels the global one as the default
  - Fix group membership interval ignoring the interface's own
    `query-interval`.  With only `query-interval 4` on an interface, a
    group without members stayed for 260 sec, not 18 sec

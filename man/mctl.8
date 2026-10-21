@@ -94,7 +94,10 @@ for MLD.
 Global settings.
 .It Cm show interfaces Op Cm json
 One row per interface and protocol: VLAN, protocol, elected querier,
-state, query interval, querier timeout and protocol version.
+state, query interval, querier timeout and protocol version.  The
+JSON output also has the interface's
+.Cm router-timeout ,
+the other querier present interval.
 .It Cm show groups Op Cm json
 IGMP and MLD group memberships, as seen by the bridge.
 .It Cm show router-ports Op Cm json
