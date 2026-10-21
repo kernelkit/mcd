@@ -820,7 +820,7 @@ int show_bridge_compat(FILE *fp)
 
 		inet_addr_fmt(&ifi->ifi_querier->al_addr, s1, sizeof(s1));
 		now = time(NULL);
-		timeout = router_timeout - (now - ifi->ifi_querier->al_ctime);
+		timeout = iface_router_timeout(ifi) - (now - ifi->ifi_querier->al_ctime);
 		dumpster(s1, mac, sizeof(mac), port, sizeof(port));
 
 		if (detail)

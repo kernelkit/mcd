@@ -409,10 +409,6 @@ int config_init(void)
 	return -1;	/* may be created later, wait for SIGHUP */
     }
 
-    /* Unless set, follows the intervals and robustness just read */
-    if (!router_timeout)
-	router_timeout = IGMP_OTHER_QUERIER_PRESENT_INTERVAL;
-
     return 0;
 }
 

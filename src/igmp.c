@@ -33,7 +33,7 @@ void igmp_init(void)
     igmp_response_interval    = IGMP_QUERY_RESPONSE_INTERVAL;
     igmp_last_member_interval = IGMP_LAST_MEMBER_INTERVAL_DEFAULT;
     igmp_robustness           = IGMP_ROBUSTNESS_DEFAULT;
-    router_timeout            = 0; /* unset, see config_init() */
+    router_timeout            = 0; /* unset, see iface_router_timeout() */
     router_alert              = 1;
     topology_query            = 1;
     mrd_interval              = MRD_ADV_INTERVAL;

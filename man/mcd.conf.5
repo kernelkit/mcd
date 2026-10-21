@@ -41,12 +41,15 @@ queries in the startup burst.
 .It Cm router-timeout Ar SEC
 Time to wait for a silent querier before taking over, the other
 querier present interval, 1 to 1024.  When unset it is calculated per
-RFC 3376:
+interface, RFC 3376 \(sc8.5, from the interface's own
+.Cm query-interval
+when set:
 .Bd -literal -offset indent
 robustness * query-interval + response-interval / 2
 .Ed
 .Pp
-Set it only to interoperate with devices that do not follow the RFC.
+When set, it applies to every interface.  Set it only to interoperate
+with devices that do not follow the RFC.
 .It Cm router-alert on | off , no router-alert
 IP Router Alert option in IGMP queries, on by default for stacks that
 hard-code the IP header length.  MLD queries always carry the IPv6

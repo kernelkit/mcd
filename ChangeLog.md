@@ -41,7 +41,8 @@ All relevant, user visible, changes are documented in this file.
    reading its reply
  - Fix default router timeout (other querier present interval) ignoring
    the configured `robustness`, query and response intervals, it was
-   always 255 sec unless `router-timeout` was set
+   always 255 sec unless `router-timeout` was set.  It is now per
+   interface, from the interface's own `query-interval` when set
  - Fix `mcd` exiting 0 when it cannot fork to daemonize
  - Fix `mctl` crashing on a daemon command of more than 32 words
  - Fix timers stopping if an expiry landed exactly on a whole second

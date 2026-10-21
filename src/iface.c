@@ -124,6 +124,25 @@ int iface_pv(const struct ifi *ifi, int pv)
     return ifi->ifi_family == AF_INET6 ? pv - 1 : pv;
 }
 
+/* The interface's query interval, or the global one, NULL for global */
+uint32_t iface_query_interval(const struct ifi *ifi)
+{
+    return ifi && ifi->ifi_query_interval ? ifi->ifi_query_interval : igmp_query_interval;
+}
+
+/*
+ * Other querier present interval, RFC 3376 section 8.5 and RFC 3810
+ * section 9.5, from the interface's own query interval.  The global
+ * default when ifi is NULL, router-timeout overrides both.
+ */
+uint32_t iface_router_timeout(const struct ifi *ifi)
+{
+    if (router_timeout)
+	return router_timeout;
+
+    return igmp_robustness * iface_query_interval(ifi) + igmp_response_interval / 2;
+}
+
 static void querier_del(struct ifi *ifi)
 {
     if (!ifi->ifi_querier)
@@ -386,11 +405,7 @@ static void join_static_groups(struct ifi *ifi)
 
 static void start_iface(struct ifi *ifi)
 {
-    uint32_t qi = ifi->ifi_query_interval;
-
-    /* Check interface specific settings */
-    if (!qi)
-	qi = igmp_query_interval;
+    uint32_t qi = iface_query_interval(ifi);
 
     sock_iface_init(ifi);
     join_static_groups(ifi);
@@ -473,6 +488,7 @@ static void query_groups(int period, void *arg)
 void accept_membership_query(struct ifi *ifi, const inet_addr_t *src, const inet_addr_t *group,
 			     int intv, int tmo, int ver)
 {
+    uint32_t oqpi = iface_router_timeout(ifi);
     int notnew = 1;
 
     inet_addr_fmt(src, s1, sizeof(s1));
@@ -521,7 +537,7 @@ void accept_membership_query(struct ifi *ifi, const inet_addr_t *src, const inet
 	  again:
 	    dbg("New querier %s (was %s) on %s, timeout %d", s1, ifi->ifi_querier
 		? inet_addr_fmt(&ifi->ifi_querier->al_addr, s2, sizeof(s2)) : "me",
-		ifi->ifi_name, router_timeout);
+		ifi->ifi_name, oqpi);
 
 	    if (!ifi->ifi_querier) {
 		ifi->ifi_querier = calloc(1, sizeof(struct listaddr));
@@ -530,7 +546,7 @@ void accept_membership_query(struct ifi *ifi, const inet_addr_t *src, const inet
 		    exit(EX_OSERR);
 		}
 
-		ifi->ifi_querier->al_timerid = pev_timer_add(router_timeout * 1000000, 0, router_timeout_cb, ifi);
+		ifi->ifi_querier->al_timerid = pev_timer_add(oqpi * 1000000, 0, router_timeout_cb, ifi);
 		ifi->ifi_flags &= ~IFIF_IGMP_QUERIER;
 	    }
 
@@ -556,8 +572,8 @@ void accept_membership_query(struct ifi *ifi, const inet_addr_t *src, const inet
      * Reset the timer since we've received a query.
      */
     if (notnew && ifi->ifi_querier && !inet_addr_cmp(src, &ifi->ifi_querier->al_addr)) {
-	dbg("Resetting query timeout %d sec", router_timeout);
-	pev_timer_set(ifi->ifi_querier->al_timerid, router_timeout * 1000000);
+	dbg("Resetting query timeout %d sec", oqpi);
+	pev_timer_set(ifi->ifi_querier->al_timerid, oqpi * 1000000);
 	time(&ifi->ifi_querier->al_ctime);
     }
 
@@ -898,7 +914,7 @@ end:
  */
 static void startup_query_timer(struct ifi *ifi)
 {
-    uint32_t qi = ifi->ifi_query_interval ? ifi->ifi_query_interval : igmp_query_interval;
+    uint32_t qi = iface_query_interval(ifi);
     uint32_t sqi = qi / 4 > 0 ? qi / 4 : 1;
     cbk_t *cbk;
 

@@ -310,7 +310,7 @@ static int show_status(FILE *fp)
 		jprinti(fp, "query-response-interval", igmp_response_interval, &first);
 		jprinti(fp, "query-last-member-interval", igmp_last_member_interval, &first);
 		jprinti(fp, "robustness", igmp_robustness, &first);
-		jprinti(fp, "router-timeout", router_timeout, &first);
+		jprinti(fp, "router-timeout", iface_router_timeout(NULL), &first);
 		jprintb(fp, "router-alert", router_alert, &first);
 		jprintb(fp, "topology-query", topology_query, &first);
 		jprinti(fp, "mrd-interval", mrd_interval, &first);
@@ -328,7 +328,7 @@ static int show_status(FILE *fp)
 			fprintf(fp, "Last Member Interval    : %d\n", igmp_last_member_interval);
 			fprintf(fp, "Robustness Value        : %d\n", igmp_robustness);
 		}
-		fprintf(fp, "Router Timeout          : %d\n", router_timeout);
+		fprintf(fp, "Router Timeout          : %d\n", iface_router_timeout(NULL));
 		if (detail) {
 			fprintf(fp, "Router Alert            : %s\n", ENABLED(router_alert));
 			fprintf(fp, "Topology Query          : %s\n", ENABLED(topology_query));
@@ -368,7 +368,7 @@ static int show_igmp_iface(FILE *fp, int family)
 			inet_addr_fmt(&ifi->ifi_querier->al_addr, s1, sizeof(s1));
 			interval = ifi->ifi_querier->al_interval;
 			t = time(NULL) - ifi->ifi_querier->al_ctime;
-			rt_tmo = (int)((time_t)router_timeout - t);
+			rt_tmo = (int)((time_t)iface_router_timeout(ifi) - t);
 			snprintf(timeout, sizeof(timeout), "%d", rt_tmo);
 		}
 

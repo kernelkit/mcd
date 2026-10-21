@@ -140,6 +140,8 @@ extern void		iface_check_state(void);
 extern void		iface_exit(void);
 extern const char      *iface_proto(const struct ifi *);
 extern int		iface_pv(const struct ifi *, int);
+extern uint32_t		iface_query_interval(const struct ifi *);
+extern uint32_t		iface_router_timeout(const struct ifi *);
 extern void		accept_group_report(struct ifi *, const inet_addr_t *, const inet_addr_t *, int);
 extern void		accept_group_record(struct ifi *, const inet_addr_t *, const inet_addr_t *, int, int);
 extern void		accept_v3_report(struct ifi *, const inet_addr_t *, const uint8_t *, size_t);
