@@ -41,6 +41,10 @@
 #define MIN(a,b)	(((a) <= (b))? (a) : (b))
 #endif
 
+#ifndef NELEMS
+#define NELEMS(a)	(sizeof((a)) / sizeof((a)[0]))
+#endif
+
 #ifndef strlcat
 extern size_t strlcat(char *, const char *, size_t);
 #endif
@@ -488,8 +492,10 @@ static int ipc_fetch(void)
 			*desc++ = 0;
 
 		opt = strchr(cmd, '[');
-		if (opt)
+		if (opt) {
 			*opt++ = 0;
+			opt[strcspn(opt, "]")] = 0;
+		}
 
 		add_cmd(cmd, opt, desc);
 	}
@@ -573,6 +579,7 @@ static int usage(int rc)
 		if (c->opt) {
 			strlcat(buf, " [", sizeof(buf));
 			strlcat(buf, c->opt, sizeof(buf));
+			strlcat(buf, "]", sizeof(buf));
 		}
 
 		printf("  %-25s  %s\n", buf, c->desc);
@@ -584,6 +591,61 @@ static int usage(int rc)
 static int version(void)
 {
 	printf("mctl version %s (%s)\n", PACKAGE_VERSION, PACKAGE_NAME);
+	return 0;
+}
+
+/*
+ * Shell completion, mctl -C WORD...: the words typed so far, the last
+ * one partial.  Prints the candidates for it, one per line, with the
+ * command's description after a tab when the word completes it.
+ */
+static int complete(int argc, char *argv[])
+{
+	const char *seen[MAXARGS * 4];
+	int n = argc ? argc - 1 : 0;	/* position of the partial word */
+	const char *cur = argc ? argv[n] : "";
+	size_t len = strlen(cur);
+	int nseen = 0;
+	struct cmd *c;
+
+	if (ipc_fetch())
+		return 1;
+
+	TAILQ_FOREACH(c, &cmds, link) {
+		const char *word;
+		int i;
+
+		for (i = 0; i < n && i < c->argc; i++) {
+			if (!string_match(argv[i], c->argv[i]))
+				break;
+		}
+		if (i < n)
+			continue;
+
+		if (n < c->argc)
+			word = c->argv[n];
+		else if (n == c->argc && c->opt)
+			word = c->opt;
+		else
+			continue;
+
+		if (strncasecmp(cur, word, len))
+			continue;
+
+		for (i = 0; i < nseen; i++) {
+			if (!strcmp(seen[i], word))
+				break;
+		}
+		if (i < nseen || nseen >= (int)NELEMS(seen))
+			continue;
+		seen[nseen++] = word;
+
+		if (n + 1 == c->argc && c->desc)
+			printf("%s\t%s\n", word, c->desc);
+		else
+			puts(word);
+	}
+
 	return 0;
 }
 
@@ -624,6 +686,7 @@ static int cmd(int argc, char *argv[])
 int main(int argc, char *argv[])
 {
 	struct option long_options[] = {
+		{ "complete",   0, NULL, 'C' },
 		{ "debug",      0, NULL, 'd' },
 		{ "help",       0, NULL, 'h' },
 		{ "ident",      1, NULL, 'i' },
@@ -635,12 +698,17 @@ int main(int argc, char *argv[])
 		{ NULL, 0, NULL, 0 }
 	};
 	int monitor = 0;
+	int compl = 0;
 	int c, rc;
 
 	sock_file = getenv("MCD_SOCK");
 
-	while ((c = getopt_long(argc, argv, "dh?i:mptu:v", long_options, NULL)) != EOF) {
+	while ((c = getopt_long(argc, argv, "Cdh?i:mptu:v", long_options, NULL)) != EOF) {
 		switch(c) {
+		case 'C':	/* --complete, for the shell completion scripts */
+			compl = 1;
+			break;
+
 		case 'd':
 			debug = 1;
 			break;
@@ -679,6 +747,9 @@ int main(int argc, char *argv[])
 			return usage(1);
 		}
 	}
+
+	if (compl)
+		return complete(argc - optind, &argv[optind]);
 
 	do {
 		if (monitor) {

@@ -49,6 +49,7 @@ enum {
 	IPC_STATUS,
 	IPC_MDB,
 	IPC_ROUTER_PORTS,
+	IPC_MRD_ROUTERS,
 };
 
 struct ipcmd {
@@ -63,6 +64,7 @@ struct ipcmd {
 	{ IPC_IGMP_GRP,     "show groups", "[json]", "Show IGMP/MLD group memberships" },
 	{ IPC_IGMP_IFACE,   "show interfaces", "[json]", "Show IGMP/MLD interface status" },
 	{ IPC_ROUTER_PORTS, "show router-ports", "[json]", "Show multicast router ports per bridge" },
+	{ IPC_MRD_ROUTERS,  "show routers", "[json]", "Show multicast routers heard, RFC 4286" },
 	{ IPC_STATUS,       "show status", "[json]", "Show daemon status (default)" },
 	{ IPC_IGMP,         "show igmp", "[json]", "Show interfaces and group memberships" },
 	{ IPC_MDB,          "show mdb", NULL, "Show multicast forwarding database" },
@@ -308,8 +310,10 @@ static int show_status(FILE *fp)
 		jprinti(fp, "query-response-interval", igmp_response_interval, &first);
 		jprinti(fp, "query-last-member-interval", igmp_last_member_interval, &first);
 		jprinti(fp, "robustness", igmp_robustness, &first);
-		jprinti(fp, "router-timeout", router_timeout, &first);
+		jprinti(fp, "router-timeout", iface_router_timeout(NULL), &first);
 		jprintb(fp, "router-alert", router_alert, &first);
+		jprintb(fp, "topology-query", topology_query, &first);
+		jprinti(fp, "mrd-interval", mrd_interval, &first);
 
 		if (!nested) {
 			prefix -= 2;
@@ -324,9 +328,12 @@ static int show_status(FILE *fp)
 			fprintf(fp, "Last Member Interval    : %d\n", igmp_last_member_interval);
 			fprintf(fp, "Robustness Value        : %d\n", igmp_robustness);
 		}
-		fprintf(fp, "Router Timeout          : %d\n", router_timeout);
-		if (detail)
+		fprintf(fp, "Router Timeout (default): %d sec\n", iface_router_timeout(NULL));
+		if (detail) {
 			fprintf(fp, "Router Alert            : %s\n", ENABLED(router_alert));
+			fprintf(fp, "Topology Query          : %s\n", ENABLED(topology_query));
+			fprintf(fp, "MRD Interval            : %d\n", mrd_interval);
+		}
 	}
 
 	return 0;
@@ -341,11 +348,12 @@ static int show_igmp_iface(FILE *fp, int family)
 		fprintf(fp, "[\n");
 		prefix += 2;
 	} else
-		fprintf(fp, "%-15s%4s  %-5s  %-27s  %8s  %8s  %7s  %3s=\n", "Interface", "VID",
-			"Proto", "Querier", "State", "Interval", "Timeout", "Ver");
+		fprintf(fp, "%-15s%4s  %-5s  %-27s  %8s  %8s  %7s  %3s  %3s=\n", "Interface", "VID",
+			"Proto", "Querier", "State", "Interval", "Timeout", "MRD", "Ver");
 
 	for (ifi = config_iface_iter(1); ifi; ifi = config_iface_iter(0)) {
 		int interval = ifi->ifi_query_interval, rt_tmo = -1;
+		int oqpi = iface_router_timeout(ifi);
 		char timeout[10];
 		int version;
 
@@ -361,7 +369,7 @@ static int show_igmp_iface(FILE *fp, int family)
 			inet_addr_fmt(&ifi->ifi_querier->al_addr, s1, sizeof(s1));
 			interval = ifi->ifi_querier->al_interval;
 			t = time(NULL) - ifi->ifi_querier->al_ctime;
-			rt_tmo = (int)((time_t)router_timeout - t);
+			rt_tmo = (int)((time_t)oqpi - t);
 			snprintf(timeout, sizeof(timeout), "%d", rt_tmo);
 		}
 
@@ -387,6 +395,8 @@ static int show_igmp_iface(FILE *fp, int family)
 			if (rt_tmo > -1)
 				jprinti(fp, "timeout", rt_tmo, &once);
 			jprinti(fp, "interval", interval, &once);
+			jprinti(fp, "router-timeout", oqpi, &once);
+			jprintb(fp, "mrd", ifi->ifi_flags & IFIF_MRD, &once);
 			jprinti(fp, "version", version, &once);
 
 			prefix -= 2;
@@ -397,8 +407,9 @@ static int show_igmp_iface(FILE *fp, int family)
 
 			if (ifi->ifi_vlan)
 				snprintf(vlan, sizeof(vlan), "%4d", ifi->ifi_vlan);
-			fprintf(fp, "%-15s%4s  %-5s  %-27s  %8s  %8d  %7s  %3d\n", ifi->ifi_name,
-				vlan, iface_proto(ifi), s1, ifstate(ifi), interval, timeout, version);
+			fprintf(fp, "%-15s%4s  %-5s  %-27s  %8s  %8d  %7s  %3s  %3d\n", ifi->ifi_name,
+				vlan, iface_proto(ifi), s1, ifstate(ifi), interval, timeout,
+				ifi->ifi_flags & IFIF_MRD ? "on" : "off", version);
 		}
 	}
 
@@ -413,6 +424,64 @@ static int show_igmp_iface(FILE *fp, int family)
 static int show_igmp_ifaces(FILE *fp)
 {
 	return show_igmp_iface(fp, AF_UNSPEC);
+}
+
+static int show_mrd_routers(FILE *fp)
+{
+	time_t now = time(NULL);
+	struct ifi *ifi;
+	int first = 1;
+
+	if (json) {
+		fprintf(fp, "[\n");
+		prefix += 2;
+	} else
+		fprintf(fp, "%-15s%4s  %-5s  %-27s  %8s  %5s  %3s  %7s=\n", "Interface", "VID",
+			"Proto", "Router", "Interval", "Query", "QRV", "Expires");
+
+	for (ifi = config_iface_iter(1); ifi; ifi = config_iface_iter(0)) {
+		struct mrd_router *r;
+
+		TAILQ_FOREACH(r, &ifi->ifi_mrd_routers, link) {
+			int expires = (int)(r->expires - now);
+
+			if (expires <= 0)
+				continue;
+			inet_addr_fmt(&r->addr, s1, sizeof(s1));
+			if (json) {
+				int once = 1;
+
+				fprintf(fp, "%s%*s{\n", first ? "" : ",\n", prefix, "");
+				prefix += 2;
+				jprint(fp, "interface", ifi->ifi_name, &once);
+				jprint(fp, "family", ifi->ifi_family == AF_INET6 ? "ipv6" : "ipv4", &once);
+				if (ifi->ifi_vlan)
+					jprinti(fp, "vid", ifi->ifi_vlan, &once);
+				jprint(fp, "router", s1, &once);
+				jprinti(fp, "interval", r->interval, &once);
+				jprinti(fp, "query-interval", r->qqi, &once);
+				jprinti(fp, "robustness", r->qrv, &once);
+				jprinti(fp, "expires", expires, &once);
+				prefix -= 2;
+				fprintf(fp, "\n%*s}", prefix, "");
+			} else {
+				char vlan[5] = { 0 };
+
+				if (ifi->ifi_vlan)
+					snprintf(vlan, sizeof(vlan), "%4d", ifi->ifi_vlan);
+				fprintf(fp, "%-15s%4s  %-5s  %-27s  %8d  %5d  %3d  %7d\n", ifi->ifi_name,
+					vlan, iface_proto(ifi), s1, r->interval, r->qqi, r->qrv, expires);
+			}
+			first = 0;
+		}
+	}
+
+	if (json) {
+		prefix -= 2;
+		fprintf(fp, "\n%*s]", prefix, "");
+	}
+
+	return 0;
 }
 
 static int show_igmp(FILE *fp)
@@ -660,6 +729,10 @@ static void ipc_handle(int sd, void *arg)
 
 	case IPC_ROUTER_PORTS:
 		ipc_show(client, show_router_ports, cmd, sizeof(cmd));
+		break;
+
+	case IPC_MRD_ROUTERS:
+		ipc_show(client, show_mrd_routers, cmd, sizeof(cmd));
 		break;
 
 	case IPC_COMPAT:

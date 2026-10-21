@@ -1,5 +1,5 @@
 .\"  -*- nroff -*-
-.Dd October 16, 2026
+.Dd October 21, 2026
 .Dt MCTL 8 SMM
 .Os
 .Sh NAME
@@ -12,6 +12,8 @@
 .Op Fl i Ar NAME
 .Op Fl u Ar FILE
 .Op Ar COMMAND
+.Nm
+.Fl C Ar WORD...
 .Sh DESCRIPTION
 .Nm
 queries a running
@@ -54,9 +56,22 @@ IPC socket, default derived from the identity.  Also settable with the
 environment variable.
 .It Fl v , -version
 Show version and exit.
+.It Fl C , -complete Ar WORD...
+Used by the shell completion scripts.  Prints the candidates for the
+last word, which may be partial, from the running daemon's command
+list, one per line.  Prints nothing when no daemon is running.
 .El
 .Pp
 Output width follows the terminal.
+.Pp
+Completion scripts for
+.Xr bash 1
+and
+.Xr zsh 1
+are installed with
+.Nm .
+The commands come from the running daemon, so they are not completed
+while it is down.
 .Sh COMMANDS
 Commands can be abbreviated, e.g.\&
 .Cm s i
@@ -79,11 +94,22 @@ for MLD.
 Global settings.
 .It Cm show interfaces Op Cm json
 One row per interface and protocol: VLAN, protocol, elected querier,
-state, query interval, querier timeout and protocol version.
+state, query interval, querier timeout, MRD and protocol version.  The
+JSON output also has the interface's
+.Cm router-timeout ,
+the other querier present interval.
 .It Cm show groups Op Cm json
 IGMP and MLD group memberships, as seen by the bridge.
 .It Cm show router-ports Op Cm json
 Multicast router ports, grouped per bridge.
+.It Cm show routers Op Cm json
+Multicast routers heard through Multicast Router Discovery, RFC 4286,
+per interface and protocol: address, advertisement interval, query
+interval, robustness and seconds until the entry expires.  An entry
+goes when its router sends a termination, or after three advertisement
+intervals of silence.  Routers are heard whether or not
+.Cm mrd
+is on for the interface.
 .It Cm show mdb
 The bridge multicast forwarding database, as
 .Ql bridge mdb show
@@ -114,11 +140,11 @@ build time, see
 .Sh EXAMPLES
 .Bd -literal -offset indent
 $ mctl show interfaces
-Interface       VID  Proto  Querier                      State  Interval  Timeout  Ver
-vlan1                IGMP   192.168.1.1                     Up       125     None    3
-vlan1                MLD    fe80::7a4c:9bff:fe12:3456       Up       125     None    2
-br0              42  IGMP   0.0.0.0                         Up       125     None    3
-br0              42  MLD    ::                              Up       125     None    2
+Interface       VID  Proto  Querier                      State  Interval  Timeout  MRD  Ver
+vlan1                IGMP   192.168.1.1                     Up       125     None   on    3
+vlan1                MLD    fe80::7a4c:9bff:fe12:3456       Up       125     None   on    2
+br0              42  IGMP   0.0.0.0                         Up       125     None  off    3
+br0              42  MLD    ::                              Up       125     None  off    2
 .Ed
 .Pp
 The IPC protocol is plain text, one command per connection, so other

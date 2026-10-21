@@ -7,6 +7,8 @@
 #include <syslog.h>
 
 #define logit(pri, eno, fmt, arg...) do {	\
+	if (pri > loglevel)			\
+		break;				\
 	if (logging)				\
 		logger(pri, eno, fmt, ##arg);	\
 	else					\
@@ -22,6 +24,7 @@
 #define dbg(fmt, arg...)   logit(LOG_DEBUG,   0,     fmt, ##arg)
 
 extern int         logging;
+extern int         loglevel;
 
 extern void        log_init    (char *, int);
 extern int	   log_str2lvl (char *);

@@ -56,10 +56,10 @@ static void ifset(uint32_t set, uint32_t clr)
 
 %token GLOBAL_QUERY_INTERVAL GLOBAL_QUERY_LAST_MEMBER_INTERVAL GLOBAL_QUERY_RESPONSE_INTERVAL
 %token QUERY_INTERVAL
-%token IGMP_ROBUSTNESS ROUTER_TIMEOUT ROUTER_ALERT INCLUDE
+%token IGMP_ROBUSTNESS ROUTER_TIMEOUT ROUTER_ALERT TOPOLOGY_QUERY MRD_INTERVAL INCLUDE
 %token NO PHYINT
 %token DISABLE ENABLE IGMPV1 IGMPV2 IGMPV3 STATIC_GROUP PROXY_QUERIER
-%token MLDV1 MLDV2 IGMP MLD
+%token MLDV1 MLDV2 IGMP MLD MRD
 %token VLAN
 %token <num> BOOLEAN
 %token <num> NUMBER
@@ -117,6 +117,20 @@ stmt	: error
 	{
 	    router_alert = $2;
 	}
+	| NO TOPOLOGY_QUERY
+	{
+	    topology_query = 0;
+	}
+	| TOPOLOGY_QUERY BOOLEAN
+	{
+	    topology_query = $2;
+	}
+	| MRD_INTERVAL NUMBER
+	{
+	    if ($2 < 4 || $2 > 180)
+		fatal("Invalid MRD advertisement interval [4,180]: %d", $2);
+	    mrd_interval = $2;
+	}
 	| ROUTER_TIMEOUT NUMBER
 	{
 	    if ($2 < 1 || $2 > 1024)
@@ -163,6 +177,7 @@ ifmod	: DISABLE		{ ifset(IFIF_DISABLED, 0); }
 	| MLDV2		{ if (twin) twin->ifi_compat = GEN_V3; }
 	| IGMP BOOLEAN	{ off4 = !$2; }
 	| MLD BOOLEAN	{ off6 = !$2; }
+	| MRD BOOLEAN	{ ifset($2 ? IFIF_MRD : 0, $2 ? 0 : IFIF_MRD); }
 	| STATIC_GROUP GROUP
 	{
 	    struct listaddr *a;
@@ -295,6 +310,8 @@ static struct keyword {
 	{ "disable",		DISABLE, 0 },
 	{ "enable",		ENABLE, 0 },
 	{ "router-alert",	ROUTER_ALERT, 0 },
+	{ "topology-query",	TOPOLOGY_QUERY, 0 },
+	{ "mrd-interval",	MRD_INTERVAL, 0 },
 	{ "igmpv1",		IGMPV1, 0 },
 	{ "igmpv2",		IGMPV2, 0 },
 	{ "igmpv3",		IGMPV3, 0 },
@@ -302,6 +319,7 @@ static struct keyword {
 	{ "mldv2",		MLDV2, 0 },
 	{ "igmp",		IGMP, 0 },
 	{ "mld",		MLD, 0 },
+	{ "mrd",		MRD, 0 },
 	{ "static-group",	STATIC_GROUP, 0 },
 	{ "proxy-queries",	PROXY_QUERIER, 0}, /* compat */
 	{ "proxy-mode",		PROXY_QUERIER, 0},
@@ -375,22 +393,23 @@ static int yylex(void)
     return STRING;
 }
 
-void config_init(void)
+int config_init(void)
 {
     TAILQ_INIT(&scrap.ifi_static);
     TAILQ_INIT(&scrap.ifi_groups);
 
     lineno = 0;
 
-    dbg("Parsing file %s ...", config_file);
-    if (config_parse(config_file) && errno != ENOENT) {
+    if (config_parse(config_file)) {
+	int rc = errno;
+
 	err("cannot open %s", config_file);
-	exit(EX_DATAERR);
+	if (rc != ENOENT)
+	    exit(EX_DATAERR);
+	return -1;	/* may be created later, wait for SIGHUP */
     }
 
-    /* Unless set, follows the intervals and robustness just read */
-    if (!router_timeout)
-	router_timeout = IGMP_OTHER_QUERIER_PRESENT_INTERVAL;
+    return 0;
 }
 
 int config_parse(const char *file)

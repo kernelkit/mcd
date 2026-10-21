@@ -1,5 +1,5 @@
 .\"  -*- nroff -*-
-.Dd October 16, 2026
+.Dd October 21, 2026
 .Dt MCD.CONF 5
 .Os
 .Sh NAME
@@ -41,16 +41,34 @@ queries in the startup burst.
 .It Cm router-timeout Ar SEC
 Time to wait for a silent querier before taking over, the other
 querier present interval, 1 to 1024.  When unset it is calculated per
-RFC 3376:
+interface, RFC 3376 \(sc8.5, from the interface's own
+.Cm query-interval
+when set:
 .Bd -literal -offset indent
 robustness * query-interval + response-interval / 2
 .Ed
 .Pp
-Set it only to interoperate with devices that do not follow the RFC.
+When set, it applies to every interface.  Set it only to interoperate
+with devices that do not follow the RFC.
 .It Cm router-alert on | off , no router-alert
 IP Router Alert option in IGMP queries, on by default for stacks that
 hard-code the IP header length.  MLD queries always carry the IPv6
 Router Alert option.
+.It Cm topology-query on | off , no topology-query
+General query when a port of the bridge starts forwarding, on by
+default.  Link up, STP settling and a port added to the bridge all
+count.  Hosts behind the port are back in the MDB within the response
+interval instead of at the next periodic query, RFC 4541 \(sc2.1.1.
+Sent only while
+.Nm mcd
+is the querier, at most one per second per interface, followed by the
+startup burst.  Applies to the bridge itself and to VLAN interfaces on
+top of it.
+.It Cm mrd-interval Ar SEC
+Multicast Router Discovery advertisement interval, 4 to 180, default
+20.  For interfaces with
+.Cm mrd on ,
+see below.
 .It Cm include Ar PATH
 Read another file, or every file matching a
 .Xr glob 3
@@ -84,6 +102,25 @@ falls back to older versions on its own when such hosts are heard.
 MLD version to start with, default
 .Cm mldv2 ,
 with the same fallback.
+.It Cm mrd on | off
+Multicast Router Discovery, RFC 4286, off by default.  Advertises
+.Nm mcd
+as a multicast router to the snooping switches on the LAN, so they
+forward membership reports, and all multicast, towards it.  For
+switches that learn their router ports from MRD rather than from
+queries.  Three advertisements go out shortly after the interface comes
+up, then one every
+.Cm mrd-interval
+seconds, and one in answer to a solicitation.  A
+termination is sent when the interface goes down or
+.Nm mcd
+exits.  Advertisements go out whether or not
+.Nm mcd
+is the elected querier, so membership reports keep reaching it as a
+backup querier, RFC 4286 \(sc3.  An interface in proxy mode has no
+address to advertise and sends nothing.  Advertisements from other routers are listed by
+.Xr mctl 8
+.Cm show routers .
 .It Cm proxy-mode
 Send proxy queries, from 0.0.0.0 or ::, which never win an election.
 This makes

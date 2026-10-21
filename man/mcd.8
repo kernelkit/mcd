@@ -1,5 +1,5 @@
 .\"  -*- nroff -*-
-.Dd October 16, 2026
+.Dd October 21, 2026
 .Dt MCD 8 SMM
 .Os
 .Sh NAME
@@ -7,7 +7,7 @@
 .Nd IGMP and MLD querier for the Linux bridge
 .Sh SYNOPSIS
 .Nm
-.Op Fl hnsv
+.Op Fl hnstv
 .Op Fl f Ar FILE
 .Op Fl i Ar NAME
 .Op Fl l Ar LEVEL
@@ -48,6 +48,13 @@ queries,
 .Cm query-interval
 / 4 apart, RFC 3376 \(sc8.6 and \(sc8.7.
 .It
+General query when a port of the bridge starts forwarding, so hosts
+behind it are back in the MDB within the response interval, not at the
+next query interval, RFC 4541 \(sc2.1.1.  See
+.Cm topology-query
+in
+.Xr mcd.conf 5 .
+.It
 Starts at IGMPv3 and MLDv2 and falls back to IGMPv2, IGMPv1 or MLDv1
 for as long as older hosts are heard.
 .It
@@ -59,6 +66,13 @@ VLAN interface on top.
 .It
 Static groups, joined in the kernel so the bridge always forwards them
 to itself.
+.It
+Multicast Router Discovery, RFC 4286, for switches that learn their
+router ports from MRD advertisements rather than from queries.  Off by
+default, see
+.Cm mrd
+in
+.Xr mcd.conf 5 .
 .El
 .Pp
 Interfaces, links and addresses are followed with netlink, so an
@@ -101,6 +115,11 @@ a reload completes.
 Log to syslog, the default unless
 .Fl n
 is given.
+.It Fl t , -check-config
+Check the configuration file and exit without starting the daemon.
+Errors are reported as
+.Ar FILE:LINE: message
+with a non-zero exit status.  Runs as a normal user.
 .It Fl u , -ipc Ns = Ns Ar FILE
 IPC socket used by
 .Xr mctl 8 ,

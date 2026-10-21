@@ -25,7 +25,7 @@ while IFS='|' read -r desc globals expect; do
     pid=$!
     tenacious 10 test -S "/tmp/$NM/sock"
     got=$(echo "show igmp" | socat -t 10 - UNIX-CONNECT:"/tmp/$NM/sock" \
-	      | sed -n 's/^Router Timeout *: *//p')
+	      | sed -n 's/^Router Timeout (default): *\([0-9]*\).*/\1/p')
     kill $pid
     wait $pid 2>/dev/null
     rm -f "/tmp/$NM/sock"

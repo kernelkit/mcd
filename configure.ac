@@ -1,5 +1,5 @@
 AC_PREREQ([2.69])
-AC_INIT([mcd], [3.0], [https://github.com/kernelkit/mcd/issues])
+AC_INIT([mcd], [3.1], [https://github.com/kernelkit/mcd/issues])
 AC_CONFIG_AUX_DIR(.aux)
 AM_INIT_AUTOMAKE([1.11 foreign])
 AM_SILENT_RULES([yes])
@@ -65,6 +65,19 @@ AC_ARG_WITH(group,
 	AS_HELP_STRING([--with-group=NAME], [Group for /run/mcd.sock (mctl), default: root]),
 	[group=$withval], [group=root])
 
+AC_ARG_WITH(bash-completion-dir,
+	AS_HELP_STRING([--with-bash-completion-dir=DIR], [Install mctl bash completion in DIR, default: DATADIR/bash-completion/completions, no to skip]),
+	[bashcompdir=$withval], [bashcompdir=yes])
+
+AC_ARG_WITH(zsh-completion-dir,
+	AS_HELP_STRING([--with-zsh-completion-dir=DIR], [Install mctl zsh completion in DIR, default: DATADIR/zsh/site-functions, no to skip]),
+	[zshcompdir=$withval], [zshcompdir=yes])
+
+AS_IF([test "x$bashcompdir" = "xyes"], [bashcompdir='$(datadir)/bash-completion/completions'])
+AS_IF([test "x$zshcompdir" = "xyes"], [zshcompdir='$(datadir)/zsh/site-functions'])
+AC_SUBST(bashcompdir)
+AC_SUBST(zshcompdir)
+
 # Create config.h from selected features and fallback defautls
 AS_IF([test "x$with_group" != "xno"], [
 	AS_IF([test "x$group" = "xyes"], [
@@ -74,6 +87,8 @@ AC_DEFINE_UNQUOTED(DEFGROUP, "$group", [For /run/finit/socket])
 AM_CONDITIONAL(BSD,         [test "x$ac_cv_header_net_if_dl_h"     = "xyes"])
 AM_CONDITIONAL(LINUX,       [test "x$ac_cv_header_linux_netlink_h" = "xyes"])
 AM_CONDITIONAL(ENABLE_TEST, [test "x$enable_test"                 != "xno"])
+AM_CONDITIONAL(BASHCOMP,    [test "x$bashcompdir"                 != "xno"])
+AM_CONDITIONAL(ZSHCOMP,     [test "x$zshcompdir"                  != "xno"])
 
 # Workaround for as-of-yet unreleased runstatedir support, planned for
 # autoconf 2.70, which some major distros have backported.
@@ -95,6 +110,8 @@ cat <<EOF
 Optional features:
   IPC group.............: $group
   Unit tests............: $enable_test
+  Bash completion.......: $bashcompdir
+  Zsh completion........: $zshcompdir
 
 ------------- Compiler version --------------
 $($CC --version || true)

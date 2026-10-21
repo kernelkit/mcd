@@ -71,6 +71,11 @@ Features
   `robustness` queries spaced `query-interval / 4` apart, per RFC 3376
   §8.6 and §8.7.  A host that missed the first query gets another one
   within half a minute instead of waiting a full query interval.
+- Topology query.  When a bridge port starts forwarding, after link
+  up, STP settling or being added to the bridge, `mcd` sends a general
+  query at once, per RFC 4541 §2.1.1.  Hosts behind the port are back
+  in the MDB within the response interval instead of at the next
+  periodic query, up to two minutes later with the defaults.
 - Version fallback.  Starts at IGMPv3 and MLDv2, drops to the older
   versions when such hosts appear, and returns when they go quiet.
 - Proxy mode, a backup querier that sends from `0.0.0.0` or `::` and can
@@ -79,6 +84,9 @@ Features
 - Raw VLAN mode.  Run a querier directly on a VLAN of a filtering
   bridge, no `vlanN` interface required.
 - Static groups, joined in the kernel so they never time out.
+- Multicast Router Discovery, RFC 4286.  With `mrd on`, `mcd` advertises
+  itself to the snooping switches on the LAN, for the ones that learn
+  their router ports from MRD rather than from queries.
 - `mctl` shows interface and querier status, group memberships, router
   ports per bridge, and the bridge MDB in a readable form.  JSON output
   for scripts, a watch mode for humans.
@@ -202,24 +210,25 @@ arguments for an overview:
     $ mctl
     Multicast Overview
     Query Interval (default): 125 sec
-    Router Timeout          : 255
+    Router Timeout (default): 255 sec
     Fast Leave Ports        :
     Router Ports            : eth3
     Flood Ports             :
 
-    Interface       VID  Proto  Querier                      State  Interval  Timeout  Ver
-    vlan1                IGMP   192.168.1.1                     Up       125     None    3
-    vlan1                MLD    fe80::7a4c:9bff:fe12:3456       Up       125     None    2
-    vlan2                IGMP   192.168.2.1                     Up       125     None    3
-    vlan2                MLD    fe80::7a4c:9bff:fe12:3456       Up       125     None    2
-    br0              42  IGMP   0.0.0.0                         Up       125     None    3
-    br0              42  MLD    ::                              Up       125     None    2
+    Interface       VID  Proto  Querier                      State  Interval  Timeout  MRD  Ver
+    vlan1                IGMP   192.168.1.1                     Up       125     None   on    3
+    vlan1                MLD    fe80::7a4c:9bff:fe12:3456       Up       125     None   on    2
+    vlan2                IGMP   192.168.2.1                     Up       125     None   on    3
+    vlan2                MLD    fe80::7a4c:9bff:fe12:3456       Up       125     None   on    2
+    br0              42  IGMP   0.0.0.0                         Up       125     None  off    3
+    br0              42  MLD    ::                              Up       125     None  off    2
 
     Bridge          VID  Multicast Group       Ports
     br0               2  239.1.1.1             eth3
 
 The parts are also available on their own, as `show interfaces`,
-`show groups`, `show router-ports` and `show mdb`.  Add `json` to any
+`show groups`, `show router-ports` and `show mdb`.  `show routers`
+lists the multicast routers heard through MRD.  Add `json` to any
 `show` command for machine readable output, and `-m` to keep it
 updating like `watch(1)`.  All commands and options are in
 [mctl(8)][].
@@ -243,10 +252,11 @@ it in the foreground with more logging:
     sudo mcd -n -l info
 
 `SIGHUP` reloads the configuration and probes the interfaces again.
-To run several instances, give each its own identity with `-i NAME`,
-which also names its configuration file, PID file and IPC socket, and
-point `mctl -i NAME` at the one you want.  The options, signals and
-files are in [mcd(8)][].
+To check a configuration file before loading it, run `mcd -t -f FILE`
+as any user.  To run several instances, give each its own identity
+with `-i NAME`, which also names its configuration file, PID file and
+IPC socket, and point `mctl -i NAME` at the one you want.  The
+options, signals and files are in [mcd(8)][].
 
 
 Building
@@ -267,6 +277,7 @@ Options worth knowing:
 |------------------------|------------------------------------------------------------|
 | `--with-group=NAME`    | Group owner of `/run/mcd.sock`, default `root`.  Use e.g. `wheel` to let admins run `mctl` without `sudo` |
 | `--enable-test`        | Build the test suite, see [Testing](#testing)              |
+| `--with-bash-completion-dir=DIR`, `--with-zsh-completion-dir=DIR` | Where to install the `mctl` completion scripts, default under `DATADIR`, `no` to skip |
 | `--prefix=`, `--sysconfdir=` | The usual, defaults are `/usr/local` and `/etc`      |
 
 Configure prints a summary at the end, check it before running `make`.

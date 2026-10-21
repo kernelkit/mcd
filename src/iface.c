@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: ISC */
 
 #include "defs.h"
+#include "mrd.h"
 #include "inet.h"
 
 /*
@@ -30,6 +31,7 @@ static void startup_query_cb   (int timeout, void *arg);
 static void startup_query_timer(struct ifi *ifi);
 
 static void router_timeout_cb  (int timeout, void *arg);
+static void querier_start      (struct ifi *ifi);
 
 static void delete_group_cb    (int timeout, void *arg);
 static int  delete_group_timer (struct ifi *ifi, struct listaddr *g, int tmo);
@@ -81,6 +83,7 @@ void iface_lists_init(struct ifi *ifi)
     TAILQ_INIT(&ifi->ifi_static);
     TAILQ_INIT(&ifi->ifi_groups);
     TAILQ_INIT(&ifi->ifi_addrs);
+    TAILQ_INIT(&ifi->ifi_mrd_routers);
 }
 
 void iface_zero(struct ifi *ifi)
@@ -96,6 +99,9 @@ void iface_zero(struct ifi *ifi)
     ifi->ifi_query_interval = igmp_query_interval;
     ifi->ifi_timerid	= 0;
     ifi->ifi_startup_timerid = 0;
+    ifi->ifi_mrd_timerid = 0;
+    ifi->ifi_mrd_init = 0;
+    ifi->ifi_mrd_pending = 0;
     ifi->ifi_igmpv1_warn = 0;
 }
 
@@ -116,6 +122,31 @@ const char *iface_proto(const struct ifi *ifi)
 int iface_pv(const struct ifi *ifi, int pv)
 {
     return ifi->ifi_family == AF_INET6 ? pv - 1 : pv;
+}
+
+/* The interface's query interval, or the global one, NULL for global */
+uint32_t iface_query_interval(const struct ifi *ifi)
+{
+    return ifi && ifi->ifi_query_interval ? ifi->ifi_query_interval : igmp_query_interval;
+}
+
+/*
+ * Other querier present interval, RFC 3376 section 8.5 and RFC 3810
+ * section 9.5, from the interface's own query interval.  The global
+ * default when ifi is NULL, router-timeout overrides both.
+ */
+uint32_t iface_router_timeout(const struct ifi *ifi)
+{
+    if (router_timeout)
+	return router_timeout;
+
+    return igmp_robustness * iface_query_interval(ifi) + igmp_response_interval / 2;
+}
+
+/* Group membership interval, RFC 3376 section 8.4, RFC 3810 section 9.4 */
+static uint32_t iface_group_interval(const struct ifi *ifi)
+{
+    return igmp_robustness * iface_query_interval(ifi) + igmp_response_interval;
 }
 
 static void querier_del(struct ifi *ifi)
@@ -211,8 +242,7 @@ void iface_check_election(struct ifi *ifi)
     ifi->ifi_flags |= IFIF_IGMP_QUERIER;
     dbg("Assuming %squerier duties on interface %s",
           is_igmp_proxy(ifi) ? "proxy " : "", ifi->ifi_name);
-    send_query(ifi, igmp_response_interval, NULL);
-    startup_query_timer(ifi);	/* RFC3376 §8.6, §8.7 startup query burst */
+    querier_start(ifi);
 }
 
 /*
@@ -381,11 +411,7 @@ static void join_static_groups(struct ifi *ifi)
 
 static void start_iface(struct ifi *ifi)
 {
-    uint32_t qi = ifi->ifi_query_interval;
-
-    /* Check interface specific settings */
-    if (!qi)
-	qi = igmp_query_interval;
+    uint32_t qi = iface_query_interval(ifi);
 
     sock_iface_init(ifi);
     join_static_groups(ifi);
@@ -403,6 +429,8 @@ static void start_iface(struct ifi *ifi)
     if (!(ifi->ifi_flags & IFIF_DISABLED))
         iface_check_election(ifi);
 
+    mrd_start(ifi);
+
     info("Interface %s now in service", ifi->ifi_name);
 }
 
@@ -410,13 +438,17 @@ static void stop_iface(struct ifi *ifi)
 {
     struct listaddr *a, *tmp;
 
+    mrd_stop(ifi);
+
     /*
-     * Stop query timers (periodic and startup burst)
+     * Stop query timers (periodic, startup burst and topology hold-off)
      */
     if (ifi->ifi_startup_timerid > 0) {
 	pev_timer_del(ifi->ifi_startup_timerid);
 	ifi->ifi_startup_timerid = 0;
     }
+    ifi->ifi_topo_timerid = pev_timer_del(ifi->ifi_topo_timerid);
+    ifi->ifi_topo_pending = 0;
     if (ifi->ifi_timerid > 0)
         pev_timer_del(ifi->ifi_timerid);
     ifi->ifi_timerid = 0;
@@ -424,6 +456,7 @@ static void stop_iface(struct ifi *ifi)
     TAILQ_FOREACH_SAFE(a, &ifi->ifi_groups, al_link, tmp)
 	group_del(ifi, a);
     querier_del(ifi);
+    mrd_flush(ifi);
 
     dbg("Releasing querier duties on interface %s", ifi->ifi_name);
     ifi->ifi_flags &= ~IFIF_IGMP_QUERIER;
@@ -461,6 +494,7 @@ static void query_groups(int period, void *arg)
 void accept_membership_query(struct ifi *ifi, const inet_addr_t *src, const inet_addr_t *group,
 			     int intv, int tmo, int ver)
 {
+    uint32_t oqpi = iface_router_timeout(ifi);
     int notnew = 1;
 
     inet_addr_fmt(src, s1, sizeof(s1));
@@ -509,7 +543,7 @@ void accept_membership_query(struct ifi *ifi, const inet_addr_t *src, const inet
 	  again:
 	    dbg("New querier %s (was %s) on %s, timeout %d", s1, ifi->ifi_querier
 		? inet_addr_fmt(&ifi->ifi_querier->al_addr, s2, sizeof(s2)) : "me",
-		ifi->ifi_name, router_timeout);
+		ifi->ifi_name, oqpi);
 
 	    if (!ifi->ifi_querier) {
 		ifi->ifi_querier = calloc(1, sizeof(struct listaddr));
@@ -518,7 +552,7 @@ void accept_membership_query(struct ifi *ifi, const inet_addr_t *src, const inet
 		    exit(EX_OSERR);
 		}
 
-		ifi->ifi_querier->al_timerid = pev_timer_add(router_timeout * 1000000, 0, router_timeout_cb, ifi);
+		ifi->ifi_querier->al_timerid = pev_timer_add(oqpi * 1000000, 0, router_timeout_cb, ifi);
 		ifi->ifi_flags &= ~IFIF_IGMP_QUERIER;
 	    }
 
@@ -544,8 +578,8 @@ void accept_membership_query(struct ifi *ifi, const inet_addr_t *src, const inet
      * Reset the timer since we've received a query.
      */
     if (notnew && ifi->ifi_querier && !inet_addr_cmp(src, &ifi->ifi_querier->al_addr)) {
-	dbg("Resetting query timeout %d sec", router_timeout);
-	pev_timer_set(ifi->ifi_querier->al_timerid, router_timeout * 1000000);
+	dbg("Resetting query timeout %d sec", oqpi);
+	pev_timer_set(ifi->ifi_querier->al_timerid, oqpi * 1000000);
 	time(&ifi->ifi_querier->al_ctime);
     }
 
@@ -628,7 +662,7 @@ void accept_group_report(struct ifi *ifi, const inet_addr_t *src, const inet_add
 	if (g->al_timerid > 0)
 	    g->al_timerid = pev_timer_del(g->al_timerid);
 
-	g->al_timerid = delete_group_timer(ifi, g, IGMP_GROUP_MEMBERSHIP_INTERVAL);
+	g->al_timerid = delete_group_timer(ifi, g, iface_group_interval(ifi));
 
 	/*
 	 * Reset timer for switching version back every time an older
@@ -655,7 +689,7 @@ void accept_group_report(struct ifi *ifi, const inet_addr_t *src, const inet_add
 
     /** set a timer for expiration **/
     g->al_reporter = *src;
-    g->al_timerid  = delete_group_timer(ifi, g, IGMP_GROUP_MEMBERSHIP_INTERVAL);
+    g->al_timerid  = delete_group_timer(ifi, g, iface_group_interval(ifi));
 
     /*
      * Set timer for swithing version back if an older version
@@ -886,7 +920,7 @@ end:
  */
 static void startup_query_timer(struct ifi *ifi)
 {
-    uint32_t qi = ifi->ifi_query_interval ? ifi->ifi_query_interval : igmp_query_interval;
+    uint32_t qi = iface_query_interval(ifi);
     uint32_t sqi = qi / 4 > 0 ? qi / 4 : 1;
     cbk_t *cbk;
 
@@ -905,6 +939,78 @@ static void startup_query_timer(struct ifi *ifi)
 }
 
 /*
+ * Become querier: first general query and the RFC 3376 §8.6, §8.7
+ * startup query burst.
+ */
+static void querier_start(struct ifi *ifi)
+{
+    send_query(ifi, igmp_response_interval, NULL);
+    startup_query_timer(ifi);
+}
+
+static void topo_holdoff_cb(int timeout, void *arg);
+
+/*
+ * Topology query, then one second of hold-off so a flapping port
+ * gets one query per second.
+ */
+static void topo_query(struct ifi *ifi)
+{
+    ifi->ifi_topo_pending = 0;
+    querier_start(ifi);
+
+    if (ifi->ifi_topo_timerid > 0)
+	pev_timer_set(ifi->ifi_topo_timerid, 1000000);
+    else
+	ifi->ifi_topo_timerid = pev_timer_add(1000000, 0, topo_holdoff_cb, ifi);
+}
+
+static void topo_holdoff_cb(int timeout, void *arg)
+{
+    struct ifi *ifi = (struct ifi *)arg;
+
+    if (ifi->ifi_topo_pending && (ifi->ifi_flags & IFIF_IGMP_QUERIER))
+	topo_query(ifi);
+    else
+	ifi->ifi_topo_timerid = pev_timer_del(ifi->ifi_topo_timerid);
+}
+
+/*
+ * A port of the bridge started forwarding: link up, STP settled or
+ * port added.  Hosts behind it are not in the MDB until they answer
+ * a query, so send one now rather than at the next query interval,
+ * RFC 4541 section 2.1.1.  Our interface is the bridge itself or a
+ * vlan interface on top of it.
+ */
+void iface_topology_change(int bridge, int port)
+{
+    struct ifi *ifi;
+
+    if (!topology_query)
+	return;
+
+    TAILQ_FOREACH(ifi, &ifaces, ifi_link) {
+	char ifname[IFNAMSIZ];
+
+	if (ifi->ifi_index != bridge && ifi->ifi_lower != bridge)
+	    continue;
+	if (ifi->ifi_flags & (IFIF_DOWN | IFIF_DISABLED))
+	    continue;
+	if (!(ifi->ifi_flags & IFIF_IGMP_QUERIER))
+	    continue;
+
+	if (ifi->ifi_topo_timerid > 0) {
+	    ifi->ifi_topo_pending = 1;
+	    continue;
+	}
+
+	info("Port %s forwarding, sending query on %s",
+	     if_indextoname(port, ifname) ?: "?", ifi->ifi_name);
+	topo_query(ifi);
+    }
+}
+
+/*
  * When an active querier times out we assume the role here.
  */
 static void router_timeout_cb(int timeout, void *arg)
@@ -915,8 +1021,7 @@ static void router_timeout_cb(int timeout, void *arg)
     querier_del(ifi);
 
     ifi->ifi_flags |= IFIF_IGMP_QUERIER;
-    send_query(ifi, igmp_response_interval, NULL);
-    startup_query_timer(ifi);	/* RFC3376 §8.6, §8.7 startup query burst */
+    querier_start(ifi);
 }
 
 /*
@@ -939,7 +1044,7 @@ static void group_version_cb(int timeout, void *arg)
 	 inet_addr_fmt(&cbk->g->al_addr, s1, sizeof(s1)), ifi->ifi_name);
 
     if (cbk->g->al_pv < 3)
-	pev_timer_set(cbk->g->al_pv_timerid, IGMP_GROUP_MEMBERSHIP_INTERVAL * 1000000);
+	pev_timer_set(cbk->g->al_pv_timerid, iface_group_interval(ifi) * 1000000);
     else
 	cbk->g->al_pv_timerid = pev_timer_del(cbk->g->al_pv_timerid);
 }
@@ -951,7 +1056,7 @@ static int group_version_timer(struct ifi *ifi, struct listaddr *g)
 {
     int tid;
 
-    tid = pev_timer_add(IGMP_GROUP_MEMBERSHIP_INTERVAL * 1000000, 0, group_version_cb, cbk_new(ifi, g));
+    tid = pev_timer_add(iface_group_interval(ifi) * 1000000, 0, group_version_cb, cbk_new(ifi, g));
     pev_timer_set_cb_del(tid, free);
 
     return tid;

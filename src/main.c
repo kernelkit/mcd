@@ -67,7 +67,7 @@ static int usage(int code)
     else
 	snprintf(ipcbuf, sizeof(ipcbuf), _PATH_MCD_SOCK, ident);
 
-    printf("Usage: %s [-himnpsv] [-f FILE] [-i NAME] [-l LEVEL] [-p FILE] [-u FILE]\n"
+    printf("Usage: %s [-hnstv] [-f FILE] [-i NAME] [-l LEVEL] [-p FILE] [-u FILE]\n"
 	   "\n"
 	   "  -f, --config=FILE        Default filename derived from -i: %s\n"
 	   "  -h, --help               Show this help text\n"
@@ -76,6 +76,7 @@ static int usage(int code)
 	   "  -n, --foreground         Run in foreground, do not detach from controlling terminal\n"
 	   "  -p, --pidfile=FILE       Default pidfile, derived from -i: %s\n"
 	   "  -s, --syslog             Log to syslog, default unless running in --foreground\n"
+	   "  -t, --check-config       Check the configuration file and exit\n"
 	   "  -u, --ipc=FILE           UNIX domain socket, default from -i: %s\n"
 	   "  -v, --version            Show program version\n", prognm, config_file, nm, pidfn, sockfn);
 
@@ -107,17 +108,19 @@ int main(int argc, char *argv[])
 	{ "foreground",    0, 0, 'n' },
 	{ "pidfile",       1, 0, 'p' },
 	{ "syslog",        0, 0, 's' },
+	{ "check-config",  0, 0, 't' },
 	{ "ipc",           1, 0, 'u' },
 	{ "version",       0, 0, 'v' },
 	{ NULL, 0, 0, 0 }
     };
     int foreground = 0;
+    int check = 0;
     int ch;
 
     prognm = ident = progname(argv[0]);
     sock_file = getenv("MCD_SOCK");
 
-    while ((ch = getopt_long(argc, argv, "f:hi:l:np:su:v", long_options, NULL)) != EOF) {
+    while ((ch = getopt_long(argc, argv, "f:hi:l:np:stu:v", long_options, NULL)) != EOF) {
 	switch (ch) {
 	case 'f':
 	    config_file = strdup(optarg);
@@ -156,6 +159,10 @@ int main(int argc, char *argv[])
 	    use_syslog++;
 	    break;
 
+	case 't':	/* --check-config */
+	    check = 1;
+	    break;
+
 	case 'u':
 	    sock_file = strdup(optarg);
 	    break;
@@ -167,6 +174,17 @@ int main(int argc, char *argv[])
 	default:
 	    return usage(1);
 	}
+    }
+
+    log_init(ident, check ? 0 : use_syslog);
+    compose_paths();
+
+    if (check) {
+	if (config_init())
+	    return EX_NOINPUT;
+
+	prinl(0, "config file %s is ok", config_file);	/* whatever -l says */
+	return 0;
     }
 
     if (geteuid() != 0) {
@@ -210,13 +228,8 @@ int main(int argc, char *argv[])
     } else
 	setlinebuf(stderr);
 
-    /*
-     * Setup logging
-     */
-    log_init(ident, use_syslog);
-    dbg("%s starting", versionstring);
-
-    compose_paths();
+    dbg("%s starting, config %s", versionstring, config_file);
+    srand(time(NULL) ^ getpid());
 
     pev_init();
     sock_init();

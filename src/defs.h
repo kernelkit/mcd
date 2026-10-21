@@ -60,6 +60,8 @@ TAILQ_HEAD(ifaces, ifi);
  * External declarations for global variables and functions.
  */
 extern int		router_alert;
+extern int		topology_query;
+extern int		mrd_interval;
 extern uint32_t		router_timeout;
 extern uint32_t		allhosts_group;
 extern uint32_t		allrtrs_group;
@@ -69,7 +71,6 @@ extern uint32_t		igmp_query_interval;
 extern uint32_t		igmp_last_member_interval;
 extern uint32_t		igmp_robustness;
 
-extern int		loglevel;
 extern int		use_syslog;
 extern int		running;
 extern int		haveterminal;
@@ -101,6 +102,9 @@ extern int		did_final_init;
 
 #ifndef INADDR_ALLRPTS_GROUP
 #define INADDR_ALLRPTS_GROUP    ((in_addr_t)0xe0000016) /* 224.0.0.22, IGMPv3 */
+#ifndef INADDR_ALLSNOOPERS_GROUP
+#define INADDR_ALLSNOOPERS_GROUP	0xe000006aU	/* 224.0.0.106, RFC 4286 */
+#endif
 #endif
 
 #ifndef INADDR_MAX_LOCAL_GROUP
@@ -131,10 +135,13 @@ extern void             iface_add(int, int);
 extern void             iface_del(int, int);
 extern void             iface_check_election(struct ifi *);
 extern void             iface_check(int, unsigned int);
+extern void             iface_topology_change(int, int);
 extern void		iface_check_state(void);
 extern void		iface_exit(void);
 extern const char      *iface_proto(const struct ifi *);
 extern int		iface_pv(const struct ifi *, int);
+extern uint32_t		iface_query_interval(const struct ifi *);
+extern uint32_t		iface_router_timeout(const struct ifi *);
 extern void		accept_group_report(struct ifi *, const inet_addr_t *, const inet_addr_t *, int);
 extern void		accept_group_record(struct ifi *, const inet_addr_t *, const inet_addr_t *, int, int);
 extern void		accept_v3_report(struct ifi *, const inet_addr_t *, const uint8_t *, size_t);
@@ -144,9 +151,10 @@ extern void		accept_membership_query(struct ifi *, const inet_addr_t *, const in
 /* netlink.c */
 extern void             netlink_init(void);
 extern void             netlink_exit(void);
+extern int              netlink_link_lower(int);
 
 /* config.c */
-extern void             config_init(void);
+extern int              config_init(void);
 extern void		config_set_ifflag(uint32_t);
 extern struct ifi      *config_iface_iter(int);
 extern struct ifi      *config_iface_add(char *);

@@ -6,11 +6,14 @@
 #include "defs.h"
 #include "igmp.h"
 #include "inet.h"
+#include "mrd.h"
 
 /*
  * Exported variables.
  */
 int             router_alert;		     /* IP option Router Alert      */
+int             topology_query;		     /* Query when a port comes up  */
+int             mrd_interval;		     /* MRD advertisement interval  */
 uint32_t        router_timeout;		     /* Other querier present intv. */
 uint32_t	igmp_query_interval;	     /* Default: 125 sec            */
 uint32_t	igmp_response_interval;	     /* Default: 10 sec             */
@@ -30,8 +33,10 @@ void igmp_init(void)
     igmp_response_interval    = IGMP_QUERY_RESPONSE_INTERVAL;
     igmp_last_member_interval = IGMP_LAST_MEMBER_INTERVAL_DEFAULT;
     igmp_robustness           = IGMP_ROBUSTNESS_DEFAULT;
-    router_timeout            = 0; /* unset, see config_init() */
+    router_timeout            = 0; /* unset, see iface_router_timeout() */
     router_alert              = 1;
+    topology_query            = 1;
+    mrd_interval              = MRD_ADV_INTERVAL;
 }
 
 static const char *igmp_packet_kind(uint8_t type)
@@ -42,6 +47,9 @@ static const char *igmp_packet_kind(uint8_t type)
     case IGMP_V2_MEMBERSHIP_REPORT:	return "v2 member report  ";
     case IGMP_V3_MEMBERSHIP_REPORT:	return "v3 member report  ";
     case IGMP_V2_LEAVE_GROUP:		return "leave message     ";
+    case IGMP_MRD_ADVERT:		return "mrd advertisement ";
+    case IGMP_MRD_ADVERT + 1:		return "mrd solicitation  ";
+    case IGMP_MRD_ADVERT + 2:		return "mrd termination   ";
     default:				return NULL;
     }
 }
@@ -52,6 +60,7 @@ static const char *igmp_packet_kind(uint8_t type)
 void accept_igmp(struct ifi *ifi, int vid, uint8_t *buf, size_t len)
 {
     int ipdatalen, iphdrlen, igmpdatalen, timeout, interval = 0, ver = GEN_V3;
+    int msg;
     inet_addr_t src, group;
     const char *kind;
     struct igmp *igmp;
@@ -75,19 +84,33 @@ void accept_igmp(struct ifi *ifi, int vid, uint8_t *buf, size_t len)
 	return;
     }
 
-    igmp        = (struct igmp *)(buf + iphdrlen);
+    igmp = (struct igmp *)(buf + iphdrlen);
+    kind = igmp_packet_kind(igmp->igmp_type);
+    if (!kind)
+	return;
+
+    if (ipdatalen < 4 || inet_cksum((uint16_t *)igmp, ipdatalen)) {
+	info("received IGMP packet with bad checksum from %s", s1);
+	return;
+    }
+
+    dbg("RECV %s from %-15s ifi %-2d.%d to %s", kind, s1, ifi->ifi_index, vid,
+	inet_fmt(ip->ip_dst.s_addr, s2, sizeof(s2)));
+
+    msg = mrd_msg(ifi, igmp->igmp_type);
+    if (msg >= 0) {
+	inet_addr_t dst;
+
+	inet_addr_set4(&dst, ip->ip_dst.s_addr);
+	mrd_accept(ifi, msg, &src, &dst, igmp, ipdatalen);
+	return;
+    }
+
     igmpdatalen = ipdatalen - IGMP_MINLEN;
     if (igmpdatalen < 0) {
 	info("received IP data field too short (%u bytes) for IGMP, from %s", ipdatalen, s1);
 	return;
     }
-
-    kind = igmp_packet_kind(igmp->igmp_type);
-    if (!kind)
-	return;
-
-    dbg("RECV %s from %-15s ifi %-2d.%d to %s", kind, s1, ifi->ifi_index, vid,
-	inet_fmt(ip->ip_dst.s_addr, s2, sizeof(s2)));
 
     inet_addr_set4(&group, igmp->igmp_group.s_addr);
 
@@ -128,7 +151,7 @@ void accept_igmp(struct ifi *ifi, int vid, uint8_t *buf, size_t len)
     }
 }
 
-static size_t build_ipv4(uint8_t *buf, uint32_t src, uint32_t dst, short unsigned int datalen)
+size_t build_ipv4(uint8_t *buf, uint32_t src, uint32_t dst, short unsigned int datalen)
 {
     struct ip *ip = (struct ip *)(buf);
     size_t len = IP_HEADER_RAOPT_LEN;

@@ -122,6 +122,7 @@ void config_iface_update(struct ifi *ifi)
 {
     if (getmac(ifi->ifi_name, ifi->ifi_hwaddr, sizeof(ifi->ifi_hwaddr)))
 	warn("failed finding hw address for iface %s", ifi->ifi_name);
+    ifi->ifi_lower = netlink_link_lower(ifi->ifi_index);
 }
 
 /*
@@ -172,13 +173,11 @@ struct ifi *config_iface_add(char *ifname)
      * May not exist yet, prepare for netlink event later
      */
     ifindex = if_nametoindex(ifname);
-    if (ifindex)
+    if (ifindex) {
 	ifi->ifi_index = ifindex;
-    else
+	config_iface_update(ifi);
+    } else
 	ifi->ifi_flags |= IFIF_DOWN;
-
-    if (getmac(ifname, ifi->ifi_hwaddr, sizeof(ifi->ifi_hwaddr)))
-	warn("failed finding hw address for iface %s", ifname);
 
     TAILQ_INSERT_TAIL(&ifaces, ifi, ifi_link);
     iface_clone(ifi, AF_INET6, ifi);
