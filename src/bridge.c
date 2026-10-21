@@ -824,7 +824,7 @@ int show_bridge_compat(FILE *fp)
 		dumpster(s1, mac, sizeof(mac), port, sizeof(port));
 
 		if (detail)
-			fprintf(fp, "%4d  %-15s  %-17s  %-16s  %4d sec  %d sec\n", vid, s1, mac, port, igmp_query_interval, timeout);
+			fprintf(fp, "%4d  %-15s  %-17s  %-16s  %4d sec  %d sec\n", vid, s1, mac, port, iface_query_interval(ifi), timeout);
 		else
 			fprintf(fp, "%4d  %-15s  %-16s  %d sec\n", vid, s1, port, timeout);
 	}

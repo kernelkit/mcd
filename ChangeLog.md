@@ -43,6 +43,9 @@ All relevant, user visible, changes are documented in this file.
    the configured `robustness`, query and response intervals, it was
    always 255 sec unless `router-timeout` was set.  It is now per
    interface, from the interface's own `query-interval` when set
+ - Fix group membership interval ignoring the interface's own
+   `query-interval`.  With only `query-interval 4` on an interface, a
+   group without members stayed for 260 sec, not 18 sec
  - Fix `mcd` exiting 0 when it cannot fork to daemonize
  - Fix `mctl` crashing on a daemon command of more than 32 words
  - Fix timers stopping if an expiry landed exactly on a whole second

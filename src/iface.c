@@ -143,6 +143,12 @@ uint32_t iface_router_timeout(const struct ifi *ifi)
     return igmp_robustness * iface_query_interval(ifi) + igmp_response_interval / 2;
 }
 
+/* Group membership interval, RFC 3376 section 8.4, RFC 3810 section 9.4 */
+static uint32_t iface_group_interval(const struct ifi *ifi)
+{
+    return igmp_robustness * iface_query_interval(ifi) + igmp_response_interval;
+}
+
 static void querier_del(struct ifi *ifi)
 {
     if (!ifi->ifi_querier)
@@ -656,7 +662,7 @@ void accept_group_report(struct ifi *ifi, const inet_addr_t *src, const inet_add
 	if (g->al_timerid > 0)
 	    g->al_timerid = pev_timer_del(g->al_timerid);
 
-	g->al_timerid = delete_group_timer(ifi, g, IGMP_GROUP_MEMBERSHIP_INTERVAL);
+	g->al_timerid = delete_group_timer(ifi, g, iface_group_interval(ifi));
 
 	/*
 	 * Reset timer for switching version back every time an older
@@ -683,7 +689,7 @@ void accept_group_report(struct ifi *ifi, const inet_addr_t *src, const inet_add
 
     /** set a timer for expiration **/
     g->al_reporter = *src;
-    g->al_timerid  = delete_group_timer(ifi, g, IGMP_GROUP_MEMBERSHIP_INTERVAL);
+    g->al_timerid  = delete_group_timer(ifi, g, iface_group_interval(ifi));
 
     /*
      * Set timer for swithing version back if an older version
@@ -1038,7 +1044,7 @@ static void group_version_cb(int timeout, void *arg)
 	 inet_addr_fmt(&cbk->g->al_addr, s1, sizeof(s1)), ifi->ifi_name);
 
     if (cbk->g->al_pv < 3)
-	pev_timer_set(cbk->g->al_pv_timerid, IGMP_GROUP_MEMBERSHIP_INTERVAL * 1000000);
+	pev_timer_set(cbk->g->al_pv_timerid, iface_group_interval(ifi) * 1000000);
     else
 	cbk->g->al_pv_timerid = pev_timer_del(cbk->g->al_pv_timerid);
 }
@@ -1050,7 +1056,7 @@ static int group_version_timer(struct ifi *ifi, struct listaddr *g)
 {
     int tid;
 
-    tid = pev_timer_add(IGMP_GROUP_MEMBERSHIP_INTERVAL * 1000000, 0, group_version_cb, cbk_new(ifi, g));
+    tid = pev_timer_add(iface_group_interval(ifi) * 1000000, 0, group_version_cb, cbk_new(ifi, g));
     pev_timer_set_cb_del(tid, free);
 
     return tid;
