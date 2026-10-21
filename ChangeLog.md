@@ -3,23 +3,40 @@ Change Log
 
 All relevant, user visible, changes are documented in this file.
 
-[UNRELEASED][]
---------------
+[v3.1][] - 2026-10-21
+---------------------
+
+Faster convergence and Multicast Router Discovery.  `mcd` queries the
+LAN as soon as a bridge port starts forwarding, can advertise itself
+to snooping switches that learn router ports from MRD, and follows an
+interface's own `query-interval` in all its timers.  Many fixes for
+robustness, found by fuzzing and static analysis in the Nix flake
+contributed by Dave Seddon.
+
+> **Note:** the router timeout and the group membership interval now
+> follow an interface's own `query-interval`.  With `query-interval 4`
+> on a bridge, `mcd` takes over from a silent querier after 13 sec and
+> drops a group without members after 18 sec, not after 255 and 260
+> sec.  An explicit `router-timeout` still applies to all interfaces.
 
 ### Changes
- - General query when a bridge port starts forwarding, RFC 4541 §2.1.1,
-   so hosts behind the port are back in the MDB within the response
-   interval instead of at the next periodic query.  Link up, STP
-   settling and a port added to the bridge all count, for the bridge
-   itself and VLAN interfaces on top of it.  On by default, see
-   `topology-query` in mcd.conf(5)
+ - General query when a bridge port starts forwarding, RFC 4541 §2.1.1.
+   Link up, STP settling and a port added to the bridge all count, for
+   the bridge itself and VLAN interfaces on top of it.  Hosts behind
+   the port are back in the MDB within the response interval instead
+   of at the next periodic query.  On by default, see `topology-query`
+   in mcd.conf(5)
  - Multicast Router Discovery, RFC 4286, IGMP and MLD.  New `iface`
    keyword `mrd on` advertises `mcd` as a multicast router to the
    snooping switches on the LAN, answers their solicitations, and sends
-   a termination on the way down.  Off by default.  `mrd-interval`
-   sets the advertisement interval.  `mctl show interfaces` has a new
-   MRD column, and `mctl show routers` lists the multicast routers
-   heard on each interface, with their advertised intervals
+   a termination on the way down.  Off by default.  New global keyword
+   `mrd-interval` sets the advertisement interval, 4 to 180 sec
+ - `mctl show routers` lists the multicast routers heard through MRD
+   on each interface, with their advertised intervals.  `mctl show
+   interfaces` has a new MRD column
+ - `mctl show interfaces json` lists each interface's router timeout
+   as `router-timeout`.  `mctl show` labels the global value as the
+   default
  - New `mcd -t` option to check a configuration file and exit, like
    `nginx -t`.  Errors are reported as `FILE:LINE: message`, and it
    runs as a normal user
@@ -27,8 +44,17 @@ All relevant, user visible, changes are documented in this file.
    the running daemon, via the new `mctl -C` option.  Installed with
    `make install`, see `--with-bash-completion-dir` and
    `--with-zsh-completion-dir`
+ - Nix flake with a development shell, native and cross builds, OCI
+   images, static analysis, fuzzing, and the test suite in microVMs,
+   see `nix/README.md`.  By Dave Seddon
 
 ### Fixes
+ - Fix router timeout (other querier present interval) ignoring the
+   configured `robustness`, query and response intervals.  It was always
+   255 sec unless `router-timeout` was set, it now follows each
+   interface's own `query-interval`
+ - Fix group membership interval ignoring the interface's own
+   `query-interval`
  - Fix `-l LEVEL` having no effect in the foreground, `mcd -n` printed
    every message, debug included, whatever the level
  - Fix `mctl show router-ports` and `show igmp json` missing the router
@@ -39,15 +65,6 @@ All relevant, user visible, changes are documented in this file.
    the client
  - Fix `mcd` dying of `SIGPIPE` when an IPC client hangs up before
    reading its reply
- - Fix default router timeout (other querier present interval) ignoring
-   the configured `robustness`, query and response intervals, it was
-   always 255 sec unless `router-timeout` was set.  It is now per
-   interface, from the interface's own `query-interval` when set.
-   `mctl show interfaces json` has it per interface as
-   `router-timeout`, `mctl show` labels the global one as the default
- - Fix group membership interval ignoring the interface's own
-   `query-interval`.  With only `query-interval 4` on an interface, a
-   group without members stayed for 260 sec, not 18 sec
  - Fix `mcd` exiting 0 when it cannot fork to daemonize
  - Fix `mctl` crashing on a daemon command of more than 32 words
  - Fix timers stopping if an expiry landed exactly on a whole second
@@ -325,7 +342,8 @@ Initial public release.
 Limited IGMPv1/v2/v3 querier with hard-coded query interval, etc.  Put
 interfaces in a .conf file, whitespace separated to enable querier.
 
-[UNRELEASED]: https://github.com/kernelkit/mcd/compare/v3.0...HEAD
+[UNRELEASED]: https://github.com/kernelkit/mcd/compare/v3.1...HEAD
+[v3.1]:       https://github.com/kernelkit/mcd/compare/v3.0...v3.1
 [v3.0]:       https://github.com/kernelkit/mcd/compare/v2.4...v3.0
 [v2.4]:       https://github.com/kernelkit/mcd/compare/v2.3...v2.4
 [v2.3]:       https://github.com/kernelkit/mcd/compare/v2.2...v2.3
